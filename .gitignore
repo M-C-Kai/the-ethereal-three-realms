@@ -1,0 +1,36 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Runtime logs and local process output
+*.log
+*.log.*
+*.stderr
+*.stdout
+
+# Local account/character state
+/implementation_staging/data/roles.json
+
+# Signing credentials and packaged Android builds
+*.p12
+*.jks
+*.keystore
+*.apk
+*.idsig
+
+# Generated extraction/build workspaces
+/implementation_staging/build/
+/implementation_staging/work/
+/implementation_staging/META-INF/
+
+# Root-level diagnostic render outputs
+/appearance-layer-audit/
+/player_overlay_variants.png
+/role_*_diagnostic.json
+/role_*_diagnostic.png
+
+# Editor and operating-system metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,2500 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import contextlib
+import json
+import logging
+import struct
+import time
+from dataclasses import dataclass, replace
+from pathlib import Path
+
+from map_o import MapO, MapOError
+from protocol import (
+    GameCipher,
+    ProtocolError,
+    binary,
+    byte,
+    decode_payload,
+    encode_frame,
+    field_values,
+    integer,
+    long_integer,
+    short,
+    string,
+)
+
+
+LOG = logging.getLogger('piaomiao-local')
+
+
+# Opening the main function menu makes this client prefetch several optional
+# systems (tasks, instances and activities). Their response dispatchers all
+# release the same global waiting state even when the subtype is not handled.
+# Use deliberately unhandled subtypes so an unavailable system behaves as an
+# empty module without constructing a screen that expects additional fields.
+MENU_PREFETCH_EMPTY_SUBTYPES = {
+    1403: 1,
+    # In the active client, subtype 2 opens a panel and immediately reads a
+    # multi-field payload.  Subtype 0 is intentionally unhandled and safely
+    # releases the menu's loading state with this one-field empty response.
+    1090: 0,
+    1153: 0,
+    1061: 3,
+}
+
+
+def menu_prefetch_empty_ack(message_id: int) -> bytes:
+    try:
+        subtype = MENU_PREFETCH_EMPTY_SUBTYPES[message_id]
+    except KeyError as exc:
+        raise ValueError(f'unsupported menu prefetch protocol: {message_id}') from exc
+    return encode_frame(message_id, [byte(subtype)])
+
+
+@dataclass
+class Settings:
+    host: str = '0.0.0.0'
+    port: int = 6805
+    advertise_host: str = '127.0.0.1'
+    server_name: str = '本地一区'
+    accept_any_credentials: bool = True
+    expected_client_version: int = 2000
+    role_id: int = 10001
+    role_name: str = '本地侠客'
+    role_model: int = 2000
+    map_id: int = 58
+    map_name: str = '仙石村'
+    map_width: int = 16
+    map_height: int = 12
+    spawn_x: int = 60
+    spawn_y: int = 67
+    # Protocol 1126 carries generic map actors.  The client adds 0x200b20 to
+    # the raw model id before loading role/<model>.dat; 3760000 therefore maps
+    # to the bundled role/5860000.dat sprite.  This model's image ids are
+    # present in the local APK's images.o index.
+    # Generic map actors can only be removed by the APK's protocol-18 handler
+    # when their id is at least 1_000_000. Keep this encounter in that range
+    # so victory despawns it before automatic battle mode can re-interact.
+    monster_id: int = 1_900_001
+    monster_name: str = '试炼妖兽'
+    monster_model: int = 3_760_000
+    monster_x: int = 10
+    monster_y: int = 6
+    # Minimal cross-map test portal.  The client treats 1126 actors as
+    # interactable map objects and sends 1010/action=7 with this id when the
+    # player reaches the actor's tile.
+    portal_enabled: bool = False
+    portal_id: int = 580001
+    portal_name: str = '跨地图传送点'
+    portal_x: int = 64
+    portal_y: int = 67
+    portal_target_map_id: int = 50000
+    portal_target_map_name: str = '传送测试区'
+    portal_target_spawn_x: int = 8
+    portal_target_spawn_y: int = 6
+    portal_target_map_o_file: str = 'maps/50000.map.o'
+    portal_target_map_ref_available: bool = True
+    map_ref_available: bool = True
+    return_portal_id: int = 580002
+    return_portal_name: str = '返回仙石村'
+    return_portal_x: int = 9
+    return_portal_y: int = 6
+    heartbeat_interval_seconds: float = 25.0
+    map_o_file: str = 'maps/58.map.o'
+    role_data_file: str = 'data/roles.json'
+
+    @classmethod
+    def load(cls, path: Path) -> 'Settings':
+        if not path.exists():
+            return cls()
+        return cls(**json.loads(path.read_text(encoding='utf-8')))
+
+
+@dataclass
+class LocalBattleState:
+    """Connection-local state for the deliberately small APK battle probe.
+
+    The APK owns rendering and animation; the compatibility server only keeps
+    enough state to answer the confirmed 1040/1041/1042 messages for one
+    player and one monster.  Nothing is persisted to the role store.
+    """
+
+    active: bool = False
+    round: int = 1
+    player_id: int = 0
+    monster_id: int = 0
+    player_hp: int = 100
+    monster_hp: int = 100
+    # A defeated monster remains absent until the client reloads the map. This
+    # covers automatic battle's short race with the removal frame.
+    monster_defeated: bool = False
+    # ``round_ack`` means the complete 1042 action queue has been sent and the
+    # server is waiting for the APK to report that its animation queue drained.
+    phase: str = 'idle'
+
+    def begin(self, player_id: int, monster_id: int) -> None:
+        self.active = True
+        self.round = 1
+        self.player_id = player_id
+        self.monster_id = monster_id
+        self.player_hp = 100
+        self.monster_hp = 100
+        self.phase = 'idle'
+
+    def finish(self) -> None:
+        self.active = False
+        self.phase = 'idle'
+
+    def reset_encounter(self) -> None:
+        """Respawn the connection-local trial monster on a map reload."""
+        self.finish()
+        self.monster_defeated = False
+
+    def apply_basic_attack(self, damage: int = 10) -> bool:
+        """Apply one deterministic local attack and report whether it ended."""
+        if not self.active:
+            return True
+        self.monster_hp = max(0, self.monster_hp - max(1, damage))
+        return self.monster_hp == 0
+
+
+# The APK does not contain the authoritative server-side reward table.  Keep
+# the local trial encounter deterministic, but persist its result through the
+# same role/inventory records used by the rest of the service.
+BATTLE_EXP_REWARD = 50
+BATTLE_DROP_TEMPLATE_ID = 260_000_001
+BATTLE_DROP_NAME = '小还丹'
+MAX_ROLE_LEVEL = 99
+LEVEL_BASE_STAT_GAIN = 1
+# 1042 only appends records to the APK's battle queue. The following full
+# 1040/action=2 calls the battle screen's i() method and starts playback. The
+# client then returns the short [action=2, round] acknowledgement after the
+# complete queue has drained, so the server never guesses sprite timings.
+ROLE_MODELS = (
+    ((0, 2, 4), (19, 23, 1, 3, 5)),
+    ((6, 8, 10), (7, 9, 11)),
+    ((12, 14, 16), (13, 15, 17)),
+)
+
+ROLE_STATS = (
+    (2, 16, 7, 28, 7, 18, 3, 15, 2, 15, 7, 14, 8, 15, 3, 11, 17, 28, 2, 16, 7, 28, 7, 18),
+    (7, 7, 3, 25, 3, 25, 4, 22, 2, 22, 3, 23, 2, 22, 4, 1, 5, 25, 7, 7, 3, 25, 3, 25),
+    (16, 14, 17, 41, 2, 9, 4, 13, 17, 7, 17, 9, 5, 13, 4, 9, 6, 41, 16, 14, 17, 41, 2, 9),
+    (3, 0, 10, 49, 4, 6, 8, 10, 9, 4, 10, 0, 5, 10, 8, 0, 6, 49, 3, 0, 10, 49, 4, 6),
+    (3, 6, 4, 16, 7, 5, 0, 4, 9, 7, 4, 1, 9, 4, 9, 6, 1, 16, 3, 6, 4, 16, 7, 5),
+    (4, 21, 1, 46, 1, 9, 7, 1, 27, 1, 1, 5, 4, 1, 7, 22, 8, 46, 4, 21, 1, 46, 1, 9),
+    (2, 1, 7, 3, 5, 3, 4, 7, 9, 5, 7, 6, 6, 7, 4, 9, 3, 3, 2, 1, 7, 3, 5, 3),
+)
+
+
+# Protocol 1008 field 12 is not the equipment quality.  The original client
+# turns this short into a 24x24 atlas lookup via ``a.c.x.f(int)``:
+#
+#   image id = 3_002_424 + (icon_code // 100 % 100) * 10_000
+#   frame    = icon_code % 100
+#
+# These codes point at atlases already bundled in the APK.  The icon code is
+# independent from the template id and from the equipment location byte.
+# ``pmsj.work.e.af`` names the original equipment locations 1..14 exactly as
+# listed below.  Groups 1..13 are matching armour/accessory icon atlases;
+# groups 21..33 contain the different weapon families.
+EQUIPMENT_SPECS = (
+    (1, '青纹盔', 109, '头盔'),
+    (2, '青纹肩甲', 201, '肩甲'),
+    (3, '青纹铠甲', 305, '铠甲'),
+    (4, '青纹腰带', 406, '腰带'),
+    (5, '青纹腿甲', 505, '腿甲'),
+    (6, '青纹项链', 609, '项链'),
+    (7, '青纹披风', 701, '披风'),
+    (8, '青纹护腕', 804, '护腕'),
+    (9, '青纹长靴', 907, '鞋子'),
+    (10, '青锋剑', 2701, '武器'),
+    (11, '青纹戒指', 1106, '戒指'),
+    (12, '青纹外套', 1201, '外套'),
+    (13, '青纹饰品', 1309, '饰品'),
+    (14, '青纹法宝', 1000, '法宝'),
+)
+
+# The player sprite is composed from independently replaceable image layers.
+# Property 7 selects the weapon family; properties 14..20 select trousers,
+# armour, shoulders, wrists, boots, cape and helmet respectively. Zero is the
+# unequipped state (property 14 resolves zero to the bundled base trousers).
+BASE_CHARACTER_APPEARANCE = {
+    7: 0,
+    14: 0,
+    15: 0,
+    16: 0,
+    17: 0,
+    18: 0,
+    19: 0,
+    20: 0,
+}
+
+DEFAULT_MOUNT_MODEL = 41004
+MOUNT_EQUIPMENT_SLOT = 17  # APK resource 0x4661: the dedicated "坐骑" slot.
+
+# Protocol 1502 multiplexes two different resource requests. Action 1 asks for
+# a role .dat and is answered by 1503; actions 0/2 ask for an image and must be
+# answered by 1501. The battle actors use logical model ids while the bundled
+# role directory keeps the monster sprite after the same 0x200b20 offset used
+# by map actors.
+BATTLE_RESOURCE_MODEL_OFFSET = 0x200B20
+BATTLE_RESOURCE_ALIASES = {
+    # A normal kind-1 fighter is constructed with logical model 6. The thin
+    # APK does not bundle role/6.dat; its preloaded composite-player layout is
+    # role/100000.dat, which is the matching server-delivered template.
+    6: 100_000,
+}
+# The APK requests role/0.dat for the built-in basic-attack animation.  This
+# is an optional empty effect definition in the original client; completing
+# the 1503 transfer with zero bytes lets the animation queue advance while
+# the accompanying image atlas is still loaded normally.
+BATTLE_EMPTY_RESOURCE_IDS = {0}
+PNG_QUERY_MAIN_CACHE = 0
+PNG_QUERY_ROLE_CACHE = 2
+
+# All visible equipment channels were isolated and rendered in four directions
+# against role/100000.dat. Slots without a client sprite channel remain icon
+# only instead of being forced onto an unrelated body part.
+EQUIPMENT_APPEARANCE_PROPERTIES = {
+    1: {'20': 3},       # 头盔 -> 21003
+    2: {'16': 23},      # 肩甲 -> 17023
+    3: {'15': 34},      # 铠甲 -> 16034
+    5: {'14': 25},      # 腿甲 -> 15025
+    7: {'19': 3},       # 披风 -> 20003
+    8: {'17': 8},       # 护腕 -> 18008
+    9: {'18': 22},      # 鞋子 -> 19022
+    10: {'7': 270001},  # 武器 -> 27000 + quality overlay 30601
+}
+
+POTION_TEMPLATE_ID = 260_000_001
+POTION_ICON_CODE = 6109
+
+
+def role_race_and_gender(model: int) -> tuple[int, int]:
+    for race, gender_models in enumerate(ROLE_MODELS):
+        for gender, models in enumerate(gender_models):
+            if model in models:
+                return race, gender
+    return 0, 0
+
+
+def role_stats(model: int) -> list[int]:
+    if not 0 <= model < 24:
+        return [0] * 8
+    return [values[model] for values in ROLE_STATS] + [0]
+
+
+def default_role(settings: Settings) -> dict[str, object]:
+    role = {
+        'id': settings.role_id,
+        'name': settings.role_name,
+        'model': settings.role_model,
+        'slot': 0,
+        'race': 0,
+        'gender': 0,
+        'level': 1,
+        'experience': 0,
+        'auto_level': True,
+        'stats': [0] * 8,
+        'map_id': settings.map_id,
+        'map_name': settings.map_name,
+        'mount_model': 0,
+    }
+    role['items'] = starter_items(int(role['id']))
+    return role
+
+
+def settings_for_map(settings: Settings, map_id: int) -> Settings:
+    """Return the wire settings for a map in the small local map registry.
+
+    The target map uses the generated, fully walkable 50000.map.o payload.
+    The APK carries a matching 50000.map.ref/.map.o alias so the normal
+    cross-map reload path can resolve its local tile resources.
+    """
+    if int(map_id) == int(settings.portal_target_map_id):
+        return replace(
+            settings,
+            map_id=int(settings.portal_target_map_id),
+            map_name=str(settings.portal_target_map_name),
+            spawn_x=int(settings.portal_target_spawn_x),
+            spawn_y=int(settings.portal_target_spawn_y),
+            monster_x=12,
+            monster_y=8,
+            map_o_file=str(settings.portal_target_map_o_file),
+            portal_enabled=True,
+            portal_id=int(settings.return_portal_id),
+            portal_name=str(settings.return_portal_name),
+            portal_x=int(settings.return_portal_x),
+            portal_y=int(settings.return_portal_y),
+            portal_target_map_id=int(settings.map_id),
+            portal_target_map_name=str(settings.map_name),
+            portal_target_spawn_x=int(settings.spawn_x),
+            portal_target_spawn_y=int(settings.spawn_y),
+            portal_target_map_o_file=str(settings.map_o_file),
+            map_ref_available=bool(settings.portal_target_map_ref_available),
+        )
+    return replace(settings, map_id=int(map_id))
+
+
+def settings_for_role(settings: Settings, role: dict[str, object] | None) -> Settings:
+    map_id = int(role.get('map_id', settings.map_id)) if role is not None else int(settings.map_id)
+    return settings_for_map(settings, map_id)
+
+
+def starter_items(role_id: int) -> list[dict[str, object]]:
+    """Return the starter inventory understood by the original client."""
+    item_base = role_id * 100
+    # Keep the historical ids for weapon, armour and potion so persisted test
+    # characters migrate without losing their equipped state or stack count.
+    id_offsets = {10: 1, 3: 2}
+    remaining_offsets = iter(range(4, 16))
+    items: list[dict[str, object]] = []
+    for order, (slot, name, icon_code, slot_name) in enumerate(EQUIPMENT_SPECS, start=1):
+        item_offset = id_offsets[slot] if slot in id_offsets else next(remaining_offsets)
+        quality = 1
+        item = {
+            'id': item_base + item_offset,
+            'template_id': slot * 10_000_000 + 1_001,
+            'name': name,
+            'description': f'APK 原始资源中的{slot_name}。_青纹套装，装备位置：{slot_name}。',
+            'quantity': 1,
+            'max_quantity': 1,
+            'location': 'bag',
+            'equipment_slot': slot,
+            'price': 10 + slot,
+            'level_required': 1,
+            'icon_code': icon_code,
+            'quality': quality,
+            'sort_group': 100,
+            'sort_order': order,
+            'equipment_attributes': [3 if slot == 10 else 0, 2 if slot in {1, 2, 3, 4, 5, 7, 8, 9, 12} else 0, 0, 0],
+        }
+        appearance = EQUIPMENT_APPEARANCE_PROPERTIES.get(slot)
+        if appearance is not None:
+            item['appearance_properties'] = dict(appearance)
+        items.append(item)
+    items.append({
+        'id': item_base + 3,
+        'template_id': POTION_TEMPLATE_ID,
+        'name': '小还丹',
+        'description': '本地服测试恢复道具。_使用后恢复生命，并消耗一个。',
+        'quantity': 10,
+        'max_quantity': 99,
+        'location': 'bag',
+        'price': 2,
+        'level_required': 1,
+        'icon_code': POTION_ICON_CODE,
+        'quality': 0,
+        'sort_group': 150,
+        'sort_order': 1,
+        'item_flags': 0x40,
+        'action_flags': 0x06,
+        'heal': 50,
+    })
+    items.append({
+        'id': item_base + 16,
+        # Category 17 is parsed as an equipment record by the original APK;
+        # the independent location byte (17) selects its dedicated mount slot.
+        'template_id': 170_410_004,
+        'name': '坐骑验证令',
+        'description': '坐骑装备。_装备后骑乘 41004，卸下后下坐骑。',
+        'quantity': 1,
+        'max_quantity': 1,
+        'location': 'bag',
+        'equipment_slot': MOUNT_EQUIPMENT_SLOT,
+        'price': 0,
+        'level_required': 1,
+        'icon_code': POTION_ICON_CODE,
+        'sort_group': 100,
+        'sort_order': MOUNT_EQUIPMENT_SLOT,
+        'equipment_attributes': [0, 0, 0, 0],
+        'mount_model': DEFAULT_MOUNT_MODEL,
+    })
+    return items
+
+
+class RoleStore:
+    def __init__(self, settings: Settings):
+        path = Path(settings.role_data_file)
+        self.path = path if path.is_absolute() else Path(__file__).resolve().parent / path
+        self.settings = settings
+        self.data: dict[str, object] = {'next_role_id': settings.role_id + 1, 'accounts': {}}
+        if self.path.exists():
+            try:
+                loaded = json.loads(self.path.read_text(encoding='utf-8'))
+                if isinstance(loaded, dict) and isinstance(loaded.get('accounts'), dict):
+                    self.data = loaded
+            except (OSError, ValueError) as exc:
+                LOG.warning('failed to load role data %s: %s', self.path, exc)
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(self.path.suffix + '.tmp')
+        temporary.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding='utf-8')
+        temporary.replace(self.path)
+
+    def save(self) -> None:
+        self._save()
+
+    @staticmethod
+    def _ensure_items(role: dict[str, object]) -> bool:
+        items = role.get('items')
+        if not isinstance(items, list):
+            role['items'] = starter_items(int(role.get('id', 0)))
+            return True
+        changed = False
+        defaults = starter_items(int(role.get('id', 0)))
+        by_id = {
+            int(item.get('id', 0)): item
+            for item in items
+            if isinstance(item, dict)
+        }
+        # Upgrade the two legacy test items in place and append the missing
+        # equipment slots.  Location and quantities are player state, so they
+        # survive this catalogue migration.
+        for default in defaults:
+            item_id = int(default['id'])
+            current = by_id.get(item_id)
+            if current is None:
+                items.append(default)
+                by_id[item_id] = default
+                changed = True
+                continue
+            preserved = {
+                key: current[key]
+                for key in ('location', 'quantity', 'last_heal')
+                if key in current
+            }
+            merged = {**default, **preserved}
+            if current != merged:
+                current.clear()
+                current.update(merged)
+                changed = True
+        for order, item in enumerate(items, start=1):
+            if not isinstance(item, dict):
+                continue
+            # The original bag UI only places records whose field 14 belongs
+            # to one of its four tab groups. A zero value is accepted by the
+            # protocol parser but never appears in the visible list.
+            category = (int(item.get('template_id', 0)) // 10_000_000) % 100
+            equipment = 1 <= category <= 21
+            current_group = int(item.get('sort_group', 0))
+            # Group 100 is equipment-only: the bag sorter casts every member
+            # of that vector to the equipment subclass. Generic items belong
+            # in group 150; placing one in 100 freezes the original UI thread.
+            expected_group = 100 if equipment else 150
+            if (
+                current_group not in {100, 150, 160, 170}
+                or (equipment and current_group != 100)
+                or (not equipment and current_group == 100)
+            ):
+                item['sort_group'] = expected_group
+                changed = True
+            if int(item.get('sort_order', 0)) == 0:
+                item['sort_order'] = order
+                changed = True
+        return changed
+
+    def roles_for(self, username: str) -> list[dict[str, object]]:
+        accounts = self.data['accounts']
+        assert isinstance(accounts, dict)
+        if username not in accounts:
+            accounts[username] = [default_role(self.settings)]
+            self._save()
+        roles = accounts[username]
+        assert isinstance(roles, list)
+        changed = False
+        for role in roles:
+            if 'experience' not in role:
+                role['experience'] = 0
+                changed = True
+            if 'auto_level' not in role:
+                role['auto_level'] = True
+                changed = True
+            changed = self._ensure_items(role) or changed
+        if changed:
+            self._save()
+        return sorted(roles, key=lambda role: int(role.get('slot', 0)))
+
+    def find(self, username: str, role_id: int) -> dict[str, object] | None:
+        return next((role for role in self.roles_for(username) if int(role.get('id', 0)) == role_id), None)
+
+    def create(self, username: str, name: str, model: int, requested_slot: int) -> dict[str, object]:
+        roles = self.roles_for(username)
+        occupied = {int(role.get('slot', 0)) for role in roles}
+        slot = requested_slot if requested_slot in range(3) and requested_slot not in occupied else -1
+        if slot < 0:
+            slot = next((candidate for candidate in range(3) if candidate not in occupied), 0)
+        valid_models = {value for race in ROLE_MODELS for gender in race for value in gender}
+        if model not in valid_models:
+            model = 0
+        race, gender = role_race_and_gender(model)
+        role_id = int(self.data.get('next_role_id', self.settings.role_id + 1))
+        self.data['next_role_id'] = role_id + 1
+        role: dict[str, object] = {
+            'id': role_id,
+            'name': name.strip() or f'本地侠客{role_id}',
+            'model': model,
+            'slot': slot,
+            'race': race,
+            'gender': gender,
+            'level': 1,
+            'experience': 0,
+            'auto_level': True,
+            'stats': role_stats(model),
+            'map_id': self.settings.map_id,
+            'map_name': self.settings.map_name,
+        }
+        role['items'] = starter_items(role_id)
+        roles.append(role)
+        accounts = self.data['accounts']
+        assert isinstance(accounts, dict)
+        accounts[username] = roles
+        self._save()
+        return role
+
+    def delete(self, username: str, role_id: int) -> bool:
+        roles = self.roles_for(username)
+        remaining = [role for role in roles if int(role.get('id', 0)) != role_id]
+        if len(remaining) == len(roles):
+            return False
+        accounts = self.data['accounts']
+        assert isinstance(accounts, dict)
+        accounts[username] = remaining
+        self._save()
+        return True
+
+
+def login_server_list(settings: Settings) -> bytes:
+    # 服务器状态索引：0=维护、1=良好、2=繁忙、3=爆满。
+    fields = [
+        byte(0),
+        string(''),
+        byte(1),
+        string(settings.server_name),
+        string(f'{settings.advertise_host}:{settings.port}'),
+        byte(1),
+        byte(1),
+    ]
+    return encode_frame(1077, fields)
+
+
+def game_server_redirect(settings: Settings, session_id: int, account_id: int) -> bytes:
+    # 客户端收到 1052 后会关闭登录连接，再连接这里给出的游戏服地址，
+    # 并在新连接中发送同为 1052 的 session/account 两个整数。
+    return encode_frame(1052, [
+        integer(session_id),
+        integer(account_id),
+        integer(settings.port),
+        string(settings.advertise_host),
+        byte(66),
+        byte(49),
+    ])
+
+
+def role_list(settings: Settings, roles: list[dict[str, object]] | None = None) -> bytes:
+    roles = roles if roles is not None else [default_role(settings)]
+    records = []
+    for role in roles:
+        race = int(role.get('race', 0))
+        gender = int(role.get('gender', 0))
+        record = [
+            integer(int(role['id'])),
+            integer(race),
+            integer(int(role.get('level', 1))),
+            integer(int(role.get('model', settings.role_model))),
+            integer((race * 10) + gender),
+            string(str(role.get('name', settings.role_name))),
+            integer(int(role.get('slot', 0))),
+        ]
+        stats = list(role.get('stats', [0] * 8))
+        record.extend(integer(int(value)) for value in (stats + [0] * 8)[:8])
+        records.extend(record)
+    # 响应的 action 字段由客户端 w.b(0) 读取，必须是 short；客户端发来的
+    # 1080 请求则使用 byte action。这是该协议的非对称字段类型之一。
+    return encode_frame(1080, [short(0), byte(len(roles)), *records])
+
+
+def creation_names() -> bytes:
+    # 创建界面当前种族有男女两个分支，因此 action=4 后固定读取两个名字。
+    return encode_frame(1080, [short(4), string('云生'), string('月华')])
+
+
+def deletion_result(role_id: int) -> bytes:
+    return encode_frame(1080, [short(1), integer(role_id)])
+
+
+def player_info(settings: Settings, role: dict[str, object] | None = None) -> bytes:
+    role = role if role is not None else default_role(settings)
+    # 1006 的第 0 字段是连续属性数量。地图只会读取前 30 项，但人物
+    # 面板会继续读取到属性 84（斗法排行），所以发送完整的 0..84 表。
+    properties = [integer(0) for _ in range(85)]
+    properties[1] = integer(int(role['id']))
+    properties[3] = string(str(role.get('name', settings.role_name)))
+    properties[6] = integer(int(role.get('model', settings.role_model)))
+    properties[10] = string('')
+    properties[11] = integer(int(role.get('level', 1)))
+    properties[12] = integer(int(role.get('race', 0)))
+    # Item icons/templates and character image layers are separate catalogues.
+    # Only verified appearance pairs are applied here.
+    for property_index, value in character_appearance(role).items():
+        properties[property_index] = integer(value)
+    properties[23] = integer(1000)
+    properties[22] = integer(int(role.get('mount_model', 0)))
+    properties[24] = integer(1)
+    properties[25] = integer(0)
+    level = max(1, int(role.get('level', 1)))
+    experience = max(0, int(role.get('experience', 0)))
+    properties[31] = long_integer(experience)
+    properties[32] = long_integer(max(100, level * 100))
+    properties[38] = integer(0)
+    properties[39] = integer(int(role.get('race', 0)))
+
+    level = max(1, int(role.get('level', 1)))
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    base_stats = (raw_stats + [10, 10, 10, 10, 10])[:5]
+    max_hp = 100 + ((level - 1) * 10) + max(0, base_stats[1])
+    max_mp = 50 + ((level - 1) * 5) + max(0, base_stats[2])
+    properties[40] = integer(max_hp)
+    properties[41] = integer(max_hp)
+    properties[42] = integer(max_mp)
+    properties[43] = integer(max_mp)
+    for index, value in enumerate(base_stats, start=44):
+        properties[index] = integer(max(0, value))
+
+    properties[49] = integer(0)
+    properties[52] = integer(0)
+    properties[54] = string('无')
+    properties[55] = integer(100)
+    properties[56] = integer(100)
+    properties[57] = integer(100)
+    properties[58] = integer(100)
+    # The original item subclass gates the weapon "装备" menu through
+    # character property 63 (weapon-family permission bitmask).  Bit 0 is
+    # the starter weapon family used by template 100001001; leaving this
+    # property at zero makes armour look normal but hides the weapon action.
+    properties[63] = integer(1)
+    properties[75] = integer(0)
+    properties[77] = integer(0)
+    properties[78] = integer(100)
+    properties[79] = string('无')
+    properties[80] = integer(level)
+    properties[82] = integer(300)
+    properties[83] = integer(300)
+    properties[84] = integer(0)
+    return encode_frame(1006, [
+        integer(len(properties)),
+        *properties,
+        integer(int(time.time())),
+    ])
+
+
+def character_extension_info() -> bytes:
+    """Initialize the optional rows consumed by the character base page.
+
+    The original client keeps these rows in ``pmsj.work.b.f.u``.  That field
+    starts as null and the base page calls ``size()`` without checking it, so
+    protocol 1089/action 0 must be delivered even when there are no rows.
+    """
+    return encode_frame(1089, [byte(0), byte(0)])
+
+
+def character_skill_list() -> bytes:
+    """Create a harmless local skill container for the fourth character tab.
+
+    Protocol 1132 only allocates the client's skill container when its record
+    count is positive.  A hidden, zero-flag placeholder prevents the tab from
+    repeatedly requesting unavailable official skill data while keeping all
+    gameplay effects disabled.
+    """
+    placeholder = [
+        string('基础技能'),  # display name
+        integer(0),         # skill id / container key
+        integer(0),         # current level
+        integer(0),         # maximum level
+        integer(0),         # proficiency
+        integer(0),         # maximum proficiency
+        integer(0),         # flags: hidden and inactive
+        *(integer(0) for _ in range(7)),
+    ]
+    return encode_frame(1132, [byte(0), byte(1), *placeholder])
+
+
+def character_panel_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
+    """Return the attribute and divine-power datasets requested by UI 31."""
+    level = max(1, int(role.get('level', 1)))
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_mp = 50 + ((level - 1) * 5) + base_stats[2]
+
+    attribute_thresholds = [max_hp, max_mp, *base_stats]
+    attributes = encode_frame(1039, [byte(1), *(integer(value) for value in attribute_thresholds)])
+
+    divine_values = [int(role['id']), level, level, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    divine = encode_frame(1039, [byte(2), *(integer(value) for value in divine_values)])
+    return attributes, divine
+
+
+def role_items(role: dict[str, object]) -> list[dict[str, object]]:
+    items = role.get('items', [])
+    if not isinstance(items, list):
+        return []
+    # Keep the original list object: discard/use operations must also mutate the
+    # list held by the role before RoleStore.save() serializes it.
+    if any(not isinstance(item, dict) for item in items):
+        items = [item for item in items if isinstance(item, dict)]
+        role['items'] = items
+    return items  # type: ignore[return-value]
+
+
+def character_appearance(role: dict[str, object]) -> dict[int, int]:
+    """Return the effective verified character-layer properties for a role."""
+    properties = dict(BASE_CHARACTER_APPEARANCE)
+    for item in role_items(role):
+        if item.get('location') != 'equipped' or not is_equipment(item):
+            continue
+        appearance = item.get('appearance_properties', {})
+        if not isinstance(appearance, dict):
+            continue
+        for property_index, value in appearance.items():
+            index = int(property_index)
+            if index in BASE_CHARACTER_APPEARANCE:
+                properties[index] = int(value)
+    return properties
+
+
+def character_appearance_frame(role_id: int, properties: dict[int, int]) -> bytes:
+    """Encode the client's protocol-1017 incremental character update.
+
+    ``pmsj.work.main.e.O`` reads field 1 as the target role id, field 2 as
+    the pair count, then byte/int property pairs beginning at field 3. Field 0
+    is the unused update subtype retained by the original wire layout.
+    """
+    fields = [byte(0), integer(role_id), integer(len(properties))]
+    for property_index, value in sorted(properties.items()):
+        fields.extend((byte(property_index), integer(value)))
+    return encode_frame(1017, fields)
+
+
+def level_experience_required(level: int) -> int:
+    """Return the deterministic local EXP cost for the next level."""
+    return max(100, max(1, int(level)) * 100)
+
+
+def role_level_properties(role: dict[str, object]) -> dict[int, int]:
+    """Return the level-dependent properties shown by the APK character UI."""
+    level = max(1, min(MAX_ROLE_LEVEL, int(role.get('level', 1))))
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_mp = 50 + ((level - 1) * 5) + base_stats[2]
+    return {
+        11: level,
+        31: max(0, int(role.get('experience', 0))),
+        32: level_experience_required(level),
+        40: max_hp,
+        41: max_hp,
+        42: max_mp,
+        43: max_mp,
+        **{property_index: value for property_index, value in enumerate(base_stats, start=44)},
+        80: level,
+        # ``main/e.O`` treats 85/86 as the high-word refresh for the 64-bit
+        # experience fields 31/32.  The low words remain in 31/32; keeping
+        # both halves in the frame mirrors the APK's incremental update path.
+        85: max(0, int(role.get('experience', 0))) >> 32,
+        86: level_experience_required(level) >> 32,
+    }
+
+
+def battle_progress_frame(role: dict[str, object]) -> bytes:
+    """Incrementally refresh level/experience after a battle reward.
+
+    ``1006`` is the APK's full login-time user initializer: receiving it
+    destroys and recreates the local player and immediately starts the map
+    entry handshake. Battle settlement must instead use the verified ``1017``
+    character-property update layout consumed by ``main/e.O``.
+    """
+    properties = role_level_properties(role)
+    fields = [byte(0), integer(int(role['id'])), integer(len(properties))]
+    for property_index, value in sorted(properties.items()):
+        fields.extend((
+            byte(property_index),
+            # 1017 carries the low words as int fields.  APK ``main/e.O``
+            # consumes 85/86 as the corresponding high words and rebuilds
+            # properties 31/32 as Long values.
+            integer(value),
+        ))
+    return encode_frame(1017, fields)
+
+
+def mount_update_frame(role: dict[str, object]) -> bytes:
+    """Update the APK's mount/transform property (1006/1017 property 22)."""
+    return character_appearance_frame(
+        int(role['id']),
+        {22: int(role.get('mount_model', 0))},
+    )
+
+
+def character_appearance_change_frame(
+    role: dict[str, object],
+    previous: dict[int, int],
+) -> bytes | None:
+    current = character_appearance(role)
+    changed = {
+        property_index: current[property_index]
+        for property_index in current
+        if previous.get(property_index) != current[property_index]
+    }
+    if not changed:
+        return None
+    return character_appearance_frame(int(role['id']), changed)
+
+
+def equipment_panel_refresh_frame(role: dict[str, object]) -> bytes:
+    """Ask the APK to redraw the open equipment tab without changing sprites.
+
+    The original client refreshes the equipment-page widgets from its 1017
+    character-update callback.  Accessory-only slots (belt, necklace, ring,
+    coat, accessory and magic treasure) have no character sprite property, so
+    their 1008 operation=3 update alone leaves an already-open panel stale.
+    Re-sending the effective appearance values is visually a no-op but enters
+    that callback and redraws the equipment vector.
+    """
+    return character_appearance_frame(int(role['id']), character_appearance(role))
+
+
+def find_item(role: dict[str, object], item_id: int) -> dict[str, object] | None:
+    return next((item for item in role_items(role) if int(item.get('id', 0)) == item_id), None)
+
+
+def item_slot(item: dict[str, object]) -> int:
+    if 'equipment_slot' in item:
+        return int(item['equipment_slot'])
+    category = (int(item.get('template_id', 0)) // 10_000_000) % 100
+    return category if 1 <= category <= 14 else 0
+
+
+def is_equipment(item: dict[str, object]) -> bool:
+    category = (int(item.get('template_id', 0)) // 10_000_000) % 100
+    return 1 <= category <= 21
+
+
+def item_frame(item: dict[str, object], operation: int = 1) -> bytes:
+    """Encode the original client's complete 1008 item-instance record.
+
+    The local protocol uses operation ``3`` for an equipment state update.
+    This is the operation already understood by the bundled APK for both
+    equip and unequip; changing it to another operation breaks the item's
+    equip action menu.
+    """
+    location = str(item.get('location', 'bag'))
+    location_code = {'bag': 50, 'warehouse': 51}.get(location, item_slot(item))
+    fields = [
+        byte(operation),
+        integer(int(item['id'])),
+        short(int(item.get('quantity', 1))),
+        short(int(item.get('max_quantity', 1))),
+        byte(location_code),
+        integer(int(item.get('state_flags', 0))),
+        integer(int(item.get('price', 0))),
+        integer(int(item['template_id'])),
+        string(str(item.get('name', '未命名物品'))),
+        short(int(item.get('item_flags', 0))),
+        short(int(item.get('action_flags', 0))),
+        byte(int(item.get('level_required', 1))),
+        short(int(item.get('icon_code', item.get('quality', 0)))),
+        integer(int(item.get('expires_at', -1))),
+        short(int(item.get('sort_group', 0))),
+        short(int(item.get('sort_order', 0))),
+    ]
+    if is_equipment(item):
+        base_attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+        innate_attributes = list(item.get('innate_attributes', [0, 0, 0, 0, 0]))
+        acquired_attributes = list(item.get('acquired_attributes', [0, 0, 0, 0, 0]))
+        extra_attributes = list(item.get('extra_attributes', [0, 0, 0, 0, 0]))
+        fields.extend(short(int(value)) for value in (base_attributes + [0] * 4)[:4])
+        fields.extend(byte(int(value)) for value in (innate_attributes + [0] * 5)[:5])
+        fields.extend(byte(int(value)) for value in (acquired_attributes + [0] * 5)[:5])
+        fields.extend(short(int(value)) for value in (extra_attributes + [0] * 5)[:5])
+    return encode_frame(1008, fields)
+
+
+def item_description_frame(item: dict[str, object]) -> bytes:
+    return encode_frame(1009, [
+        short(82),
+        integer(int(item['id'])),
+        string(str(item.get('description', item.get('name', '物品')))),
+    ])
+
+
+def item_detail_frame(item: dict[str, object]) -> bytes:
+    return encode_frame(1032, [
+        byte(1),
+        integer(int(item.get('template_id', 0))),
+        short(int(item.get('icon_code', item.get('quality', 0)))),
+        string(str(item.get('description', item.get('name', '物品')))),
+    ])
+
+
+def battle_reward_notice(experience: int, item: dict[str, object], level_up: bool = False) -> bytes:
+    """Persist the deterministic result in the APK's notice cache.
+
+    Protocol 1123 is not a visible notification: ``main/e.C`` only stores
+    its version and text for the notice screen.  Keep it as a durable record,
+    and use :func:`battle_reward_popup` for the immediate on-screen result.
+    """
+    level_text = '，升级了' if level_up else ''
+    text = f'战斗胜利{level_text}！获得经验 {experience}，获得 {item.get("name", BATTLE_DROP_NAME)} x{item.get("quantity_gained", 1)}'
+    # 1123/action 0 is the client's normal notice channel.  A timestamp-like
+    # version makes each victory visible even when the previous notice was
+    # already acknowledged locally.
+    return encode_frame(1123, [byte(0), integer(int(time.time())), string(text)])
+
+
+def battle_reward_popup(experience: int, item: dict[str, object], level_up: bool = False) -> bytes:
+    """Open the APK's native top-of-map reward overlay (protocol 1049).
+
+    ``main/e`` handles 1049/action 3 by passing the next five fields to the
+    map screen's embedded ``e/bs`` overlay.  Its fixed layout is experience,
+    pet experience, silver, cultivation and an item-count marker.  The
+    overlay slides down from the top, remains visible for three seconds, and
+    slides away; unlike protocol 1512 it does not open the centred ``br``
+    prompt and therefore does not interrupt the map screen.
+
+    The bundled client renders the length of the last string after ``获得``.
+    Encode one marker character per awarded item so a single drop is shown as
+    ``获得 1`` while the complete item instance is still delivered by 1008.
+    """
+    quantity = max(0, int(item.get('quantity_gained', 1)))
+    item_count_marker = 'x' * quantity
+    return encode_frame(1049, [
+        byte(3),
+        integer(max(0, int(experience))),
+        integer(0),
+        integer(0),
+        integer(0),
+        string(item_count_marker),
+    ])
+
+
+def top_message_frame(text: str) -> bytes:
+    """Show one non-blocking message in the APK's native top map overlay."""
+    return encode_frame(1049, [byte(4), string(text)])
+
+
+def level_up_effect_frame(role: dict[str, object], levels_gained: int = 1) -> bytes:
+    """Play the APK's native level-up effect and attribute-growth panel.
+
+    ``main/e.ar`` dispatches protocol 1129 to the map overlay. Field 0 is the
+    character id; fields 3..11 are HP, MP, physical attack, physical defence,
+    speed, dodge, hit, magic attack and magic defence gains.
+    """
+    count = max(1, int(levels_gained))
+    return encode_frame(1129, [
+        integer(int(role['id'])),
+        integer(int(role.get('level', 1))),
+        integer(count * 5),
+        integer(count * 11),
+        integer(count * 6),
+        integer(count * 2),
+        integer(count),
+        integer(count),
+        integer(count),
+        integer(count),
+        integer(count * 2),
+        integer(count),
+    ])
+
+
+def apply_one_level(role: dict[str, object]) -> bool:
+    """Consume EXP for one level and persist deterministic base-stat growth."""
+    level = max(1, int(role.get('level', 1)))
+    experience = max(0, int(role.get('experience', 0)))
+    if level >= MAX_ROLE_LEVEL or experience < level_experience_required(level):
+        return False
+    role['experience'] = experience - level_experience_required(level)
+    role['level'] = level + 1
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    base_stats = (raw_stats + [0] * 8)[:8]
+    for index in range(5):
+        base_stats[index] += LEVEL_BASE_STAT_GAIN
+    role['stats'] = base_stats
+    return True
+
+
+def apply_battle_rewards(role: dict[str, object], experience: int = BATTLE_EXP_REWARD) -> tuple[dict[str, object], bool]:
+    """Persist one trial victory and return the changed item plus level-up flag."""
+    old_level = max(1, int(role.get('level', 1)))
+    role['experience'] = max(0, int(role.get('experience', 0))) + max(0, experience)
+    if bool(role.get('auto_level', True)):
+        while int(role.get('level', 1)) < MAX_ROLE_LEVEL and apply_one_level(role):
+            pass
+
+    item = next(
+        (candidate for candidate in role_items(role)
+         if int(candidate.get('template_id', 0)) == BATTLE_DROP_TEMPLATE_ID
+         and str(candidate.get('location', 'bag')) == 'bag'),
+        None,
+    )
+    if item is None:
+        item = {
+            'id': (int(role.get('id', 0)) * 100) + 17,
+            'template_id': BATTLE_DROP_TEMPLATE_ID,
+            'name': BATTLE_DROP_NAME,
+            'description': '试炼妖兽掉落的恢复道具。',
+            'quantity': 1,
+            'max_quantity': 99,
+            'location': 'bag',
+            'price': 2,
+            'level_required': 1,
+            'icon_code': POTION_ICON_CODE,
+            'quality': 0,
+            'sort_group': 150,
+            'sort_order': 99,
+            'item_flags': 0x40,
+            'action_flags': 0x06,
+            'heal': 50,
+        }
+        role_items(role).append(item)
+    else:
+        item['quantity'] = min(
+            int(item.get('max_quantity', 99)),
+            int(item.get('quantity', 0)) + 1,
+        )
+    return item, int(role.get('level', 1)) > old_level
+
+
+def notice_and_world(settings: Settings, role: dict[str, object] | None = None) -> list[bytes]:
+    role = role if role is not None else default_role(settings)
+    map_id = int(role.get('map_id', settings.map_id))
+    map_name = str(role.get('map_name', settings.map_name))
+    notice = encode_frame(1123, [byte(0), integer(0), string('本地服务正常')])
+    # 1110 字段 1/2 are the logical map id used by the client. The patched
+    # APK carries the matching 50000.map.ref alias for the target map.
+    client_map_id = map_id
+    world = encode_frame(1110, [
+        integer(0),
+        integer(client_map_id),
+        integer(client_map_id),
+        string(map_name),
+    ])
+    return [notice, world]
+
+
+def map_action(settings: Settings, action: int, status: int = 0, role_id: int | None = None) -> bytes:
+    # 游戏端读取 1010 应答时固定从字段 5 取动作码。
+    return encode_frame(1010, [
+        integer(settings.role_id if role_id is None else role_id),
+        short(settings.spawn_x),
+        short(settings.spawn_y),
+        integer(0),
+        integer(status),
+        # 客户端在 1010 响应中用 w.b(5) 读取动作码，必须是 short。
+        short(action),
+    ])
+
+
+def map_monster_frame(settings: Settings) -> bytes:
+    """Return the verified 1126 actor-spawn frame for the local monster.
+
+    ``pmsj.work.main.e.Q`` decodes subtype 0 as a list of generic map actors:
+    field 0 is the subtype, field 1 the count, then each record contains
+    id/x/y/raw-model/name.  The client adds 0x200b20 to raw-model before
+    loading the sprite resource.
+    """
+    return encode_frame(1126, [
+        byte(0),
+        byte(1),
+        integer(settings.monster_id),
+        integer(settings.monster_x),
+        integer(settings.monster_y),
+        integer(settings.monster_model),
+        string(settings.monster_name),
+    ])
+
+
+def map_portal_frame(settings: Settings) -> bytes:
+    """Return the verified 1126 generic-actor shape for the test portal."""
+    return encode_frame(1126, [
+        byte(0),
+        byte(1),
+        integer(settings.portal_id),
+        integer(settings.portal_x),
+        integer(settings.portal_y),
+        # Reuse the known-good local actor sprite.  The important part of the
+        # portal is its actor id/position; no new client resource is required.
+        integer(settings.monster_model),
+        string(settings.portal_name),
+    ])
+
+
+def map_object_remove_frame(object_id: int) -> bytes:
+    """Remove a generic 1126 actor via verified ``1010/action=18``.
+
+    ``main/e`` dispatches protocol 1010 using short field 5. Action 18 reads
+    the actor id from integer field 0 and removes ids >= 1_000_000 from the
+    generic-actor container. It is not a standalone protocol number 18.
+    """
+    return encode_frame(1010, [
+        integer(object_id),
+        short(0),
+        short(0),
+        integer(0),
+        integer(0),
+        short(18),
+    ])
+
+
+def map_object_interaction_values(values: list[object]) -> tuple[int, int | None, int | None, int | None]:
+    """Decode the active APK's 2031 generic-map-object request.
+
+    ``main/e.a(IISS)`` writes ``[object_id, 0, x, y, action, 0]``.  Keep
+    the optional fields tolerant because older builds omit the trailing
+    values when an actor has no interaction metadata.
+    """
+    if not values:
+        raise ValueError('map object interaction requires an object id')
+    object_id = int(values[0])
+    object_x = int(values[2]) if len(values) > 2 else None
+    object_y = int(values[3]) if len(values) > 3 else None
+    action = int(values[4]) if len(values) > 4 else None
+    return object_id, object_x, object_y, action
+
+
+def battle_reset_frame() -> bytes:
+    """Return the APK-verified 1040 action=0 battle reset frame.
+
+    Action 0 is parsed by the client as the battle-state reset/open path.  It
+    removes stale map/battle state and creates screen 20, which must precede
+    the action=1 first-round payload on a fresh map session.
+    """
+    return encode_frame(1040, [byte(0)])
+
+
+def battle_start_frame(role: dict[str, object], settings: Settings) -> bytes:
+    """Build the APK-confirmed 1040/action=1 battle-state frame.
+
+    ``main/e`` reads the following fixed types for action 1:
+    byte(action), int(round), byte(reserved), int(timer), short(menu-state),
+    string(reserved), short(target-state), string(reserved), byte(ready).
+    The two strings and the reserved byte are intentionally empty/zero because
+    the client parser only consumes them in this action; no server semantics
+    are inferred from their names.
+    """
+    return encode_frame(1040, [
+        byte(1),
+        integer(1),
+        byte(0),
+        integer(30),
+        short(0),
+        string(''),
+        short(0),
+        string(''),
+        byte(1),
+    ])
+
+
+def battle_actor_frame(
+    *,
+    actor_id: int,
+    model: int,
+    name: str,
+    kind: int,
+    side_code: int,
+    slot: int = 1,
+    model_is_battle_base: bool = False,
+    appearance: dict[int, int] | None = None,
+    current_hp: int = 100,
+    max_hp: int = 100,
+) -> bytes:
+    """Build the APK's 1048 actor record used to populate battle slots.
+
+    ``main/e.af`` constructs ``work/b/h`` from field 7 (kind), field 9 (id),
+    field 2/0 (model), field 5 (side/category), and field 15 (position), then
+    stores every field on the actor.  The remaining numeric fields are the
+    zero/default stat block; keeping them present is important because the
+    renderer reads the sparse record by index.
+    """
+    source_model = model if model_is_battle_base else (model * 10 if kind == 1 else max(0, model - 1))
+    visible_layers = appearance or {}
+    fields: list[Field] = [
+        integer(source_model),  # 0: flags/model source
+        integer(0),              # 1
+        integer(source_model if kind == 1 else 0),  # 2: player model source
+        integer(max(0, current_hp)),  # 3: current hp/status (used by h.d())
+        integer(0),              # 4
+        integer(side_code),      # 5: side/category
+        string(name),            # 6: battle name
+        short(kind),              # 7: actor kind
+        integer(slot),            # 8: one-based battle slot
+        integer(actor_id),        # 9: actor id
+        integer(max(0, current_hp)),  # 10: current hp
+        integer(max(1, max_hp)),      # 11: max hp
+        integer(100),             # 12: current mp
+        integer(100),             # 13: max mp/status
+        integer(int(visible_layers.get(14, 0))),  # 14: trousers layer
+        # The APK reuses field 15 both as the constructor's auxiliary short
+        # and as the base/armour appearance value in h.r().
+        short(int(visible_layers.get(15, 0))),     # 15: armour/base layer
+        integer(int(visible_layers.get(16, 0))),   # 16: shoulder layer
+        integer(int(visible_layers.get(17, 0))),   # 17: wrist layer
+        integer(int(visible_layers.get(18, 0))),   # 18: boot layer
+        integer(int(visible_layers.get(19, 0))),   # 19: cape layer
+        integer(int(visible_layers.get(20, 0))),   # 20: helmet layer
+        # 1048's kind-1 decoder reads field 21 as a short constructor
+        # auxiliary value before it calls h.r().  The APK accesses this field
+        # unconditionally; omitting it aborts the client's message handler
+        # before the battle renderer can request the player sprite.
+        short(int(visible_layers.get(21, 0))),    # 21: actor auxiliary value
+    ]
+    return encode_frame(1048, fields)
+
+
+def battle_actor_frames(role: dict[str, object], settings: Settings) -> list[bytes]:
+    """Return one player and one monster record for the local battle probe."""
+    return [
+        battle_actor_frame(
+            actor_id=int(role['id']),
+            model=int(role.get('model', settings.role_model)),
+            name=str(role.get('name', settings.role_name)),
+            kind=1,
+            # main/b.h.e() treats the local fighter's side as grid 0. Side 3
+            # is a special non-grid list and cannot be resolved by normal
+            # attack actions, so the player must use the ordinary side 2.
+            side_code=2,
+            slot=1,
+            appearance=character_appearance(role),
+        ),
+        battle_actor_frame(
+            actor_id=int(settings.monster_id),
+            model=int(settings.monster_model),
+            name=str(settings.monster_name),
+            kind=2,
+            side_code=1,
+            slot=1,
+        ),
+    ]
+
+
+def battle_actor_update_frame(
+    role: dict[str, object],
+    settings: Settings,
+    state: LocalBattleState,
+    actor_id: int,
+) -> bytes:
+    """Re-send one 1048 record with the actor's current HP.
+
+    The 1042 action packet drives animation and damage numbers, but the APK's
+    visible life bar is read from actor field 3 (and the current/max stat pair
+    at fields 10/11).  A small 1048 state refresh keeps those values in sync.
+    """
+    if actor_id == state.player_id:
+        return battle_actor_frame(
+            actor_id=state.player_id,
+            model=int(role.get('model', settings.role_model)),
+            name=str(role.get('name', settings.role_name)),
+            kind=1,
+            side_code=2,
+            slot=1,
+            appearance=character_appearance(role),
+            current_hp=state.player_hp,
+            max_hp=100,
+        )
+    return battle_actor_frame(
+        actor_id=state.monster_id,
+        model=int(settings.monster_model),
+        name=str(settings.monster_name),
+        kind=2,
+        side_code=1,
+        slot=1,
+        current_hp=state.monster_hp,
+        max_hp=100,
+    )
+
+
+def battle_resource_path(model_id: int) -> Path | None:
+    """Resolve a logical battle model to a bundled APK role .dat file."""
+    role_dir = Path(__file__).resolve().parent / 'build' / 'weapon-apk-extracted' / 'assets' / 'res' / 'role'
+    candidates = [role_dir / f'{model_id}.dat']
+    alias = BATTLE_RESOURCE_ALIASES.get(model_id)
+    if alias is not None:
+        candidates.append(role_dir / f'{alias}.dat')
+    mapped = model_id + BATTLE_RESOURCE_MODEL_OFFSET
+    if mapped != model_id:
+        candidates.append(role_dir / f'{mapped}.dat')
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def battle_resource_frames(model_id: int) -> list[bytes]:
+    """Return the two 1503 chunks expected by ``main/e.ao`` for a .dat query."""
+    path = battle_resource_path(model_id)
+    if path is None:
+        if model_id in BATTLE_EMPTY_RESOURCE_IDS:
+            LOG.info('battle resource empty model=%d', model_id)
+            empty = [integer(model_id), short(0), short(0), binary(b'')]
+            return [
+                encode_frame(1503, [byte(0), *empty]),
+                encode_frame(1503, [byte(2), *empty]),
+            ]
+        LOG.warning('battle resource missing model=%d', model_id)
+        return []
+    data = path.read_bytes()
+    if len(data) > 0xFFFF:
+        LOG.warning('battle resource too large model=%d bytes=%d', model_id, len(data))
+        return []
+    # status 0 allocates and copies the first chunk.  The APK's status-2
+    # handler also appends its declared chunk before finalising the cache;
+    # repeating ``data`` there would overflow the client's fixed buffer.
+    fields = [integer(model_id), short(len(data)), short(len(data)), binary(data)]
+    finish_fields = [integer(model_id), short(len(data)), short(0), binary(b'')]
+    return [
+        encode_frame(1503, [byte(0), *fields]),
+        encode_frame(1503, [byte(2), *finish_fields]),
+    ]
+
+
+def _signed_int32(value: int) -> int:
+    """Return an unsigned APK integer in Java's signed-int representation."""
+    value &= 0xFFFFFFFF
+    return value - 0x100000000 if value >= 0x80000000 else value
+
+
+def battle_image_resource(image_id: int) -> tuple[int, int, int, int, int, int, int, int, int, bytes] | None:
+    """Read one proprietary image record from the APK/JAR image sets.
+
+    The client reconstructs a regular indexed PNG from the RGB565 palette and
+    the stored IDAT bytes. Some role layers request a direction/variant id 100
+    above the base atlas id; the bundled index only stores that base id. The
+    APK is a thin client and omits some player images which remain available
+    in the original client JAR, so that extracted set is used as a fallback.
+    """
+    build_dir = Path(__file__).resolve().parent / 'build'
+    image_dirs = (
+        build_dir / 'weapon-apk-extracted' / 'assets' / 'res' / 'images',
+        build_dir / 'jar-images' / 'res' / 'images',
+    )
+
+    source_id = image_id
+    image_dir: Path | None = None
+    record: tuple[int, int] | None = None
+    # Prefer an exact id from either resource set before trying the directional
+    # id alias. This prevents an APK alias from masking an exact JAR resource.
+    for candidate_id in (image_id, image_id - 100):
+        if candidate_id < 0:
+            continue
+        for candidate_dir in image_dirs:
+            index_path = candidate_dir / 'images.o'
+            if not index_path.is_file():
+                continue
+            index = index_path.read_bytes()
+            if len(index) < 2:
+                continue
+            index_size = struct.unpack_from('>H', index, 0)[0]
+            records = index[2:2 + index_size]
+            for offset in range(0, len(records) - 6, 7):
+                record_id, container_number, data_offset = struct.unpack_from('>IBH', records, offset)
+                if record_id != candidate_id:
+                    continue
+                container_path = candidate_dir / f'png{container_number}.p'
+                if not container_path.is_file():
+                    continue
+                source_id = candidate_id
+                image_dir = candidate_dir
+                record = (container_number, data_offset)
+                break
+            if record is not None:
+                break
+        if record is not None:
+            break
+    if record is None or image_dir is None:
+        return None
+
+    container_number, data_offset = record
+    container_path = image_dir / f'png{container_number}.p'
+    if not container_path.is_file():
+        # The original JAR index contains a few combat-effect records that
+        # reuse container numbers shipped by the APK.  Keep the JAR index
+        # metadata (including the correct record offset), but transparently
+        # source the matching container from the APK when the JAR omitted it.
+        for candidate_dir in image_dirs:
+            candidate_path = candidate_dir / f'png{container_number}.p'
+            if candidate_path.is_file():
+                container_path = candidate_path
+                break
+        else:
+            return None
+    container = container_path.read_bytes()
+    if data_offset + 24 > len(container):
+        return None
+
+    position = data_offset
+    group_count, group_index = container[position], container[position + 1]
+    position += 2
+    if group_count:
+        position += (group_count - group_index - 1) * 2
+    if position + 22 > len(container):
+        return None
+    (
+        width,
+        height,
+        bit_depth,
+        transparent_index,
+        palette_crc,
+        transparency_crc,
+        header_crc,
+        palette_length,
+        idat_length,
+    ) = struct.unpack_from('>HHBBIIIHH', container, position)
+    position += 22
+
+    if group_count:
+        position += group_index * palette_length
+        palette = container[position:position + palette_length]
+        position += palette_length
+        position += (group_count - group_index - 1) * palette_length
+    else:
+        palette = container[position:position + palette_length]
+        position += palette_length
+    idat = container[position:position + idat_length]
+    if len(palette) != palette_length or len(idat) != idat_length:
+        return None
+
+    if source_id != image_id:
+        LOG.info('battle image alias requested=%d source=%d', image_id, source_id)
+    if 'jar-images' in image_dir.parts:
+        LOG.info('battle image JAR fallback image=%d source=%d', image_id, source_id)
+    return (
+        width,
+        height,
+        bit_depth,
+        transparent_index,
+        palette_crc,
+        transparency_crc,
+        header_crc,
+        palette_length,
+        idat_length,
+        palette + idat,
+    )
+
+
+def battle_image_frames(query_action: int, image_id: int) -> list[bytes]:
+    """Return 1501 image chunks followed by the client's 1502 redraw signal."""
+    resource = battle_image_resource(image_id)
+    if resource is None:
+        LOG.warning('battle image resource missing image=%d action=%d', image_id, query_action)
+        return []
+    (
+        width,
+        height,
+        bit_depth,
+        transparent_index,
+        palette_crc,
+        transparency_crc,
+        header_crc,
+        palette_length,
+        idat_length,
+        data,
+    ) = resource
+
+    # Action 2 originates from a/a/a's role-image cache. main/e.ap selects
+    # that cache with response field 0 == 1; batched action 0 uses cache 0.
+    cache_selector = 1 if query_action == PNG_QUERY_ROLE_CACHE else 0
+    if palette_length + idat_length != len(data) or len(data) > 0xFFFF:
+        LOG.warning('battle image resource invalid image=%d bytes=%d', image_id, len(data))
+        return []
+
+    def frame(status: int, chunk: bytes) -> bytes:
+        return encode_frame(1501, [
+            integer(cache_selector),
+            integer(len(data)),
+            byte(0),
+            byte(status),
+            integer(image_id),
+            short(width),
+            short(height),
+            byte(bit_depth),
+            byte(transparent_index),
+            short(palette_length),
+            short(idat_length),
+            integer(_signed_int32(palette_crc)),
+            integer(_signed_int32(transparency_crc)),
+            integer(_signed_int32(header_crc)),
+            short(len(chunk)),
+            binary(chunk),
+        ])
+
+    # As with 1503, status 0 allocates and copies the complete payload while
+    # status 2 finalises with an empty chunk, avoiding a client buffer overflow.
+    # main/e.ap stores action-2 resources in the role cache without invalidating
+    # the current canvas. Server protocol 1502 is the separate processPngQuery
+    # completion signal which forces the map/battle scene to redraw.
+    return [frame(0, data), frame(2, b''), encode_frame(1502)]
+
+
+def battle_action_frame(
+    state: LocalBattleState,
+    round_number: int | None = None,
+    *,
+    actor_id: int | None = None,
+    target_id: int | None = None,
+    damage: int = 10,
+    label: str = '普通攻击',
+) -> bytes:
+    """Queue one native APK basic attack, including its damage effect.
+
+    The decompiled ``pmsj.work.main.b`` controller identifies action type 1
+    as ``ACTION_ATTACK``. It moves the sender to ``target.g()``, waits for
+    arrival, switches to the attack pose, applies the embedded BattleEffect,
+    and only then queues the sender's return movement. Effect type 22 calls
+    ``target.a(delta, flags)`` and updates HP immediately.
+
+    Types 7 and 8 are summon/call-back actions. Using type 8 as an attack was
+    the reason HP changed after the return animation and could strand actors.
+    """
+    sender_id = state.player_id if actor_id is None else actor_id
+    victim_id = state.monster_id if target_id is None else target_id
+    return encode_frame(1042, [
+        integer(state.round if round_number is None else round_number),
+        integer(sender_id),
+        integer(victim_id),
+        byte(1),                 # ACTION_ATTACK
+        byte(1),                 # one hit
+        byte(0),
+        integer(0),              # sender visual effect id
+        integer(0),              # target visual effect id
+        string(label),
+        integer(1),              # BattleEffect count
+        integer(victim_id),      # effect target
+        integer(0),              # normal hit reaction and damage number
+        integer(22),             # HP delta effect
+        integer(-max(1, damage)),
+        string(''),
+    ])
+
+
+def battle_move_frame(
+    state: LocalBattleState,
+    round_number: int | None = None,
+    *,
+    actor_id: int | None = None,
+    target_id: int | None = None,
+) -> bytes:
+    """Build a raw effect-free ACTION_ATTACK record for diagnostics.
+
+    Gameplay uses :func:`battle_action_frame`; this record approaches and
+    returns but intentionally performs no damage.
+    """
+    return encode_frame(1042, [
+        integer(state.round if round_number is None else round_number),
+        integer(state.player_id if actor_id is None else actor_id),
+        integer(state.monster_id if target_id is None else target_id),
+        byte(1),
+        byte(0),
+        byte(0),
+        integer(0),
+        integer(0),
+        string(''),
+        integer(0),
+    ])
+
+
+def battle_action_show_frame(state: LocalBattleState, round_number: int | None = None) -> bytes:
+    """Advance the APK battle UI (1040/action=2) for a specific round.
+
+    The client sends its completion acknowledgement only after it has
+    finished the action animation.  The server may already have advanced its
+    internal HP/turn state by then, so the frame must carry the round that the
+    client just executed rather than blindly using the post-action counter.
+    """
+    shown_round = state.round if round_number is None else round_number
+    return encode_frame(1040, [
+        byte(2),
+        integer(shown_round),
+        byte(0),
+        integer(0),
+        short(0),
+        string(''),
+        short(0),
+        string(''),
+        byte(1),
+    ])
+
+
+def battle_end_frame() -> bytes:
+    """End the local battle through the APK's verified action=4 branch."""
+    return encode_frame(1040, [byte(4)])
+
+
+def map_data_frames(settings: Settings, role_id: int | None = None) -> list[bytes]:
+    configured = Path(settings.map_o_file)
+    map_path = configured if configured.is_absolute() else Path(__file__).resolve().parent / configured
+    try:
+        generated = MapO.from_file(map_path.read_bytes())
+    except (OSError, MapOError) as exc:
+        LOG.warning('cannot load generated map %s; using flat fallback: %s', map_path, exc)
+        width = max(2, min(127, settings.map_width))
+        height = max(2, min(127, settings.map_height))
+        generated = MapO(
+            width=width,
+            height=height,
+            map_type=0,
+            tile_definitions=[0],
+            tiles=[0] * (width * height),
+            collision=[False] * (width * height),
+            mirror=[False] * (width * height),
+        )
+    sections = generated.to_1407_sections()
+    map_type = int(sections['map_type'])
+    width = int(sections['width'])
+    height = int(sections['height'])
+    tile_definitions = sections['definitions']
+    encoded_tiles = sections['tiles_rle']
+    collision = sections['collision']
+    mirror = sections['mirror']
+    assert isinstance(tile_definitions, bytes)
+    assert isinstance(encoded_tiles, bytes)
+    assert isinstance(collision, bytes)
+    assert isinstance(mirror, bytes)
+
+    return [
+        map_action(settings, 11, role_id=role_id),
+        encode_frame(1407, [byte(0), byte(map_type), byte(width), byte(height)]),
+        encode_frame(1407, [byte(1), short(len(tile_definitions)), binary(tile_definitions)]),
+        encode_frame(1407, [byte(3), short(len(encoded_tiles)), binary(encoded_tiles)]),
+        encode_frame(1407, [byte(5), short(len(collision)), binary(collision)]),
+        encode_frame(1407, [byte(7), short(len(mirror)), binary(mirror)]),
+        # status=1：不要找本地 map.o；上面的 1407 数据就是本次地图数据。
+        map_action(settings, 12, status=1, role_id=role_id),
+    ]
+
+
+def map_enter_frames(settings: Settings, role_id: int | None = None) -> list[bytes]:
+    # Only map 58 has an APK-local map.ref in this build.  For the synthetic
+    # target map, status=1 skips the local lookup after the server has already
+    # supplied the map.o-equivalent data through 1407.
+    ref_status = 0 if settings.map_ref_available else 1
+    frames = [
+        map_action(settings, 13, status=ref_status, role_id=role_id),
+        map_action(settings, 14, role_id=role_id),
+        map_action(settings, 105, role_id=role_id),
+        map_monster_frame(settings),
+    ]
+    if settings.portal_enabled:
+        frames.append(map_portal_frame(settings))
+    return frames
+
+
+def heartbeat_challenge(nonce: int) -> bytes:
+    """Ask the original client for its built-in 1012 heartbeat response."""
+    return encode_frame(1012, [integer(nonce)])
+
+
+class LocalGameServer:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.roles = RoleStore(settings)
+        self._next_session_id = 1000
+        self._sessions: dict[tuple[int, int], str] = {}
+
+    async def _send(
+        self,
+        writer: asyncio.StreamWriter,
+        *frames: bytes,
+        cipher: GameCipher | None = None,
+        lock: asyncio.Lock | None = None,
+    ) -> None:
+        async def send_frames() -> None:
+            for frame in frames:
+                writer.write(cipher.encrypt_server_frame(frame) if cipher is not None else frame)
+            await writer.drain()
+
+        if lock is None:
+            await send_frames()
+        else:
+            # GameCipher is stateful. Keep encryption and socket writes in one
+            # critical section so heartbeat and request replies cannot interleave.
+            async with lock:
+                await send_frames()
+
+    async def _heartbeat_loop(
+        self,
+        writer: asyncio.StreamWriter,
+        cipher: GameCipher,
+        send_lock: asyncio.Lock,
+        peer: object,
+    ) -> None:
+        nonce = 0
+        try:
+            while True:
+                await asyncio.sleep(self.settings.heartbeat_interval_seconds)
+                nonce = 1 if nonce >= 0x7FFFFFFF else nonce + 1
+                await self._send(
+                    writer,
+                    heartbeat_challenge(nonce),
+                    cipher=cipher,
+                    lock=send_lock,
+                )
+                LOG.info('heartbeat sent to %s nonce=%d', peer, nonce)
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            return
+
+    async def _handle_map_object_interaction(
+        self,
+        *,
+        username: str,
+        active_role: dict[str, object] | None,
+        object_id: int,
+        object_x: int | None,
+        object_y: int | None,
+        action: int | None,
+        source: str,
+        writer: asyncio.StreamWriter,
+        cipher: GameCipher | None,
+        send_lock: asyncio.Lock,
+        battle_state: LocalBattleState,
+    ) -> None:
+        """Handle a generic 1126 actor request without guessing battle data.
+
+        The APK sends protocol 2031 for a generic map actor. Its verified
+        action is 6 and the payload includes the actor id and tile. Portal
+        activation is a complete transition. A monster now starts the local
+        single-target battle probe using the confirmed 1040/action=1 shape.
+        """
+        current_settings = settings_for_role(self.settings, active_role)
+        LOG.info(
+            'map object interaction source=%s user=%r map=%d object_id=%d tile=%s,%s action=%s',
+            source,
+            username,
+            current_settings.map_id,
+            object_id,
+            object_x,
+            object_y,
+            action,
+        )
+
+        if (
+            active_role is not None
+            and current_settings.portal_enabled
+            and object_id == int(current_settings.portal_id)
+        ):
+            target_map = int(current_settings.portal_target_map_id)
+            target_name = str(current_settings.portal_target_map_name)
+            active_role['map_id'] = target_map
+            active_role['map_name'] = target_name
+            self.roles.save()
+            LOG.info(
+                'portal activated user=%r role_id=%d object_id=%d map %d -> %d',
+                username,
+                int(active_role['id']),
+                object_id,
+                current_settings.map_id,
+                target_map,
+            )
+            target_settings = settings_for_map(self.settings, target_map)
+            # 1110 is the same world/map descriptor used by the original map
+            # transition. The client then requests 1010/12 and 1010/13.
+            await self._send(
+                writer,
+                notice_and_world(target_settings, active_role)[1],
+                cipher=cipher,
+                lock=send_lock,
+            )
+            return
+
+        if object_id == int(current_settings.monster_id):
+            if battle_state.monster_defeated:
+                LOG.info(
+                    'suppressed stale monster interaction user=%r monster_id=%d; encounter already settled',
+                    username,
+                    object_id,
+                )
+                await self._send(
+                    writer,
+                    map_object_remove_frame(object_id),
+                    cipher=cipher,
+                    lock=send_lock,
+                )
+                return
+            if battle_state.active:
+                LOG.info(
+                    'ignored duplicate monster interaction user=%r monster_id=%d; battle already active',
+                    username,
+                    object_id,
+                )
+                return
+            LOG.info(
+                'monster interaction recorded user=%r monster_id=%d; starting local battle',
+                username,
+                object_id,
+            )
+            role = active_role if active_role is not None else default_role(self.settings)
+            battle_state.begin(int(role['id']), object_id)
+            # The APK's 1040/action=1 handler only updates an already-created
+            # battle screen (d/n.d(20)).  A fresh map session has no screen 20
+            # yet, so action=1 alone is silently ignored and the UI remains on
+            # its loading prompt.  Action 0 is the original reset/open path:
+            # it removes any stale map/battle state and then creates screen
+            # 20 before action 1 fills in the first round.  The battle screen
+            # also builds its grid from 1048 actor records; without these the
+            # scene opens but has no drawable player/monster and appears blank.
+            LOG.info(
+                'sending battle reset/start user=%r player_id=%d monster_id=%d',
+                username,
+                int(role['id']),
+                object_id,
+            )
+            await self._send(
+                writer,
+                battle_reset_frame(),
+                *battle_actor_frames(role, current_settings),
+                battle_start_frame(role, current_settings),
+                cipher=cipher,
+                lock=send_lock,
+            )
+            return
+
+        LOG.info('ignored map object action id=%d map=%d', object_id, current_settings.map_id)
+
+    async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        peer = writer.get_extra_info('peername')
+        LOG.info('client connected: %s', peer)
+        username = ''
+        world_sent = False
+        active_role: dict[str, object] | None = None
+        game_cipher: GameCipher | None = None
+        battle_state = LocalBattleState()
+        send_lock = asyncio.Lock()
+        heartbeat_task: asyncio.Task[None] | None = None
+        try:
+            while True:
+                header = await reader.readexactly(2)
+                frame_length = struct.unpack('>H', header)[0]
+                if frame_length < 4:
+                    raise ProtocolError(f'invalid frame length {frame_length}')
+                payload = await reader.readexactly(frame_length - 2)
+                if len(payload) < 2:
+                    raise ProtocolError('payload is missing the message id')
+                message_hint = struct.unpack_from('>H', payload, 0)[0]
+                if game_cipher is None and message_hint == 1052:
+                    game_cipher = GameCipher()
+                    LOG.info('game cipher enabled for %s', peer)
+                decoded_payload = payload
+                if game_cipher is not None:
+                    decoded_payload = payload[:2] + game_cipher.decrypt(payload[2:])
+                try:
+                    message_id, fields = decode_payload(decoded_payload)
+                except ProtocolError:
+                    LOG.warning('raw payload message_hint=%d hex=%s', message_hint, payload.hex())
+                    raise
+                values = field_values(fields)
+                LOG.info('received message=%d field_types=%s', message_id, [x.type_id for x in fields])
+
+                if message_id == 1077:
+                    username = str(values[3]) if len(values) > 3 else ''
+                    password = str(values[4]) if len(values) > 4 else ''
+                    version = int(values[0]) if values else -1
+                    LOG.info('login request user=%r password=%s version=%s', username, '*' * len(password), version)
+                    if not username or not password:
+                        await self._send(writer, encode_frame(1055, [byte(5), string('账号或密码不能为空')]))
+                    elif version != self.settings.expected_client_version:
+                        await self._send(writer, encode_frame(1055, [byte(6), string('客户端版本不匹配')]))
+                    else:
+                        await self._send(writer, login_server_list(self.settings))
+
+                elif message_id == 1051:
+                    username = str(values[0]) if values else username
+                    selected = str(values[2]) if len(values) > 2 else ''
+                    self._next_session_id += 1
+                    session_id = self._next_session_id
+                    account_id = session_id + 100000
+                    self._sessions[(session_id, account_id)] = username
+                    LOG.info('server selected user=%r address=%r session=%d', username, selected, session_id)
+                    await self._send(writer, game_server_redirect(self.settings, session_id, account_id))
+
+                elif message_id == 1052:
+                    session_id = int(values[0]) if values else 0
+                    account_id = int(values[1]) if len(values) > 1 else 0
+                    username = self._sessions.get((session_id, account_id), 'local-player')
+                    LOG.info('game handshake user=%r session=%d account=%d', username, session_id, account_id)
+                    await self._send(
+                        writer,
+                        role_list(self.settings, self.roles.roles_for(username)),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
+                    if heartbeat_task is None and game_cipher is not None:
+                        heartbeat_task = asyncio.create_task(
+                            self._heartbeat_loop(writer, game_cipher, send_lock, peer)
+                        )
+
+                elif message_id == 1080 and values:
+                    action = int(values[0])
+                    if action == 0:
+                        role_id = int(values[1]) if len(values) > 1 else 0
+                        active_role = self.roles.find(username, role_id)
+                        if active_role is None:
+                            LOG.warning('unknown role selected user=%r role_id=%d', username, role_id)
+                        else:
+                            world_sent = False
+                            LOG.info('role selected user=%r role_id=%d name=%r', username, role_id, active_role['name'])
+                            await self._send(
+                                writer,
+                                player_info(self.settings, active_role),
+                                character_extension_info(),
+                                character_skill_list(),
+                                *(item_frame(item) for item in role_items(active_role)),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    elif action == 1:
+                        role_id = int(values[1]) if len(values) > 1 else 0
+                        deleted = self.roles.delete(username, role_id)
+                        LOG.info('role delete user=%r role_id=%d deleted=%s', username, role_id, deleted)
+                        await self._send(writer, deletion_result(role_id), cipher=game_cipher, lock=send_lock)
+                    elif action == 2:
+                        name = str(values[1]) if len(values) > 1 else ''
+                        model = int(values[2]) if len(values) > 2 else 0
+                        slot = int(values[3]) if len(values) > 3 else 0
+                        created = self.roles.create(username, name, model, slot)
+                        LOG.info(
+                            'role created user=%r role_id=%d name=%r model=%d slot=%d race=%d gender=%d',
+                            username,
+                            created['id'],
+                            created['name'],
+                            created['model'],
+                            created['slot'],
+                            created['race'],
+                            created['gender'],
+                        )
+                        await self._send(
+                            writer,
+                            role_list(self.settings, self.roles.roles_for(username)),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif action == 4:
+                        LOG.info('creation names requested user=%r', username)
+                        await self._send(writer, creation_names(), cipher=game_cipher, lock=send_lock)
+                    else:
+                        LOG.info('ignored role action=%d values=%r', action, values)
+
+                elif message_id == 1123 and not world_sent:
+                    world_sent = True
+                    current = active_role if active_role is not None else default_role(self.settings)
+                    LOG.info('client initialized; sending world %d %s', current['map_id'], current['map_name'])
+                    await self._send(
+                        writer,
+                        *notice_and_world(self.settings, current),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
+
+                elif message_id == 1010 and values:
+                    action = int(values[0])
+                    if action == 36 and active_role is not None:
+                        # The character panel sends
+                        # [short(36), int(0=automatic, 1=manual)].
+                        manual = bool(int(values[1])) if len(values) > 1 else False
+                        active_role['auto_level'] = not manual
+                        self.roles.save()
+                        LOG.info('level mode changed user=%r automatic=%s', username, not manual)
+                    elif action == 12:
+                        current_settings = settings_for_role(self.settings, active_role)
+                        LOG.info('client requested map data map=%d', current_settings.map_id)
+                        role_id = int(active_role['id']) if active_role is not None else self.settings.role_id
+                        await self._send(
+                            writer,
+                            *map_data_frames(current_settings, role_id),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif action == 13:
+                        current_settings = settings_for_role(self.settings, active_role)
+                        # Map entry is the respawn boundary for the local
+                        # encounter; never carry a completed battle into the
+                        # newly loaded scene.
+                        battle_state.reset_encounter()
+                        LOG.info(
+                            'client requested map reference; map=%d entering at %d,%d; spawning monster id=%d model=%d at %d,%d',
+                            current_settings.map_id,
+                            current_settings.spawn_x,
+                            current_settings.spawn_y,
+                            current_settings.monster_id,
+                            current_settings.monster_model,
+                            current_settings.monster_x,
+                            current_settings.monster_y,
+                        )
+                        role_id = int(active_role['id']) if active_role is not None else self.settings.role_id
+                        await self._send(
+                            writer,
+                            *map_enter_frames(current_settings, role_id),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif action == 7 and len(values) > 1:
+                        # Compatibility with an older map-object path seen in
+                        # some client builds. The active APK uses 2031 below.
+                        await self._handle_map_object_interaction(
+                            username=username,
+                            active_role=active_role,
+                            object_id=int(values[1]),
+                            object_x=None,
+                            object_y=None,
+                            action=action,
+                            source='1010/7',
+                            writer=writer,
+                            cipher=game_cipher,
+                            send_lock=send_lock,
+                            battle_state=battle_state,
+                        )
+                    elif action == 15:
+                        # Sent by the APK after it receives action=105
+                        # (actionEnterMapOK).  This is a client acknowledgement,
+                        # not a request for another map frame.
+                        LOG.info('map entry acknowledged by client map=%d', settings_for_role(self.settings, active_role).map_id)
+                    else:
+                        LOG.info('ignored client map action=%d', action)
+                elif message_id == 2031 and values:
+                    # main/k.a(n) encodes [object_id, 0, x, y, action, 0]
+                    # for a generic 1126 actor; action 6 is the verified
+                    # approach/interact request used by the active APK.
+                    object_id, object_x, object_y, object_action = map_object_interaction_values(values)
+                    await self._handle_map_object_interaction(
+                        username=username,
+                        active_role=active_role,
+                        object_id=object_id,
+                        object_x=object_x,
+                        object_y=object_y,
+                        action=object_action,
+                        source='2031',
+                        writer=writer,
+                        cipher=game_cipher,
+                        send_lock=send_lock,
+                        battle_state=battle_state,
+                    )
+                elif message_id == 1502 and len(values) >= 3:
+                    # Fields are [action, count, id...]. Action 1 requests a
+                    # role .dat (1503); actions 0/2 request a PNG payload
+                    # (1501). Treating all three as .dat leaves actor records
+                    # alive but permanently invisible.
+                    query_action = int(values[0])
+                    resource_count = int(values[1])
+                    resource_ids = [int(value) for value in values[2:2 + resource_count]]
+                    LOG.info(
+                        'battle resource query action=%d count=%d ids=%r',
+                        query_action,
+                        resource_count,
+                        resource_ids,
+                    )
+                    for resource_id in resource_ids:
+                        if query_action == 1:
+                            resource_frames = battle_resource_frames(resource_id)
+                        elif query_action in (PNG_QUERY_MAIN_CACHE, PNG_QUERY_ROLE_CACHE):
+                            resource_frames = battle_image_frames(query_action, resource_id)
+                        else:
+                            LOG.warning(
+                                'unsupported battle resource action=%d id=%d',
+                                query_action,
+                                resource_id,
+                            )
+                            resource_frames = []
+                        LOG.info(
+                            'battle resource response action=%d id=%d chunks=%d',
+                            query_action,
+                            resource_id,
+                            len(resource_frames),
+                        )
+                        if resource_frames:
+                            await self._send(
+                                writer,
+                                *resource_frames,
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                elif message_id == 1040 and values:
+                    # After the client drains its local action queue it sends
+                    # BATTLE_ACTION_SHOW back as a two-field acknowledgement
+                    # [action=2, round].  It is the barrier between the player
+                    # action, the monster counterattack, and the next round.
+                    ack_action = int(values[0])
+                    ack_round = int(values[1]) if len(values) > 1 else None
+                    if battle_state.active and ack_action == 2 and ack_round is not None:
+                        LOG.info(
+                            'battle round acknowledgement user=%r round=%d server_round=%d',
+                            username,
+                            ack_round,
+                            battle_state.round,
+                        )
+                        if battle_state.phase == 'round_ack':
+                            if battle_state.monster_hp <= 0:
+                                reward_item = None
+                                level_up = False
+                                if active_role is not None:
+                                    reward_item, level_up = apply_battle_rewards(active_role)
+                                    self.roles.save()
+                                battle_state.finish()
+                                battle_state.monster_defeated = True
+                                # Send removal before the reward UI. In
+                                # automatic mode the APK can otherwise send a
+                                # new object interaction immediately after the
+                                # end frame and start a second battle.
+                                result_frames = [
+                                    battle_end_frame(),
+                                    map_object_remove_frame(battle_state.monster_id),
+                                ]
+                                if active_role is not None and reward_item is not None:
+                                    result_frames.extend((
+                                        battle_progress_frame(active_role),
+                                        item_frame(reward_item, operation=3),
+                                        battle_reward_notice(BATTLE_EXP_REWARD, reward_item, level_up),
+                                    ))
+                                    if level_up:
+                                        result_frames.append(level_up_effect_frame(active_role))
+                                    else:
+                                        result_frames.append(
+                                            battle_reward_popup(BATTLE_EXP_REWARD, reward_item, level_up)
+                                        )
+                                LOG.info(
+                                    'battle send settlement user=%r reason=monster_dead top_protocol=%s monster_hp=%d player_hp=%d',
+                                    username,
+                                    '1129/level-up' if level_up else '1049/3',
+                                    battle_state.monster_hp,
+                                    battle_state.player_hp,
+                                )
+                                await self._send(writer, *result_frames, cipher=game_cipher, lock=send_lock)
+                            elif battle_state.player_hp <= 0:
+                                battle_state.finish()
+                                LOG.info('battle send end user=%r reason=player_dead monster_hp=%d player_hp=%d', username, battle_state.monster_hp, battle_state.player_hp)
+                                await self._send(writer, battle_end_frame(), cipher=game_cipher, lock=send_lock)
+                            else:
+                                # Playback was started by the action=2 frame
+                                # sent after the 1042 batch. This short client
+                                # response means both attacks, effects and
+                                # return movements are now complete.
+                                battle_state.round = ack_round + 1
+                                battle_state.phase = 'idle'
+                                LOG.info('battle round ready user=%r round=%d monster_hp=%d player_hp=%d', username, battle_state.round, battle_state.monster_hp, battle_state.player_hp)
+                            continue
+                    else:
+                        LOG.info('ignored client battle state values=%r active=%s', values, battle_state.active)
+                elif message_id == 1041 and values:
+                    # Client battle menu acknowledgements use 1041. The APK's
+                    # h.b(II) writer starts with command 10, followed by the
+                    # current actor/round fields; only the existence of the
+                    # command is needed for this deterministic local probe.
+                    LOG.info('battle command user=%r values=%r active=%s', username, values, battle_state.active)
+                    if battle_state.active:
+                        if battle_state.phase != 'idle':
+                            LOG.info('ignored battle command while awaiting action acknowledgement')
+                            continue
+                        client_round = int(values[1]) if len(values) > 1 else battle_state.round
+                        if client_round > 0:
+                            battle_state.round = client_round
+                        action_round = battle_state.round
+                        ended = battle_state.apply_basic_attack()
+                        action_frames = [battle_action_frame(battle_state, action_round)]
+                        if not ended:
+                            battle_state.player_hp = max(0, battle_state.player_hp - 10)
+                            action_frames.append(battle_action_frame(
+                                battle_state,
+                                action_round,
+                                actor_id=battle_state.monster_id,
+                                target_id=battle_state.player_id,
+                                label='妖兽攻击',
+                            ))
+                        battle_state.phase = 'round_ack'
+                        LOG.info('battle send player-action user=%r round=%d monster_hp=%d player_hp=%d ended=%s', username, action_round, battle_state.monster_hp, battle_state.player_hp, ended)
+                        await self._send(
+                            writer,
+                            *action_frames,
+                            battle_action_show_frame(battle_state, action_round),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                        LOG.info('battle send action-show user=%r round=%d phase=round_ack', username, action_round)
+                        continue
+                elif message_id == 1129 and active_role is not None and values:
+                    # The APK's manual Upgrade button sends [short(3)].
+                    action = int(values[0])
+                    if action == 3:
+                        if apply_one_level(active_role):
+                            self.roles.save()
+                            LOG.info(
+                                'manual level-up user=%r role_id=%d level=%d experience=%d',
+                                username,
+                                int(active_role['id']),
+                                int(active_role['level']),
+                                int(active_role['experience']),
+                            )
+                            await self._send(
+                                writer,
+                                battle_progress_frame(active_role),
+                                level_up_effect_frame(active_role),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                        else:
+                            await self._send(
+                                writer,
+                                top_message_frame('经验不足，无法升级'),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    else:
+                        LOG.info('ignored level action=%d values=%r', action, values)
+                elif message_id == 1012:
+                    LOG.info('heartbeat response from %s values=%r', peer, values)
+                elif message_id == 1039 and active_role is not None and values:
+                    action = int(values[0])
+                    attributes, divine = character_panel_frames(active_role)
+                    if action == 1:
+                        LOG.info('character panel requested; sending level/EXP sync plus attributes and divine-power summary')
+                        await self._send(
+                            writer,
+                            battle_progress_frame(active_role),
+                            attributes,
+                            divine,
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif action == 2:
+                        LOG.info('character divine-power detail requested values=%r', values)
+                        await self._send(writer, divine, cipher=game_cipher, lock=send_lock)
+                    else:
+                        LOG.info('ignored character panel action=%d values=%r', action, values)
+                elif message_id == 1089 and active_role is not None:
+                    LOG.info('character extension data requested values=%r', values)
+                    await self._send(
+                        writer,
+                        character_extension_info(),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
+                elif message_id == 1132 and active_role is not None:
+                    LOG.info('character skill list requested values=%r', values)
+                    await self._send(
+                        writer,
+                        character_skill_list(),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
+                elif message_id in MENU_PREFETCH_EMPTY_SUBTYPES:
+                    LOG.info('menu prefetch acknowledged as empty message=%d values=%r', message_id, values)
+                    await self._send(
+                        writer,
+                        menu_prefetch_empty_ack(message_id),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
+                elif message_id == 1032 and active_role is not None and len(values) >= 2:
+                    item_id = int(values[1])
+                    # Different item-detail screens in this client send either
+                    # the instance id or the shared template id.
+                    item = find_item(active_role, item_id)
+                    if item is None:
+                        item = next(
+                            (
+                                candidate
+                                for candidate in role_items(active_role)
+                                if int(candidate.get('template_id', 0)) == item_id
+                            ),
+                            None,
+                        )
+                    if item is not None:
+                        LOG.info('item detail requested item_id=%d name=%r', item_id, item.get('name'))
+                        await self._send(
+                            writer,
+                            item_detail_frame(item),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    else:
+                        LOG.info('item detail requested for unknown item_id=%d', item_id)
+                elif message_id == 1009 and active_role is not None and values:
+                    action = int(values[0])
+                    item_id = int(values[1]) if len(values) > 1 else 0
+                    item = find_item(active_role, item_id)
+                    if action == 82 and item is not None:
+                        await self._send(
+                            writer,
+                            item_description_frame(item),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif action == 3 and item is not None:
+                        previous_appearance = character_appearance(active_role)
+                        role_items(active_role).remove(item)
+                        self.roles.save()
+                        LOG.info('item discarded item_id=%d name=%r', item_id, item.get('name'))
+                        replies = [encode_frame(1009, [short(3), integer(item_id)])]
+                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance)
+                        if appearance_frame is not None:
+                            replies.append(appearance_frame)
+                        await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
+                    elif action == 4 and item is not None:
+                        mount_model = item.get('mount_model')
+                        if mount_model is not None:
+                            current_mount = int(active_role.get('mount_model', 0))
+                            next_mount = 0 if item.get('location') == 'equipped' or current_mount else int(mount_model)
+                            item['location'] = 'equipped' if next_mount else 'bag'
+                            active_role['mount_model'] = next_mount
+                            self.roles.save()
+                            LOG.info(
+                                'mount %s item_id=%d model=%d',
+                                'equipped' if next_mount else 'unequipped',
+                                item_id,
+                                next_mount,
+                            )
+                            replies = [
+                                item_frame(item, operation=3),
+                                encode_frame(1009, [short(4)]),
+                                mount_update_frame(active_role),
+                            ]
+                            await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
+                            continue
+                        quantity = max(0, int(item.get('quantity', 1)) - 1)
+                        item['quantity'] = quantity
+                        item['last_heal'] = int(item.get('heal', 0))
+                        replies = [item_frame(item, operation=3), encode_frame(1009, [short(4)])]
+                        if quantity == 0:
+                            role_items(active_role).remove(item)
+                            replies.insert(1, encode_frame(1009, [short(3), integer(item_id)]))
+                        self.roles.save()
+                        LOG.info('item used item_id=%d name=%r remaining=%d', item_id, item.get('name'), quantity)
+                        await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
+                    elif action == 5 and item is not None and is_equipment(item):
+                        mount_model = item.get('mount_model')
+                        if mount_model is not None:
+                            updates: list[bytes] = []
+                            for equipped in role_items(active_role):
+                                if (
+                                    equipped is not item
+                                    and equipped.get('location') == 'equipped'
+                                    and equipped.get('mount_model') is not None
+                                ):
+                                    equipped['location'] = 'bag'
+                                    updates.append(item_frame(equipped, operation=3))
+                            item['location'] = 'equipped'
+                            active_role['mount_model'] = int(mount_model)
+                            updates.extend([
+                                item_frame(item, operation=3),
+                                encode_frame(1009, [short(5)]),
+                                mount_update_frame(active_role),
+                            ])
+                            self.roles.save()
+                            LOG.info('mount equipped item_id=%d model=%d slot=%d', item_id, int(mount_model), MOUNT_EQUIPMENT_SLOT)
+                            await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
+                            continue
+                        updates: list[bytes] = []
+                        previous_appearance = character_appearance(active_role)
+                        slot = item_slot(item)
+                        for equipped in role_items(active_role):
+                            if (
+                                equipped is not item
+                                and equipped.get('location') == 'equipped'
+                                and item_slot(equipped) == slot
+                            ):
+                                equipped['location'] = 'bag'
+                                updates.append(item_frame(equipped, operation=3))
+                        item['location'] = 'equipped'
+                        updates.append(item_frame(item, operation=3))
+                        updates.append(encode_frame(1009, [short(5)]))
+                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance)
+                        updates.append(
+                            appearance_frame
+                            if appearance_frame is not None
+                            else equipment_panel_refresh_frame(active_role)
+                        )
+                        self.roles.save()
+                        LOG.info('item equipped item_id=%d name=%r slot=%d', item_id, item.get('name'), slot)
+                        await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
+                    elif action == 6 and item is not None and item.get('location') == 'equipped':
+                        mount_model = item.get('mount_model')
+                        if mount_model is not None:
+                            item['location'] = 'bag'
+                            active_role['mount_model'] = 0
+                            self.roles.save()
+                            LOG.info('mount unequipped item_id=%d model=0 slot=%d', item_id, MOUNT_EQUIPMENT_SLOT)
+                            await self._send(
+                                writer,
+                                item_frame(item, operation=3),
+                                encode_frame(1009, [short(6)]),
+                                mount_update_frame(active_role),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                            continue
+                        previous_appearance = character_appearance(active_role)
+                        item['location'] = 'bag'
+                        self.roles.save()
+                        LOG.info('item unequipped item_id=%d name=%r', item_id, item.get('name'))
+                        replies = [item_frame(item, operation=3), encode_frame(1009, [short(6)])]
+                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance)
+                        replies.append(
+                            appearance_frame
+                            if appearance_frame is not None
+                            else equipment_panel_refresh_frame(active_role)
+                        )
+                        await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
+                    else:
+                        LOG.info('ignored item action=%d item_id=%d values=%r', action, item_id, values)
+                else:
+                    LOG.info('ignored unimplemented message=%d values=%r', message_id, values)
+        except (asyncio.IncompleteReadError, ConnectionResetError):
+            LOG.info('client disconnected: %s', peer)
+        except (ProtocolError, UnicodeDecodeError, ValueError) as exc:
+            LOG.warning('protocol error from %s: %s', peer, exc)
+        finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await heartbeat_task
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except (ConnectionResetError, OSError):
+                pass
+
+
+async def run(settings: Settings) -> None:
+    handler = LocalGameServer(settings)
+    server = await asyncio.start_server(handler.handle, settings.host, settings.port)
+    addresses = ', '.join(str(sock.getsockname()) for sock in server.sockets or [])
+    LOG.info('listening on %s; advertising %s:%d', addresses, settings.advertise_host, settings.port)
+    async with server:
+        await server.serve_forever()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Piao Miao San Jie 2 local login/game prototype')
+    parser.add_argument('--config', type=Path, default=Path(__file__).with_name('config.json'))
+    parser.add_argument('--host')
+    parser.add_argument('--port', type=int)
+    parser.add_argument('--advertise-host')
+    parser.add_argument('--server-name')
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    settings = Settings.load(args.config)
+    for name in ('host', 'port', 'advertise_host', 'server_name'):
+        value = getattr(args, name)
+        if value is not None:
+            setattr(settings, name, value)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    try:
+        asyncio.run(run(settings))
+    except KeyboardInterrupt:
+        LOG.info('server stopped')
+
+
+if __name__ == '__main__':
+    main()
