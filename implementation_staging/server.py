@@ -7,17 +7,19 @@ import json
 import logging
 import struct
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 
 from map_o import MapO, MapOError
 from protocol import (
+    Field,
     GameCipher,
     ProtocolError,
     binary,
     byte,
     decode_payload,
     encode_frame,
+    field_debug_entries,
     field_values,
     integer,
     long_integer,
@@ -101,6 +103,11 @@ class Settings:
     return_portal_name: str = '返回仙石村'
     return_portal_x: int = 9
     return_portal_y: int = 6
+    # Hand-placed map-58 NPCs.  Each entry is a dict with id/name/label/x/y and
+    # may carry dat_id/model to give the NPC its own sprite.  They reuse the
+    # known-good actor shape and only spawn on map 58.
+    npc_enabled: bool = True
+    npcs: list = field(default_factory=list)
     heartbeat_interval_seconds: float = 25.0
     map_o_file: str = 'maps/58.map.o'
     role_data_file: str = 'data/roles.json'
@@ -109,7 +116,24 @@ class Settings:
     def load(cls, path: Path) -> 'Settings':
         if not path.exists():
             return cls()
-        return cls(**json.loads(path.read_text(encoding='utf-8')))
+        payload = json.loads(path.read_text(encoding='utf-8'))
+        allowed = {item.name for item in fields(cls)}
+        settings = cls(**{key: value for key, value in payload.items() if key in allowed})
+        # The NPC resource catalog (data/npcs.json) is a SUPPLEMENT to the config
+        # `npcs` baseline: config stays the source of identity (name/label/x/y);
+        # the catalog only overrides matching ids (e.g. dat_id/model) and adds
+        # NPCs that do not exist in config.
+        catalog = Path(__file__).with_name('data') / 'npcs.json'
+        if catalog.exists():
+            try:
+                extras = json.loads(catalog.read_text(encoding='utf-8'))
+                base = {n['id']: dict(n) for n in settings.npcs}
+                for entry in extras:
+                    base.setdefault(entry['id'], {}).update(entry)
+                settings.npcs = list(base.values())
+            except Exception:
+                pass
+        return settings
 
 
 @dataclass
@@ -133,6 +157,17 @@ class LocalBattleState:
     # ``round_ack`` means the complete 1042 action queue has been sent and the
     # server is waiting for the APK to report that its animation queue drained.
     phase: str = 'idle'
+    # Lightweight per-encounter id so map/battle/resource logs can be grepped
+    # together.  It is diagnostic only and never written to the protocol.
+    encounter_seq: int = 0
+    trace_id: str = ''
+    # Map/tile context anchors the post-escape re-trigger guard. The active APK
+    # may start a battle through 1010/7 without a tile, so both values are
+    # optional and the guard itself must not depend on contact_tile.
+    map_id: int = 0
+    contact_tile: tuple[int, int] | None = None
+    escape_guard: dict[str, object] | None = None
+    player_tile: tuple[int, int] | None = None
 
     def begin(self, player_id: int, monster_id: int) -> None:
         self.active = True
@@ -142,6 +177,9 @@ class LocalBattleState:
         self.player_hp = 100
         self.monster_hp = 100
         self.phase = 'idle'
+        self.encounter_seq += 1
+        self.trace_id = f'BT-{player_id}-{monster_id}-{self.encounter_seq}'
+        self.escape_guard = None
 
     def finish(self) -> None:
         self.active = False
@@ -151,6 +189,48 @@ class LocalBattleState:
         """Respawn the connection-local trial monster on a map reload."""
         self.finish()
         self.monster_defeated = False
+        self.trace_id = ''
+        self.escape_guard = None
+        self.player_tile = None
+
+    def set_escape_guard(
+        self,
+        map_id: int,
+        monster_id: int,
+        player_id: int,
+        origin: tuple[int, int] | None,
+    ) -> None:
+        """Prevent an immediate same-map/same-monster re-trigger."""
+        self.escape_guard = {
+            'map_id': int(map_id),
+            'monster_id': int(monster_id),
+            'player_id': int(player_id),
+            'origin': (int(origin[0]), int(origin[1])) if origin else None,
+        }
+
+    def clear_escape_guard(self) -> None:
+        self.escape_guard = None
+
+    def begin_escape(self) -> None:
+        """Wait for the APK's action=2 acknowledgement."""
+        if self.active:
+            self.phase = 'escape_ack'
+
+    def acknowledge_escape(self) -> bool:
+        """Enter the client-side fighter-departure grace phase."""
+        if not self.active or self.phase != 'escape_ack':
+            return False
+        self.phase = 'escape_departure'
+        return True
+
+    def complete_escape(self) -> bool:
+        """Close only after the off-screen movement grace phase."""
+        if not self.active or self.phase != 'escape_departure':
+            return False
+        origin = self.player_tile
+        self.finish()
+        self.set_escape_guard(self.map_id, self.monster_id, self.player_id, origin)
+        return True
 
     def apply_basic_attack(self, damage: int = 10) -> bool:
         """Apply one deterministic local attack and report whether it ended."""
@@ -168,6 +248,9 @@ BATTLE_DROP_TEMPLATE_ID = 260_000_001
 BATTLE_DROP_NAME = '小还丹'
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
+# main/b.h() ACKs action=2 before its separate departure vector runs. The
+# vector waits 500 ms and can move for 640 ms in the 320x240 battle canvas.
+BATTLE_ESCAPE_DEPARTURE_GRACE_SECONDS = 1.25
 # 1042 only appends records to the APK's battle queue. The following full
 # 1040/action=2 calls the battle screen's i() method and starts playback. The
 # client then returns the short [action=2, round] acknowledgement after the
@@ -178,6 +261,23 @@ ROLE_MODELS = (
     ((12, 14, 16), (13, 15, 17)),
 )
 
+SECTS = {
+    0: '无',
+    1: '昆仑',
+    2: '玄都洞',
+    3: '瑶池',
+    4: '蓬莱岛',
+    5: '轩辕宫',
+    6: '崂山',
+    7: '蜀山',
+    8: '女儿国',
+    9: '碧游宫',
+    10: '刑天殿',
+    11: '幽冥地府',
+    12: '兰若寺',
+    13: '古仙人',
+}
+
 ROLE_STATS = (
     (2, 16, 7, 28, 7, 18, 3, 15, 2, 15, 7, 14, 8, 15, 3, 11, 17, 28, 2, 16, 7, 28, 7, 18),
     (7, 7, 3, 25, 3, 25, 4, 22, 2, 22, 3, 23, 2, 22, 4, 1, 5, 25, 7, 7, 3, 25, 3, 25),
@@ -187,6 +287,42 @@ ROLE_STATS = (
     (4, 21, 1, 46, 1, 9, 7, 1, 27, 1, 1, 5, 4, 1, 7, 22, 8, 46, 4, 21, 1, 46, 1, 9),
     (2, 1, 7, 3, 5, 3, 4, 7, 9, 5, 7, 6, 6, 7, 4, 9, 3, 3, 2, 1, 7, 3, 5, 3),
 )
+
+
+def is_player_escape_command(command_code: int) -> bool:
+    """C->S 1041 command 6 is escape; command 10 is quit-spectator."""
+    return int(command_code) == 6
+
+
+def should_suppress_escape_retrigger(
+    guard: dict[str, object] | None,
+    map_id: int,
+    monster_id: int,
+) -> bool:
+    """Suppress only the guarded monster on the guarded map."""
+    if not guard:
+        return False
+    return (
+        int(guard.get('map_id', -1)) == int(map_id)
+        and int(guard.get('monster_id', -1)) == int(monster_id)
+    )
+
+
+def update_escape_guard_for_movement(state: LocalBattleState, x: int, y: int) -> bool:
+    """Update the last tile and clear the guard only after real movement."""
+    new_tile = (int(x), int(y))
+    state.player_tile = new_tile
+    guard = state.escape_guard
+    if not guard:
+        return False
+    origin = guard.get('origin')
+    if origin is None:
+        guard['origin'] = new_tile
+        return False
+    if tuple(origin) == new_tile:
+        return False
+    state.clear_escape_guard()
+    return True
 
 
 # Protocol 1008 field 12 is not the equipment quality.  The original client
@@ -294,6 +430,7 @@ def default_role(settings: Settings) -> dict[str, object]:
         'model': settings.role_model,
         'slot': 0,
         'race': 0,
+        'sect_id': 0,
         'gender': 0,
         'level': 1,
         'experience': 0,
@@ -305,6 +442,23 @@ def default_role(settings: Settings) -> dict[str, object]:
     }
     role['items'] = starter_items(int(role['id']))
     return role
+
+
+def normalized_sect_id(role: dict[str, object]) -> int:
+    """Return a client-safe sect ID for the 1006 property table."""
+    try:
+        sect_id = int(role.get('sect_id', 0))
+    except (TypeError, ValueError):
+        return 0
+    return sect_id if sect_id in SECTS else 0
+
+
+def join_sect(role: dict[str, object], sect_id: int) -> bool:
+    """Join one valid sect while the role currently has no sect."""
+    if sect_id not in SECTS or sect_id == 0 or normalized_sect_id(role) != 0:
+        return False
+    role['sect_id'] = sect_id
+    return True
 
 
 def settings_for_map(settings: Settings, map_id: int) -> Settings:
@@ -514,6 +668,9 @@ class RoleStore:
             if 'auto_level' not in role:
                 role['auto_level'] = True
                 changed = True
+            if 'sect_id' not in role:
+                role['sect_id'] = 0
+                changed = True
             changed = self._ensure_items(role) or changed
         if changed:
             self._save()
@@ -540,6 +697,7 @@ class RoleStore:
             'model': model,
             'slot': slot,
             'race': race,
+            'sect_id': 0,
             'gender': gender,
             'level': 1,
             'experience': 0,
@@ -637,7 +795,8 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
     properties[6] = integer(int(role.get('model', settings.role_model)))
     properties[10] = string('')
     properties[11] = integer(int(role.get('level', 1)))
-    properties[12] = integer(int(role.get('race', 0)))
+    # property 12 = 门派 ID; property 39 = 种族 ID.
+    properties[12] = integer(normalized_sect_id(role))
     # Item icons/templates and character image layers are separate catalogues.
     # Only verified appearance pairs are applied here.
     for property_index, value in character_appearance(role).items():
@@ -702,25 +861,88 @@ def character_extension_info() -> bytes:
     return encode_frame(1089, [byte(0), byte(0)])
 
 
-def character_skill_list() -> bytes:
-    """Create a harmless local skill container for the fourth character tab.
+def character_skill_list(role: dict[str, object]) -> bytes:
+    """Return the minimal action-0 skill list appropriate for one role."""
+    sect_id = normalized_sect_id(role)
+    if sect_id == 1:
+        skill_id = 10001
+        skill_name = '协议测试技能'
+        level = 3
+        max_level = 20
+        proficiency = 123
+        max_proficiency = 1000
+        flags = 1  # APK: field[6] bit 0 enables proficiency display.
+        skill = [
+            string(skill_name),
+            integer(skill_id),
+            integer(level),
+            integer(max_level),
+            integer(proficiency),
+            integer(max_proficiency),
+            integer(flags),
+            *(integer(0) for _ in range(7)),
+        ]
+    else:
+        skill_id = 0
+        skill_name = '基础技能'
+        level = max_level = proficiency = max_proficiency = flags = 0
+        skill = [
+            string(skill_name),
+            integer(skill_id),
+            integer(0),
+            integer(0),
+            integer(0),
+            integer(0),
+            integer(0),
+            *(integer(0) for _ in range(7)),
+        ]
 
-    Protocol 1132 only allocates the client's skill container when its record
-    count is positive.  A hidden, zero-flag placeholder prevents the tab from
-    repeatedly requesting unavailable official skill data while keeping all
-    gameplay effects disabled.
-    """
-    placeholder = [
-        string('基础技能'),  # display name
-        integer(0),         # skill id / container key
-        integer(0),         # current level
-        integer(0),         # maximum level
-        integer(0),         # proficiency
-        integer(0),         # maximum proficiency
-        integer(0),         # flags: hidden and inactive
+    LOG.info(
+        'SKILL_1132_LIST role_id=%s sect_id=%d count=1 skill_id=%d name=%r '
+        'level=%d/%d proficiency=%d/%d flags=%d',
+        role.get('id', 0), sect_id, skill_id, skill_name,
+        level, max_level, proficiency, max_proficiency, flags,
+    )
+    return encode_frame(1132, [byte(0), byte(1), *skill])
+
+
+def sect_skill_list(role: dict[str, object]) -> bytes:
+    """Return the minimal protocol-1103 list consumed by the sect-skill page."""
+    sect_id = normalized_sect_id(role)
+    if sect_id != 1:
+        LOG.info(
+            'SKILL_1103_LIST role_id=%s sect_id=%d count=0',
+            role.get('id', 0), sect_id,
+        )
+        return encode_frame(1103, [byte(0), byte(0)])
+
+    skill_id = 10001
+    skill_name = '协议测试技能'
+    level = 3
+    max_level = 20
+    slot = 1
+    record = [
+        string(skill_name),
+        integer(skill_id),
+        integer(level),
+        integer(max_level),
+        integer(0),  # field[4]: icon code; zero is a valid APK image object.
         *(integer(0) for _ in range(7)),
+        integer(slot),  # field[12]: native sect-skill slot, 1..14.
+        integer(0),
     ]
-    return encode_frame(1132, [byte(0), byte(1), *placeholder])
+    LOG.info(
+        'SKILL_1103_LIST role_id=%s sect_id=%d count=1 skill_id=%d name=%r '
+        'level=%d/%d slot=%d',
+        role.get('id', 0), sect_id, skill_id, skill_name,
+        level, max_level, slot,
+    )
+    return encode_frame(1103, [byte(0), byte(1), *record])
+
+
+def initial_skill_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
+    """Preload both skill containers before their native pages are opened."""
+    return character_skill_list(role), sect_skill_list(role)
 
 
 def character_panel_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
@@ -765,6 +987,68 @@ def character_appearance(role: dict[str, object]) -> dict[int, int]:
             if index in BASE_CHARACTER_APPEARANCE:
                 properties[index] = int(value)
     return properties
+
+
+def map_player_appearance_debug(
+    role: dict[str, object],
+    settings: Settings | None = None,
+) -> dict[str, object]:
+    """Return the current-player map appearance values sent through 1006.
+
+    This snapshot is read-only.  It does not encode a frame and must not be
+    used to decide protocol field values.
+    """
+    appearance = character_appearance(role)
+    model = int(role.get('model', settings.role_model if settings is not None else 0))
+    return {
+        'role_id': int(role.get('id', 0)),
+        'role_name': str(role.get('name', '')),
+        'model': model,
+        'race': int(role.get('race', 0)),
+        'gender': int(role.get('gender', 0)),
+        'properties': {
+            6: model,
+            7: int(appearance.get(7, 0)),
+            14: int(appearance.get(14, 0)),
+            15: int(appearance.get(15, 0)),
+            16: int(appearance.get(16, 0)),
+            17: int(appearance.get(17, 0)),
+            18: int(appearance.get(18, 0)),
+            19: int(appearance.get(19, 0)),
+            20: int(appearance.get(20, 0)),
+        },
+    }
+
+
+def format_map_player_appearance_log(
+    username: str,
+    role: dict[str, object],
+    settings: Settings | None = None,
+) -> str:
+    """Format the MAP_PLAYER_APPEARANCE diagnostic block."""
+    snapshot = map_player_appearance_debug(role, settings)
+    properties = snapshot['properties']
+    assert isinstance(properties, dict)
+    return (
+        "MAP_PLAYER_APPEARANCE\n"
+        f"user={username!r}\n"
+        f"role_id={snapshot['role_id']}\n"
+        f"name={snapshot['role_name']!r}\n"
+        f"model={snapshot['model']}\n"
+        f"race={snapshot['race']}\n"
+        f"gender={snapshot['gender']}\n"
+        "properties={\n"
+        f"  6: {properties[6]},\n"
+        f"  7: {properties[7]},\n"
+        f"  14: {properties[14]},\n"
+        f"  15: {properties[15]},\n"
+        f"  16: {properties[16]},\n"
+        f"  17: {properties[17]},\n"
+        f"  18: {properties[18]},\n"
+        f"  19: {properties[19]},\n"
+        f"  20: {properties[20]}\n"
+        "}"
+    )
 
 
 def character_appearance_frame(role_id: int, properties: dict[int, int]) -> bytes:
@@ -1132,6 +1416,32 @@ def map_portal_frame(settings: Settings) -> bytes:
     ])
 
 
+def map_npc_frame(settings: Settings, npc: dict) -> bytes:
+    """Return the verified 1126 generic-actor shape for one map-58 NPC.
+
+    Each NPC carries its own sprite via ``npc['model']`` (raw model id). The
+    client loads ``role/<model + 2100000>.dat`` (see tools/role_dat.py), so a
+    distinct ``model`` makes every NPC render with its own sprite. Falls back to
+    ``monster_model`` when an entry omits ``model``.
+    """
+    return encode_frame(1126, [
+        byte(0),
+        byte(1),
+        integer(int(npc['id'])),
+        integer(int(npc['x'])),
+        integer(int(npc['y'])),
+        integer(int(npc.get('model', settings.monster_model))),
+        string(str(npc['name'])),
+    ])
+
+
+def map_npc_frames(settings: Settings) -> list[bytes]:
+    """Return the 1126 spawn frames for every enabled map-58 NPC."""
+    if not settings.npc_enabled or settings.map_id != 58:
+        return []
+    return [map_npc_frame(settings, npc) for npc in settings.npcs]
+
+
 def map_object_remove_frame(object_id: int) -> bytes:
     """Remove a generic 1126 actor via verified ``1010/action=18``.
 
@@ -1146,6 +1456,24 @@ def map_object_remove_frame(object_id: int) -> bytes:
         integer(0),
         integer(0),
         short(18),
+    ])
+
+
+def map_object_interaction_ack_frame(object_id: int) -> bytes:
+    """Release the APK wait overlay after suppressing a 1010/action=7 re-tap.
+
+    The inbound 1010 dispatcher clears its wait flags before checking action
+    field 5. Action 7 has no inbound map mutation branch, so this complete
+    six-field record acknowledges the interaction without moving or removing
+    the actor.
+    """
+    return encode_frame(1010, [
+        integer(object_id),
+        short(0),
+        short(0),
+        integer(0),
+        integer(0),
+        short(7),
     ])
 
 
@@ -1198,6 +1526,96 @@ def battle_start_frame(role: dict[str, object], settings: Settings) -> bytes:
     ])
 
 
+def battle_actor_source_model_for_debug(
+    model: int,
+    kind: int,
+    model_is_battle_base: bool = False,
+) -> int:
+    """Read-only copy of the 1048 source_model formula for diagnostic logs.
+
+    The encoder in ``battle_actor_frame`` keeps its own identical expression
+    and does not call this helper.  Do not use this return value to decide
+    protocol output.
+    """
+    return model if model_is_battle_base else (model * 10 if kind == 1 else model - 1)
+
+
+def battle_actor_debug_snapshot(
+    *,
+    actor_id: int,
+    model: int,
+    name: str,
+    kind: int,
+    side_code: int,
+    slot: int = 1,
+    model_is_battle_base: bool = False,
+    appearance: dict[int, int] | None = None,
+    fields: list | None = None,
+    trace_id: str = '',
+) -> dict[str, object]:
+    """Return a read-only 1048 diagnostic snapshot.  Not used for encoding."""
+    visible_layers = dict(appearance or {})
+    return {
+        'trace_id': trace_id,
+        'actor_id': actor_id,
+        'name': name,
+        'role_model': model,
+        'kind': kind,
+        'side': side_code,
+        'slot': slot,
+        'appearance_preset': model if kind == 1 else 0,
+        'model_is_battle_base': model_is_battle_base,
+        'source_model': battle_actor_source_model_for_debug(model, kind, model_is_battle_base),
+        'appearance': visible_layers,
+        'visible_layers': visible_layers,
+        'fields': field_debug_entries(fields or ()),
+    }
+
+
+def format_battle_actor_1048_log(snapshot: dict[str, object]) -> str:
+    """Format a PLAYER or MONSTER 1048 diagnostic block."""
+    kind = int(snapshot['kind'])
+    fields = snapshot.get('fields') or []
+    field_lines = []
+    if isinstance(fields, list):
+        for entry in fields:
+            if not isinstance(entry, dict):
+                continue
+            field_lines.append(
+                f"  {{index: {entry['index']}, type: {entry['type']}, value: {entry['value']!r}}}"
+            )
+    fields_text = '[\n' + ',\n'.join(field_lines) + '\n]' if field_lines else '[]'
+    trace = str(snapshot.get('trace_id') or '')
+    trace_line = f"battle_trace={trace}\n" if trace else ''
+    if kind == 1:
+        return (
+            "BATTLE_ACTOR_1048 PLAYER\n"
+            f"{trace_line}"
+            f"role_id={snapshot['actor_id']}\n"
+            f"role_model={snapshot['role_model']}\n"
+            f"source_model={snapshot['source_model']}\n"
+            f"side={snapshot['side']}\n"
+            f"kind={snapshot['kind']}\n"
+            f"slot={snapshot['slot']}\n"
+            f"appearance_preset={snapshot.get('appearance_preset', snapshot['role_model'])}\n"
+            f"model_is_battle_base={snapshot['model_is_battle_base']}\n"
+            f"appearance={snapshot['appearance']}\n"
+            f"visible_layers={snapshot['visible_layers']}\n"
+            f"fields={fields_text}"
+        )
+    return (
+        "BATTLE_ACTOR_1048 MONSTER\n"
+        f"{trace_line}"
+        f"entity_id={snapshot['actor_id']}\n"
+        f"model={snapshot['role_model']}\n"
+        f"source_model={snapshot['source_model']}\n"
+        f"kind={snapshot['kind']}\n"
+        f"side={snapshot['side']}\n"
+        f"slot={snapshot['slot']}\n"
+        f"fields={fields_text}"
+    )
+
+
 def battle_actor_frame(
     *,
     actor_id: int,
@@ -1210,17 +1628,26 @@ def battle_actor_frame(
     appearance: dict[int, int] | None = None,
     current_hp: int = 100,
     max_hp: int = 100,
+    trace_id: str = '',
 ) -> bytes:
     """Build the APK's 1048 actor record used to populate battle slots.
 
     ``main/e.af`` constructs ``work/b/h`` from field 7 (kind), field 9 (id),
-    field 2/0 (model), field 5 (side/category), and field 15 (position), then
-    stores every field on the actor.  The remaining numeric fields are the
-    zero/default stat block; keeping them present is important because the
-    renderer reads the sparse record by index.
+    field 2/0 (model source), field 5 (side/category), and field 8 (battle
+    station).  Field 21 is the face/body appearance preset: kind=1 reads it as
+    the constructor's fourth argument and ``h.r()`` applies ``y(f(21))`` /
+    ``M(f(21))``.  The remaining numeric fields are the zero/default stat
+    block; keeping them present is important because the renderer reads the
+    sparse record by index.
     """
-    source_model = model if model_is_battle_base else (model * 10 if kind == 1 else max(0, model - 1))
+    # kind=2: APK e.af does field[0]+1. Keep signed model-1 so negative
+    # map models such as -2004250 round-trip; do not clamp to 0.
+    source_model = model if model_is_battle_base else (model * 10 if kind == 1 else model - 1)
     visible_layers = appearance or {}
+    # kind=1: APK h.r() uses Vector[21] as the same selector map v.r() reads
+    # from property 6.  Monsters keep the previous zero unless a caller
+    # supplies appearance 21.
+    appearance_preset = int(model) if kind == 1 else int(visible_layers.get(21, 0))
     fields: list[Field] = [
         integer(source_model),  # 0: flags/model source
         integer(0),              # 1
@@ -1230,31 +1657,48 @@ def battle_actor_frame(
         integer(side_code),      # 5: side/category
         string(name),            # 6: battle name
         short(kind),              # 7: actor kind
-        integer(slot),            # 8: one-based battle slot
+        integer(slot),            # 8: one-based battle station
         integer(actor_id),        # 9: actor id
         integer(max(0, current_hp)),  # 10: current hp
         integer(max(1, max_hp)),      # 11: max hp
         integer(100),             # 12: current mp
         integer(100),             # 13: max mp/status
         integer(int(visible_layers.get(14, 0))),  # 14: trousers layer
-        # The APK reuses field 15 both as the constructor's auxiliary short
-        # and as the base/armour appearance value in h.r().
         short(int(visible_layers.get(15, 0))),     # 15: armour/base layer
         integer(int(visible_layers.get(16, 0))),   # 16: shoulder layer
         integer(int(visible_layers.get(17, 0))),   # 17: wrist layer
         integer(int(visible_layers.get(18, 0))),   # 18: boot layer
         integer(int(visible_layers.get(19, 0))),   # 19: cape layer
         integer(int(visible_layers.get(20, 0))),   # 20: helmet layer
-        # 1048's kind-1 decoder reads field 21 as a short constructor
-        # auxiliary value before it calls h.r().  The APK accesses this field
-        # unconditionally; omitting it aborts the client's message handler
-        # before the battle renderer can request the player sprite.
-        short(int(visible_layers.get(21, 0))),    # 21: actor auxiliary value
+        # kind=1: short face/body selector.  e.af reads w.b(21) into h.<init>
+        # p4; h.r() then calls y(f(21)) and M(f(21)).  Not a battle station.
+        short(appearance_preset),
     ]
+    LOG.info(
+        '%s',
+        format_battle_actor_1048_log(
+            battle_actor_debug_snapshot(
+                actor_id=actor_id,
+                model=model,
+                name=name,
+                kind=kind,
+                side_code=side_code,
+                slot=slot,
+                model_is_battle_base=model_is_battle_base,
+                appearance=dict(visible_layers),
+                fields=fields,
+                trace_id=trace_id,
+            )
+        ),
+    )
     return encode_frame(1048, fields)
 
 
-def battle_actor_frames(role: dict[str, object], settings: Settings) -> list[bytes]:
+def battle_actor_frames(
+    role: dict[str, object],
+    settings: Settings,
+    trace_id: str = '',
+) -> list[bytes]:
     """Return one player and one monster record for the local battle probe."""
     return [
         battle_actor_frame(
@@ -1268,6 +1712,7 @@ def battle_actor_frames(role: dict[str, object], settings: Settings) -> list[byt
             side_code=2,
             slot=1,
             appearance=character_appearance(role),
+            trace_id=trace_id,
         ),
         battle_actor_frame(
             actor_id=int(settings.monster_id),
@@ -1276,6 +1721,7 @@ def battle_actor_frames(role: dict[str, object], settings: Settings) -> list[byt
             kind=2,
             side_code=1,
             slot=1,
+            trace_id=trace_id,
         ),
     ]
 
@@ -1303,6 +1749,7 @@ def battle_actor_update_frame(
             appearance=character_appearance(role),
             current_hp=state.player_hp,
             max_hp=100,
+            trace_id=state.trace_id,
         )
     return battle_actor_frame(
         actor_id=state.monster_id,
@@ -1313,6 +1760,81 @@ def battle_actor_update_frame(
         slot=1,
         current_hp=state.monster_hp,
         max_hp=100,
+        trace_id=state.trace_id,
+    )
+
+
+def battle_resource_resolution(model_id: int) -> dict[str, object]:
+    """Describe which 1502 action=1 lookup branch would be used.
+
+    Read-only: this function does not encode 1503 and is not consulted by
+    ``battle_resource_path`` when building a response.
+    """
+    role_dir = Path(__file__).resolve().parent / 'build' / 'weapon-apk-extracted' / 'assets' / 'res' / 'role'
+    alias = BATTLE_RESOURCE_ALIASES.get(model_id)
+    mapped = model_id + BATTLE_RESOURCE_MODEL_OFFSET
+    candidates: list[tuple[str, int, Path]] = [('direct', model_id, role_dir / f'{model_id}.dat')]
+    if alias is not None:
+        candidates.append(('alias', alias, role_dir / f'{alias}.dat'))
+    if mapped != model_id:
+        candidates.append(('offset', mapped, role_dir / f'{mapped}.dat'))
+    for branch, resolved_id, path in candidates:
+        if path.is_file():
+            return {
+                'requested_id': model_id,
+                'alias': alias,
+                'offset_id': mapped if mapped != model_id else None,
+                'branch': branch,
+                'resolved_id': resolved_id,
+                'resolved_path': str(path),
+                'empty': False,
+                'missing': False,
+            }
+    empty = model_id in BATTLE_EMPTY_RESOURCE_IDS
+    return {
+        'requested_id': model_id,
+        'alias': alias,
+        'offset_id': mapped if mapped != model_id else None,
+        'branch': 'empty' if empty else 'missing',
+        'resolved_id': None,
+        'resolved_path': None,
+        'empty': empty,
+        'missing': not empty,
+    }
+
+
+def format_battle_resource_query_log(
+    *,
+    username: str,
+    query_action: int,
+    resource_ids: list[int],
+    battle_active: bool,
+    round_number: int,
+    trace_id: str,
+    resource_id: int,
+    resolution: dict[str, object],
+    response_type: int | None,
+    chunks: int,
+) -> str:
+    """Format the BATTLE_RESOURCE_QUERY diagnostic block."""
+    trace = f"battle_trace={trace_id}\n" if trace_id else ''
+    return (
+        "BATTLE_RESOURCE_QUERY\n"
+        f"{trace}"
+        f"user={username!r}\n"
+        f"action={query_action}\n"
+        f"ids={resource_ids}\n"
+        f"battle_active={battle_active}\n"
+        f"round={round_number}\n"
+        f"resource_id={resource_id}\n"
+        f"alias={resolution.get('alias')!r}\n"
+        f"branch={resolution.get('branch')!r}\n"
+        f"offset_id={resolution.get('offset_id')!r}\n"
+        f"jar_fallback={resolution.get('jar_fallback', False)}\n"
+        f"resolved_id={resolution.get('resolved_id')!r}\n"
+        f"resolved_path={resolution.get('resolved_path')!r}\n"
+        f"response_type={response_type}\n"
+        f"chunks={chunks}"
     )
 
 
@@ -1484,6 +2006,66 @@ def battle_image_resource(image_id: int) -> tuple[int, int, int, int, int, int, 
     )
 
 
+def battle_image_resolve_debug(image_id: int) -> dict[str, object]:
+    """Describe which 1502 action=0/2 image lookup branch would be used.
+
+    Read-only locate of the images.o record.  It does not encode 1501/1502
+    and is not used by ``battle_image_resource`` to choose a payload.
+    """
+    build_dir = Path(__file__).resolve().parent / 'build'
+    image_dirs = (
+        build_dir / 'weapon-apk-extracted' / 'assets' / 'res' / 'images',
+        build_dir / 'jar-images' / 'res' / 'images',
+    )
+    for candidate_id in (image_id, image_id - 100):
+        if candidate_id < 0:
+            continue
+        for candidate_dir in image_dirs:
+            index_path = candidate_dir / 'images.o'
+            if not index_path.is_file():
+                continue
+            index = index_path.read_bytes()
+            if len(index) < 2:
+                continue
+            index_size = struct.unpack_from('>H', index, 0)[0]
+            records = index[2:2 + index_size]
+            for offset in range(0, len(records) - 6, 7):
+                record_id, container_number, _data_offset = struct.unpack_from('>IBH', records, offset)
+                if record_id != candidate_id:
+                    continue
+                container_path = candidate_dir / f'png{container_number}.p'
+                if not container_path.is_file():
+                    continue
+                jar_fallback = 'jar-images' in candidate_dir.parts
+                aliased = candidate_id != image_id
+                if aliased and jar_fallback:
+                    branch = 'alias_jar'
+                elif aliased:
+                    branch = 'alias'
+                elif jar_fallback:
+                    branch = 'jar_fallback'
+                else:
+                    branch = 'direct'
+                return {
+                    'requested_id': image_id,
+                    'alias': candidate_id if aliased else None,
+                    'resolved_id': candidate_id,
+                    'resolved_path': str(container_path),
+                    'branch': branch,
+                    'jar_fallback': jar_fallback,
+                    'missing': False,
+                }
+    return {
+        'requested_id': image_id,
+        'alias': None,
+        'resolved_id': None,
+        'resolved_path': None,
+        'branch': 'missing',
+        'jar_fallback': False,
+        'missing': True,
+    }
+
+
 def battle_image_frames(query_action: int, image_id: int) -> list[bytes]:
     """Return 1501 image chunks followed by the client's 1502 redraw signal."""
     resource = battle_image_resource(image_id)
@@ -1627,6 +2209,67 @@ def battle_action_show_frame(state: LocalBattleState, round_number: int | None =
     ])
 
 
+def battle_escape_animation_frames(
+    state: LocalBattleState,
+    round_number: int | None = None,
+) -> list[bytes]:
+    """Queue the APK's native fighter departure without changing battle data."""
+    shown_round = state.round if round_number is None else round_number
+    action = encode_frame(1042, [
+        integer(shown_round),
+        integer(state.player_id),
+        integer(state.player_id),
+        byte(6),
+        byte(1),
+        byte(0),
+        integer(0),
+        integer(0),
+        string('逃跑'),
+        integer(1),
+        integer(state.player_id),
+        integer(1),
+        integer(58),
+        integer(0),
+        string(''),
+    ])
+    return [action, battle_action_show_frame(state, shown_round)]
+
+
+def battle_escape_request_frames(
+    state: LocalBattleState,
+    round_number: int | None = None,
+) -> list[bytes]:
+    """Arm the ACK phase before starting the fighter departure queue."""
+    state.begin_escape()
+    return battle_escape_animation_frames(state, round_number)
+
+
+def battle_escape_frame(player_id: int) -> bytes:
+    """Close the battle after the escaping fighter has departed."""
+    return encode_frame(1041, [integer(10), integer(player_id)])
+
+
+def battle_escape_acknowledged(
+    state: LocalBattleState,
+    ack_action: int,
+    ack_round: int,
+) -> bool:
+    """Accept the early action=2 ACK without closing over the departure move."""
+    if not state.active or state.phase != 'escape_ack':
+        return False
+    if int(ack_action) != 2 or int(ack_round) != int(state.round):
+        return False
+    return state.acknowledge_escape()
+
+
+def battle_escape_completion_frames(state: LocalBattleState) -> list[bytes]:
+    """Build the single final close after the departure grace interval."""
+    player_id = state.player_id
+    if not state.complete_escape():
+        return []
+    return [battle_escape_frame(player_id)]
+
+
 def battle_end_frame() -> bytes:
     """End the local battle through the APK's verified action=4 branch."""
     return encode_frame(1040, [byte(4)])
@@ -1688,6 +2331,7 @@ def map_enter_frames(settings: Settings, role_id: int | None = None) -> list[byt
     ]
     if settings.portal_enabled:
         frames.append(map_portal_frame(settings))
+    frames.extend(map_npc_frames(settings))
     return frames
 
 
@@ -1809,6 +2453,26 @@ class LocalGameServer:
             return
 
         if object_id == int(current_settings.monster_id):
+            if should_suppress_escape_retrigger(
+                battle_state.escape_guard,
+                current_settings.map_id,
+                object_id,
+            ):
+                LOG.info(
+                    'BATTLE_ESCAPE_RETRIGGER_SUPPRESSED user=%r player_id=%d monster_id=%d map_id=%d source=%s',
+                    username,
+                    int(active_role['id']) if active_role is not None else battle_state.player_id,
+                    object_id,
+                    current_settings.map_id,
+                    source,
+                )
+                await self._send(
+                    writer,
+                    map_object_interaction_ack_frame(object_id),
+                    cipher=cipher,
+                    lock=send_lock,
+                )
+                return
             if battle_state.monster_defeated:
                 LOG.info(
                     'suppressed stale monster interaction user=%r monster_id=%d; encounter already settled',
@@ -1824,18 +2488,28 @@ class LocalGameServer:
                 return
             if battle_state.active:
                 LOG.info(
-                    'ignored duplicate monster interaction user=%r monster_id=%d; battle already active',
+                    'ignored duplicate monster interaction user=%r monster_id=%d; battle already active battle_trace=%s',
                     username,
                     object_id,
+                    battle_state.trace_id,
                 )
                 return
-            LOG.info(
-                'monster interaction recorded user=%r monster_id=%d; starting local battle',
-                username,
-                object_id,
-            )
             role = active_role if active_role is not None else default_role(self.settings)
             battle_state.begin(int(role['id']), object_id)
+            battle_state.map_id = int(current_settings.map_id)
+            battle_state.contact_tile = (
+                (int(object_x), int(object_y))
+                if object_x is not None and object_y is not None
+                else None
+            )
+            if battle_state.contact_tile is not None:
+                battle_state.player_tile = battle_state.contact_tile
+            LOG.info(
+                'monster interaction recorded user=%r monster_id=%d; starting local battle battle_trace=%s',
+                username,
+                object_id,
+                battle_state.trace_id,
+            )
             # The APK's 1040/action=1 handler only updates an already-created
             # battle screen (d/n.d(20)).  A fresh map session has no screen 20
             # yet, so action=1 alone is silently ignored and the UI remains on
@@ -1845,18 +2519,29 @@ class LocalGameServer:
             # also builds its grid from 1048 actor records; without these the
             # scene opens but has no drawable player/monster and appears blank.
             LOG.info(
-                'sending battle reset/start user=%r player_id=%d monster_id=%d',
+                'sending battle reset/start user=%r player_id=%d monster_id=%d battle_trace=%s',
                 username,
                 int(role['id']),
                 object_id,
+                battle_state.trace_id,
+            )
+            LOG.info(
+                'BATTLE_1040 action=0 battle_trace=%s user=%r',
+                battle_state.trace_id,
+                username,
             )
             await self._send(
                 writer,
                 battle_reset_frame(),
-                *battle_actor_frames(role, current_settings),
+                *battle_actor_frames(role, current_settings, trace_id=battle_state.trace_id),
                 battle_start_frame(role, current_settings),
                 cipher=cipher,
                 lock=send_lock,
+            )
+            LOG.info(
+                'BATTLE_1040 action=1 battle_trace=%s user=%r round=1',
+                battle_state.trace_id,
+                username,
             )
             return
 
@@ -1944,11 +2629,21 @@ class LocalGameServer:
                         else:
                             world_sent = False
                             LOG.info('role selected user=%r role_id=%d name=%r', username, role_id, active_role['name'])
+                            sect_id = normalized_sect_id(active_role)
+                            LOG.info(
+                                'ROLE_SECT role_id=%d name=%r sect_id=%d sect_name=%r race=%d',
+                                role_id,
+                                active_role['name'],
+                                sect_id,
+                                SECTS[sect_id],
+                                int(active_role.get('race', 0)),
+                            )
+                            LOG.info('%s', format_map_player_appearance_log(username, active_role, self.settings))
                             await self._send(
                                 writer,
                                 player_info(self.settings, active_role),
                                 character_extension_info(),
-                                character_skill_list(),
+                                *initial_skill_frames(active_role),
                                 *(item_frame(item) for item in role_items(active_role)),
                                 cipher=game_cipher,
                                 lock=send_lock,
@@ -1995,6 +2690,31 @@ class LocalGameServer:
                         cipher=game_cipher,
                         lock=send_lock,
                     )
+
+                elif message_id == 1005 and len(values) >= 2:
+                    old_tile = battle_state.player_tile
+                    guard_had_no_origin = bool(
+                        battle_state.escape_guard
+                        and battle_state.escape_guard.get('origin') is None
+                    )
+                    guard_cleared = update_escape_guard_for_movement(
+                        battle_state,
+                        int(values[0]),
+                        int(values[1]),
+                    )
+                    if guard_cleared:
+                        LOG.info(
+                            'BATTLE_ESCAPE_GUARD_CLEARED user=%r old_tile=%s new_tile=%s reason=real_1005_movement',
+                            username,
+                            old_tile,
+                            battle_state.player_tile,
+                        )
+                    elif guard_had_no_origin and battle_state.escape_guard:
+                        LOG.info(
+                            'BATTLE_ESCAPE_GUARD_ORIGIN_ESTABLISHED user=%r tile=%s',
+                            username,
+                            battle_state.player_tile,
+                        )
 
                 elif message_id == 1010 and values:
                     action = int(values[0])
@@ -2088,16 +2808,21 @@ class LocalGameServer:
                     resource_count = int(values[1])
                     resource_ids = [int(value) for value in values[2:2 + resource_count]]
                     LOG.info(
-                        'battle resource query action=%d count=%d ids=%r',
+                        'battle resource query action=%d count=%d ids=%r battle_trace=%s',
                         query_action,
                         resource_count,
                         resource_ids,
+                        battle_state.trace_id,
                     )
                     for resource_id in resource_ids:
                         if query_action == 1:
                             resource_frames = battle_resource_frames(resource_id)
+                            resolution = battle_resource_resolution(resource_id)
+                            response_type = 1503 if resource_frames else None
                         elif query_action in (PNG_QUERY_MAIN_CACHE, PNG_QUERY_ROLE_CACHE):
                             resource_frames = battle_image_frames(query_action, resource_id)
+                            resolution = battle_image_resolve_debug(resource_id)
+                            response_type = 1501 if resource_frames else None
                         else:
                             LOG.warning(
                                 'unsupported battle resource action=%d id=%d',
@@ -2105,11 +2830,35 @@ class LocalGameServer:
                                 resource_id,
                             )
                             resource_frames = []
+                            resolution = {
+                                'alias': None,
+                                'branch': 'unsupported',
+                                'offset_id': None,
+                                'resolved_id': None,
+                                'resolved_path': None,
+                            }
+                            response_type = None
                         LOG.info(
-                            'battle resource response action=%d id=%d chunks=%d',
+                            'battle resource response action=%d id=%d chunks=%d battle_trace=%s',
                             query_action,
                             resource_id,
                             len(resource_frames),
+                            battle_state.trace_id,
+                        )
+                        LOG.info(
+                            '%s',
+                            format_battle_resource_query_log(
+                                username=username,
+                                query_action=query_action,
+                                resource_ids=resource_ids,
+                                battle_active=battle_state.active,
+                                round_number=battle_state.round,
+                                trace_id=battle_state.trace_id,
+                                resource_id=resource_id,
+                                resolution=resolution,
+                                response_type=response_type,
+                                chunks=len(resource_frames),
+                            ),
                         )
                         if resource_frames:
                             await self._send(
@@ -2127,11 +2876,45 @@ class LocalGameServer:
                     ack_round = int(values[1]) if len(values) > 1 else None
                     if battle_state.active and ack_action == 2 and ack_round is not None:
                         LOG.info(
-                            'battle round acknowledgement user=%r round=%d server_round=%d',
+                            'BATTLE_1040 action=2 ack battle_trace=%s user=%r round=%d server_round=%d',
+                            battle_state.trace_id,
                             username,
                             ack_round,
                             battle_state.round,
                         )
+                        if battle_state.phase == 'escape_ack':
+                            if not battle_escape_acknowledged(
+                                battle_state,
+                                ack_action,
+                                ack_round,
+                            ):
+                                continue
+                            LOG.info(
+                                'BATTLE_ESCAPE_DEPARTURE_GRACE battle_trace=%s user=%r seconds=%.2f phase=%s',
+                                battle_state.trace_id,
+                                username,
+                                BATTLE_ESCAPE_DEPARTURE_GRACE_SECONDS,
+                                battle_state.phase,
+                            )
+                            await asyncio.sleep(BATTLE_ESCAPE_DEPARTURE_GRACE_SECONDS)
+                            escape_frames = battle_escape_completion_frames(battle_state)
+                            if escape_frames:
+                                await self._send(
+                                    writer,
+                                    *escape_frames,
+                                    cipher=game_cipher,
+                                    lock=send_lock,
+                                )
+                                LOG.info(
+                                    'BATTLE_ESCAPE_COMPLETE battle_trace=%s user=%r player_id=%d monster_id=%d active=%s phase=%s',
+                                    battle_state.trace_id,
+                                    username,
+                                    battle_state.player_id,
+                                    battle_state.monster_id,
+                                    battle_state.active,
+                                    battle_state.phase,
+                                )
+                            continue
                         if battle_state.phase == 'round_ack':
                             if battle_state.monster_hp <= 0:
                                 reward_item = None
@@ -2162,7 +2945,8 @@ class LocalGameServer:
                                             battle_reward_popup(BATTLE_EXP_REWARD, reward_item, level_up)
                                         )
                                 LOG.info(
-                                    'battle send settlement user=%r reason=monster_dead top_protocol=%s monster_hp=%d player_hp=%d',
+                                    'BATTLE_1040 action=4 settlement battle_trace=%s user=%r reason=monster_dead top_protocol=%s monster_hp=%d player_hp=%d',
+                                    battle_state.trace_id,
                                     username,
                                     '1129/level-up' if level_up else '1049/3',
                                     battle_state.monster_hp,
@@ -2171,7 +2955,13 @@ class LocalGameServer:
                                 await self._send(writer, *result_frames, cipher=game_cipher, lock=send_lock)
                             elif battle_state.player_hp <= 0:
                                 battle_state.finish()
-                                LOG.info('battle send end user=%r reason=player_dead monster_hp=%d player_hp=%d', username, battle_state.monster_hp, battle_state.player_hp)
+                                LOG.info(
+                                    'BATTLE_1040 action=4 battle_trace=%s user=%r reason=player_dead monster_hp=%d player_hp=%d',
+                                    battle_state.trace_id,
+                                    username,
+                                    battle_state.monster_hp,
+                                    battle_state.player_hp,
+                                )
                                 await self._send(writer, battle_end_frame(), cipher=game_cipher, lock=send_lock)
                             else:
                                 # Playback was started by the action=2 frame
@@ -2180,16 +2970,58 @@ class LocalGameServer:
                                 # return movements are now complete.
                                 battle_state.round = ack_round + 1
                                 battle_state.phase = 'idle'
-                                LOG.info('battle round ready user=%r round=%d monster_hp=%d player_hp=%d', username, battle_state.round, battle_state.monster_hp, battle_state.player_hp)
+                                LOG.info(
+                                    'battle round ready battle_trace=%s user=%r round=%d monster_hp=%d player_hp=%d',
+                                    battle_state.trace_id,
+                                    username,
+                                    battle_state.round,
+                                    battle_state.monster_hp,
+                                    battle_state.player_hp,
+                                )
                             continue
                     else:
                         LOG.info('ignored client battle state values=%r active=%s', values, battle_state.active)
                 elif message_id == 1041 and values:
-                    # Client battle menu acknowledgements use 1041. The APK's
-                    # h.b(II) writer starts with command 10, followed by the
-                    # current actor/round fields; only the existence of the
-                    # command is needed for this deterministic local probe.
-                    LOG.info('battle command user=%r values=%r active=%s', username, values, battle_state.active)
+                    # C->S command 6 is the APK's player escape request.
+                    # Command 10 is quit-spectator and must never enter escape.
+                    command_code = int(values[0])
+                    LOG.info(
+                        'BATTLE_1041 battle_trace=%s user=%r values=%r active=%s command=%d',
+                        battle_state.trace_id,
+                        username,
+                        values,
+                        battle_state.active,
+                        command_code,
+                    )
+                    if is_player_escape_command(command_code):
+                        if not battle_state.active:
+                            LOG.info('ignored escape request without active battle user=%r', username)
+                            continue
+                        if battle_state.phase != 'idle':
+                            LOG.info('ignored battle escape while awaiting action acknowledgement')
+                            continue
+                        client_round = int(values[1]) if len(values) > 1 else battle_state.round
+                        if client_round > 0:
+                            battle_state.round = client_round
+                        escape_frames = battle_escape_request_frames(
+                            battle_state,
+                            battle_state.round,
+                        )
+                        LOG.info(
+                            'BATTLE_ESCAPE_ANIMATION battle_trace=%s user=%r player_id=%d round=%d phase=%s',
+                            battle_state.trace_id,
+                            username,
+                            battle_state.player_id,
+                            battle_state.round,
+                            battle_state.phase,
+                        )
+                        await self._send(
+                            writer,
+                            *escape_frames,
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                        continue
                     if battle_state.active:
                         if battle_state.phase != 'idle':
                             LOG.info('ignored battle command while awaiting action acknowledgement')
@@ -2210,7 +3042,15 @@ class LocalGameServer:
                                 label='妖兽攻击',
                             ))
                         battle_state.phase = 'round_ack'
-                        LOG.info('battle send player-action user=%r round=%d monster_hp=%d player_hp=%d ended=%s', username, action_round, battle_state.monster_hp, battle_state.player_hp, ended)
+                        LOG.info(
+                            'battle send player-action battle_trace=%s user=%r round=%d monster_hp=%d player_hp=%d ended=%s',
+                            battle_state.trace_id,
+                            username,
+                            action_round,
+                            battle_state.monster_hp,
+                            battle_state.player_hp,
+                            ended,
+                        )
                         await self._send(
                             writer,
                             *action_frames,
@@ -2218,7 +3058,12 @@ class LocalGameServer:
                             cipher=game_cipher,
                             lock=send_lock,
                         )
-                        LOG.info('battle send action-show user=%r round=%d phase=round_ack', username, action_round)
+                        LOG.info(
+                            'BATTLE_1040 action=2 show battle_trace=%s user=%r round=%d phase=round_ack',
+                            battle_state.trace_id,
+                            username,
+                            action_round,
+                        )
                         continue
                 elif message_id == 1129 and active_role is not None and values:
                     # The APK's manual Upgrade button sends [short(3)].
@@ -2277,11 +3122,24 @@ class LocalGameServer:
                         cipher=game_cipher,
                         lock=send_lock,
                     )
+                elif (
+                    message_id == 1103
+                    and active_role is not None
+                    and values
+                    and int(values[0]) == 6
+                ):
+                    LOG.info('sect skill list requested values=%r', values)
+                    await self._send(
+                        writer,
+                        sect_skill_list(active_role),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
                 elif message_id == 1132 and active_role is not None:
                     LOG.info('character skill list requested values=%r', values)
                     await self._send(
                         writer,
-                        character_skill_list(),
+                        character_skill_list(active_role),
                         cipher=game_cipher,
                         lock=send_lock,
                     )

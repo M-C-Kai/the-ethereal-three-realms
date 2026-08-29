@@ -236,3 +236,44 @@ def decode_frame(frame: bytes) -> tuple[int, list[Field]]:
 
 def field_values(fields: Sequence[Field]) -> list[object]:
     return [x.value for x in fields]
+
+
+FIELD_TYPE_NAMES = {
+    TYPE_SHORT_ALT: 'short',
+    TYPE_BYTE: 'byte',
+    TYPE_SHORT: 'short',
+    TYPE_INT: 'int',
+    TYPE_STRING: 'string',
+    TYPE_BYTES: 'binary',
+    TYPE_BYTE_ALT: 'byte',
+    TYPE_LONG: 'long',
+}
+
+
+def field_type_name(type_id: int) -> str:
+    """Return a stable diagnostic name for a protocol type id."""
+    return FIELD_TYPE_NAMES.get(int(type_id), f'type_{int(type_id)}')
+
+
+def field_debug_value(field: Field) -> object:
+    """Return a log-friendly decoded field value without re-parsing TLV bytes.
+
+    Binary payloads are summarized by length so diagnostic logs do not dump
+    resource chunks. Numeric and string values are the already-decoded
+    ``Field.value`` produced by ``decode_payload`` / encoder constructors.
+    """
+    if field.type_id == TYPE_BYTES:
+        return f'bytes[{len(bytes(field.value))}]'
+    return field.value
+
+
+def field_debug_entries(fields: Sequence[Field]) -> list[dict[str, object]]:
+    """Return read-only ``{index, type, value}`` rows for diagnostic logs."""
+    return [
+        {
+            'index': index,
+            'type': field_type_name(field.type_id),
+            'value': field_debug_value(field),
+        }
+        for index, field in enumerate(fields)
+    ]

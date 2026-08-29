@@ -34,6 +34,96 @@ def expect(sock: socket.socket, message_id: int, cipher: GameCipher | None = Non
     return values
 
 
+def receive_tolerant(sock: socket.socket, cipher: GameCipher | None = None) -> tuple[int, list[object]]:
+    """Receive the next non-heartbeat frame, skipping recurring 1012 heartbeats.
+
+    The local server pushes a 1012 heartbeat every 25 seconds (original
+    watchdog); the longer role/map/escape exercise can therefore have a
+    heartbeat interleave with an expected message. This helper threads past
+    them so the assertion sees only the application message.
+    """
+    while True:
+        message_id, values = receive_frame(sock, cipher)
+        if message_id == 1012:
+            continue
+        return message_id, values
+
+
+def expect_tolerant(sock: socket.socket, message_id: int, cipher: GameCipher | None = None) -> list[object]:
+    actual_id, values = receive_tolerant(sock, cipher)
+    assert actual_id == message_id, (actual_id, values)
+    return values
+
+
+LOCKED_APPEARANCE_PROPERTIES = (2, 7, 14, 15, 16, 17, 18, 19, 20)
+
+
+def parse_appearance(frame: list[object]) -> tuple[int, int, dict[int, int]]:
+    """Parse a protocol-1017 character-appearance payload.
+
+    The server's 1017 carries the full locked appearance after any equip or
+    unequip: ``[action, role_id, property_count, (property_id, value) * count]``.
+    The APK consumer ``pmsj.work.main.e.O`` reads field 1 as the target role id,
+    field 2 as the pair count, then byte/int property pairs from field 3.
+
+    Returns ``(action, role_id, {property_id: value})``.
+    """
+    action = int(frame[0])
+    role_id = int(frame[1])
+    count = int(frame[2])
+    pairs = frame[3:]
+    assert len(pairs) == count * 2, (frame, count)
+    properties: dict[int, int] = {}
+    for index in range(0, count * 2, 2):
+        property_id = int(pairs[index])
+        value = int(pairs[index + 1])
+        assert property_id not in properties, (frame, property_id)
+        properties[property_id] = value
+    return action, role_id, properties
+
+
+def name_appearance_from_1006(player: list[object]) -> dict[int, int]:
+    """Extract the authoritative locked appearance from the login 1006 frame.
+
+    1006 is a flat ``properties[0..84]`` list: ``[count, prop0..prop84, time]``,
+    so the value of character property ``i`` lives at ``player[1 + i]``.
+    """
+    return {prop: int(player[1 + prop]) for prop in LOCKED_APPEARANCE_PROPERTIES}
+
+
+def assert_minimal_change(
+    frame: list[object],
+    role_id: int,
+    property_id: int,
+    value: int,
+) -> dict[int, int]:
+    """Assert a 1017 frame is the single-property minimal change frame."""
+    action, actual_id, properties = parse_appearance(frame)
+    assert action == 0, frame
+    assert actual_id == role_id, frame
+    assert properties == {property_id: value}, (frame, property_id, value)
+    return properties
+
+
+def assert_full_refresh(
+    frame: list[object],
+    role_id: int,
+    authoritative: dict[int, int],
+) -> dict[int, int]:
+    """Assert a 1017 frame is the full locked-appearance refresh.
+
+    The property set must be exactly the nine locked appearance layers and each
+    value must equal the current authoritative appearance.
+    """
+    action, actual_id, properties = parse_appearance(frame)
+    assert action == 0, frame
+    assert actual_id == role_id, frame
+    assert set(properties) == set(LOCKED_APPEARANCE_PROPERTIES), frame
+    for locked in LOCKED_APPEARANCE_PROPERTIES:
+        assert properties[locked] == authoritative[locked], (frame, locked, authoritative[locked])
+    return properties
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Test the complete local login/role/map protocol')
     parser.add_argument('--host', default='127.0.0.1')
@@ -44,6 +134,7 @@ def main() -> None:
     parser.add_argument('--exercise-portal', action='store_true')
     parser.add_argument('--exercise-monster', action='store_true')
     parser.add_argument('--exercise-monster-kill', action='store_true')
+    parser.add_argument('--exercise-monster-escape', action='store_true')
     parser.add_argument('--hold-seconds', type=float, default=0, help='Stay in the map and answer 1012 heartbeats')
     args = parser.parse_args()
 
@@ -93,10 +184,13 @@ def main() -> None:
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1080, [short(0), integer(role_id)])))
         player = expect(game_sock, 1006, cipher)
         assert player[0] == 85 and player[2] == role_id, player
+        appearance = name_appearance_from_1006(player)
         extension = expect(game_sock, 1089, cipher)
         assert extension == [0, 0], extension
         skills = expect(game_sock, 1132, cipher)
         assert skills[0:4] == [0, 1, '基础技能', 0] and len(skills) == 16, skills
+        sect_skills = expect(game_sock, 1103, cipher)
+        assert sect_skills[0] == 0 and sect_skills[1] in (0, 1), sect_skills
         item_records = [expect(game_sock, 1008, cipher) for _ in range(16)]
         items = {str(values[8]): values for values in item_records}
         assert len(items) == 16 and {'青锋剑', '青纹项链', '青纹长靴', '小还丹', '坐骑验证令'} <= set(items), items
@@ -133,26 +227,34 @@ def main() -> None:
             equip_ack = expect(game_sock, 1009, cipher)
             equipped_appearance = expect(game_sock, 1017, cipher)
             assert equipped[0:5] == [3, item_id, 1, 1, slot], equipped
-            assert equip_ack == [5] and equipped_appearance == [0, role_id, 1, property_index, value], (
-                name,
-                equip_ack,
-                equipped_appearance,
-            )
+            assert equip_ack == [5], equip_ack
+            # The server sends a minimal single-property change frame only when
+            # the appearance actually differs; otherwise it falls back to the
+            # full locked-appearance refresh. Mirror that decision from the
+            # authoritative appearance so either legal response is validated.
+            if appearance[property_index] != value:
+                assert_minimal_change(equipped_appearance, role_id, property_index, value)
+            else:
+                assert_full_refresh(equipped_appearance, role_id, appearance)
+            appearance[property_index] = value
 
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1009, [short(6), integer(item_id)])))
             unequipped = expect(game_sock, 1008, cipher)
             unequip_ack = expect(game_sock, 1009, cipher)
             restored_appearance = expect(game_sock, 1017, cipher)
             assert unequipped[0:5] == [3, item_id, 1, 1, 50], unequipped
-            assert unequip_ack == [6] and restored_appearance == [0, role_id, 1, property_index, 0], (
-                name,
-                unequip_ack,
-                restored_appearance,
-            )
+            assert unequip_ack == [6], unequip_ack
+            if appearance[property_index] != 0:
+                assert_minimal_change(restored_appearance, role_id, property_index, 0)
+            else:
+                assert_full_refresh(restored_appearance, role_id, appearance)
+            appearance[property_index] = 0
 
         # The six APK-defined accessory slots have no independent character
-        # sprite property, but their equipment-vector move must still update
-        # the equipment panel immediately on both equip and unequip.
+        # sprite property, so their equipment-vector move must still update
+        # the equipment panel immediately on both equip and unequip. Because
+        # no sprite property changes, the server always returns the full
+        # locked-appearance refresh.
         for name, slot in icon_only_slots.items():
             item_id = int(items[name][1])
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1009, [short(5), integer(item_id)])))
@@ -161,7 +263,7 @@ def main() -> None:
             panel_refresh = expect(game_sock, 1017, cipher)
             assert equipped[0:5] == [3, item_id, 1, 1, slot], equipped
             assert equip_ack == [5], equip_ack
-            assert panel_refresh[0:3] == [0, role_id, 8], panel_refresh
+            assert_full_refresh(panel_refresh, role_id, appearance)
 
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1009, [short(6), integer(item_id)])))
             unequipped = expect(game_sock, 1008, cipher)
@@ -169,15 +271,21 @@ def main() -> None:
             panel_refresh = expect(game_sock, 1017, cipher)
             assert unequipped[0:5] == [3, item_id, 1, 1, 50], unequipped
             assert unequip_ack == [6], unequip_ack
-            assert panel_refresh[0:3] == [0, role_id, 8], panel_refresh
+            assert_full_refresh(panel_refresh, role_id, appearance)
 
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1009, [short(4), integer(potion_id)])))
         used = expect(game_sock, 1008, cipher)
-        use_ack = expect(game_sock, 1009, cipher)
-        assert used[0:2] == [3, potion_id] and used[2] == int(items['小还丹'][2]) - 1 and use_ack == [4], (
-            used,
-            use_ack,
-        )
+        login_quantity = int(items['小还丹'][2])
+        assert used[0:2] == [3, potion_id], used
+        assert used[2] == max(0, login_quantity - 1), (used, login_quantity)
+        first_ack = expect(game_sock, 1009, cipher)
+        if first_ack == [3, potion_id]:
+            # Using the last potion exhausts the stack, so the server removes
+            # the item and issues a discard ack before the use ack.
+            use_ack = expect(game_sock, 1009, cipher)
+        else:
+            use_ack = first_ack
+        assert use_ack == [4], use_ack
 
         # The APK has a dedicated equipment-panel mount slot (position 17).
         # Equip/unequip use the same 1008/1009 flow as the other equipment,
@@ -208,12 +316,36 @@ def main() -> None:
         assert received[-1][1][5] == 12 and received[-1][1][4] == 1, received[-1]
 
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-        # Map 58 now also advertises one 1126 portal actor after the verified
-        # monster actor.  Keep the original first four frames unchanged.
-        entered = [receive_frame(game_sock, cipher) for _ in range(5)]
+        # Map 58 advertises two 1126 forward-portal actors and seven 1126 NPC
+        # actors after the verified monster actor.  Keep the first four frames
+        # unchanged; the portals and NPCs are appended in that order.
+        entered = [receive_frame(game_sock, cipher) for _ in range(13)]
         assert [x[1][5] for x in entered[:3]] == [13, 14, 105], entered
         assert entered[3][0] == 1126 and entered[3][1][:2] == [0, 1], entered[3]
         assert entered[4][0] == 1126 and entered[4][1][2] == 580001, entered[4]
+        assert entered[5][0] == 1126 and entered[5][1][2] == 580003, entered[5]
+        assert entered[5][1][3] == 34 and entered[5][1][4] == 7, entered[5]
+        assert entered[6][0] == 1126 and entered[6][1][2] == 1900002, entered[6]
+        assert entered[6][1][3] == 50 and entered[6][1][4] == 64, entered[6]
+        assert entered[6][1][6] == '孙思邈', entered[6]
+        assert entered[7][0] == 1126 and entered[7][1][2] == 1900003, entered[7]
+        assert entered[7][1][3] == 34 and entered[7][1][4] == 50, entered[7]
+        assert entered[7][1][6] == '接引真人', entered[7]
+        assert entered[8][0] == 1126 and entered[8][1][2] == 1900004, entered[8]
+        assert entered[8][1][3] == 11 and entered[8][1][4] == 21, entered[8]
+        assert entered[8][1][6] == '赵公明', entered[8]
+        assert entered[9][0] == 1126 and entered[9][1][2] == 1900005, entered[9]
+        assert entered[9][1][3] == 67 and entered[9][1][4] == 56, entered[9]
+        assert entered[9][1][6] == '柴荣', entered[9]
+        assert entered[10][0] == 1126 and entered[10][1][2] == 1900006, entered[10]
+        assert entered[10][1][3] == 70 and entered[10][1][4] == 12, entered[10]
+        assert entered[10][1][6] == '孙威', entered[10]
+        assert entered[11][0] == 1126 and entered[11][1][2] == 1900007, entered[11]
+        assert entered[11][1][3] == 59 and entered[11][1][4] == 12, entered[11]
+        assert entered[11][1][6] == '欧冶子', entered[11]
+        assert entered[12][0] == 1126 and entered[12][1][2] == 1900008, entered[12]
+        assert entered[12][1][3] == 20 and entered[12][1][4] == 12, entered[12]
+        assert entered[12][1][6] == '宠物仙子', entered[12]
 
         if args.exercise_monster:
             monster = entered[3][1]
@@ -232,7 +364,7 @@ def main() -> None:
             monster_start = expect(game_sock, 1040, cipher)
             assert monster_start[0:2] == [1, 1], monster_start
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1041, [
-                integer(10), byte(1), integer(role_id), integer(0), integer(0), integer(0), integer(0), integer(0)
+                integer(1), byte(1), integer(role_id), integer(1), integer(monster[2]), integer(2), integer(0), integer(0)
             ])))
             player_action = expect(game_sock, 1042, cipher)
             assert player_action[0:6] == [1, role_id, int(monster[2]), 1, 1, 0], player_action
@@ -251,7 +383,7 @@ def main() -> None:
                 current_round = 2
                 for _ in range(9):
                     game_sock.sendall(cipher.encrypt_frame(encode_frame(1041, [
-                        integer(10), byte(current_round), integer(role_id), integer(0), integer(0), integer(0), integer(0), integer(0)
+                        integer(1), byte(current_round), integer(role_id), integer(1), integer(monster[2]), integer(2), integer(0), integer(0)
                     ])))
                     expect(game_sock, 1042, cipher)  # player ACTION_ATTACK + damage
                     if _ < 8:
@@ -279,6 +411,129 @@ def main() -> None:
                             assert result_prompt[0] == role_id, result_prompt
                             assert result_prompt[1] == progress_properties[11], result_prompt
 
+        if args.exercise_monster_escape:
+            monster = entered[3][1]
+            contact_x, contact_y = int(monster[3]), int(monster[4])
+
+            def _start_battle():
+                # The 2031 object interaction carries the contact tile; the
+                # server seeds its battle trace and escape guard from it.
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(2031, [
+                    integer(monster[2]), integer(0), short(contact_x), short(contact_y), short(6), short(0)
+                ])))
+                assert expect_tolerant(game_sock, 1040, cipher) == [0], 'battle reset'
+                expect_tolerant(game_sock, 1048, cipher)  # player actor
+                expect_tolerant(game_sock, 1048, cipher)  # monster actor
+                start = expect_tolerant(game_sock, 1040, cipher)
+                assert start[0:2] == [1, 1], start
+
+            def _escape() -> list[object]:
+                # C->S 1041 command 6 is the APK-confirmed 逃跑 (escape) request:
+                # [6, byte(round), player_id, side=1, 0,0,0,0]. Command 10 is a
+                # different action (退出观战, quit spectator) and must NOT be sent
+                # as a player escape request. The original client first consumes
+                # a 1042 action-6 record whose inert effect enters the fighter-exit
+                # state machine. main/b's departure vector is not part of the
+                # action=2 ACK barrier, so the server must keep the battle open
+                # for its APK-derived grace interval before sending final close.
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1041, [
+                    integer(6), byte(1), integer(role_id), integer(1), integer(0), integer(0), integer(0), integer(0)
+                ])))
+                escape_action = expect_tolerant(game_sock, 1042, cipher)
+                assert escape_action == [
+                    1, role_id, role_id, 6, 1, 0, 0, 0, '逃跑',
+                    1, role_id, 1, 58, 0, '',
+                ], escape_action
+                playback = expect_tolerant(game_sock, 1040, cipher)
+                assert playback[0:2] == [2, 1], playback
+                ack_started = time.monotonic()
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(1)])))
+                close = expect_tolerant(game_sock, 1041, cipher)
+                elapsed = time.monotonic() - ack_started
+                assert elapsed >= 1.15, ('escape closed before departure movement', elapsed)
+                return close
+
+            def _guarded_interaction_ack(expected_object_id: int):
+                # b/ab.aj() enables the global wait overlay before sending the
+                # automatic 1010/7 re-tap. The guard must acknowledge that
+                # request with the complete no-op S->C action-7 record, then
+                # remain quiet instead of restarting the battle.
+                ack = expect_tolerant(game_sock, 1010, cipher)
+                assert ack == [expected_object_id, 0, 0, 0, 0, 7], ack
+                game_sock.settimeout(0.6)
+                try:
+                    while True:
+                        id_, values = receive_frame(game_sock, cipher)
+                        if id_ != 1012:
+                            raise AssertionError(('battle restarted on guarded tile', (id_, values)))
+                except socket.timeout:
+                    pass
+                finally:
+                    game_sock.settimeout(None)
+
+            def _move(tx: int, ty: int):
+                # Protocol 1005 is the APK's player-movement frame: the first
+                # two fields are the current (x, y) tile as shorts. Reaching a
+                # different tile than the escape contact clears the guard.
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1005, [
+                    short(tx), short(ty), byte(0)
+                ])))
+
+            # 开战 -> 逃跑: the original 1042 exit animation and playback barrier
+            # finish before the final 1041 close. No victory settlement,
+            # 1010/action=18 removal, reward or counterattack follows.
+            _start_battle()
+            assert _escape() == [10, role_id], 'escape confirmation'
+
+            # guard: the same monster on the same contact tile is suppressed.
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2031, [
+                integer(monster[2]), integer(0), short(contact_x), short(contact_y), short(6), short(0)
+            ])))
+            _guarded_interaction_ack(int(monster[2]))
+
+            # 移动解除: moving off the contact tile clears the guard.
+            _move(contact_x + 5, contact_y)
+
+            # 再次开战: the same monster can be engaged again and escaped again.
+            _start_battle()
+            assert _escape() == [10, role_id], 're-enter escape confirmation'
+
+            # ---- 真机无 tile 路径: 1010/7 + 1005 ----
+            # The real device starts battles through 1010 [short(7), int(obj)]
+            # which carries NO contact tile, and reports its position with 1005
+            # first. This exact ordering previously never armed the guard (it
+            # required a contact tile), so the same monster was instantly
+            # re-engaged (consecutive BT-...-2/-3/-4/-5 traces). Exercise the
+            # corrected guard here.
+            obj_id = int(monster[2])
+
+            def _position(tx: int, ty: int):
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1005, [
+                    short(tx), short(ty), byte(0)
+                ])))
+
+            def _start_battle_1010():
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(obj_id)])))
+                assert expect_tolerant(game_sock, 1040, cipher) == [0], '1010 battle reset'
+                expect_tolerant(game_sock, 1048, cipher)  # player actor
+                expect_tolerant(game_sock, 1048, cipher)  # monster actor
+                start = expect_tolerant(game_sock, 1040, cipher)
+                assert start[0:2] == [1, 1], start
+
+            # Release the 2031 guard, then report the standing position before
+            # engaging through the tile-less 1010/7 path.
+            _move(contact_x + 5, contact_y)
+            _position(8, 6)
+            _start_battle_1010()
+            assert _escape() == [10, role_id], '1010 escape confirmation'
+            # Immediate 1010/7 re-tap on the same monster must be suppressed.
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(obj_id)])))
+            _guarded_interaction_ack(obj_id)
+            # A real move off the origin tile clears the guard.
+            _position(9, 6)
+            _start_battle_1010()
+            assert _escape() == [10, role_id], '1010 re-enter escape confirmation'
+
         if args.exercise_portal:
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(580001)])))
             switched_world = expect(game_sock, 1110, cipher)
@@ -299,10 +554,25 @@ def main() -> None:
             returned_data = [receive_frame(game_sock, cipher) for _ in range(7)]
             assert [x[0] for x in returned_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], returned_data
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-            returned_enter = [receive_frame(game_sock, cipher) for _ in range(5)]
+            returned_enter = [receive_frame(game_sock, cipher) for _ in range(13)]
             assert [x[1][5] for x in returned_enter[:3]] == [13, 14, 105], returned_enter
             assert returned_enter[0][1][4] == 0, returned_enter[0]
             assert returned_enter[4][0] == 1126 and returned_enter[4][1][2] == 580001, returned_enter[4]
+            assert returned_enter[5][0] == 1126 and returned_enter[5][1][2] == 580003, returned_enter[5]
+            assert returned_enter[6][0] == 1126 and returned_enter[6][1][2] == 1900002, returned_enter[6]
+            assert returned_enter[6][1][6] == '孙思邈', returned_enter[6]
+            assert returned_enter[7][0] == 1126 and returned_enter[7][1][2] == 1900003, returned_enter[7]
+            assert returned_enter[7][1][6] == '接引真人', returned_enter[7]
+            assert returned_enter[8][0] == 1126 and returned_enter[8][1][2] == 1900004, returned_enter[8]
+            assert returned_enter[8][1][6] == '赵公明', returned_enter[8]
+            assert returned_enter[9][0] == 1126 and returned_enter[9][1][2] == 1900005, returned_enter[9]
+            assert returned_enter[9][1][6] == '柴荣', returned_enter[9]
+            assert returned_enter[10][0] == 1126 and returned_enter[10][1][2] == 1900006, returned_enter[10]
+            assert returned_enter[10][1][6] == '孙威', returned_enter[10]
+            assert returned_enter[11][0] == 1126 and returned_enter[11][1][2] == 1900007, returned_enter[11]
+            assert returned_enter[11][1][6] == '欧冶子', returned_enter[11]
+            assert returned_enter[12][0] == 1126 and returned_enter[12][1][2] == 1900008, returned_enter[12]
+            assert returned_enter[12][1][6] == '宠物仙子', returned_enter[12]
 
         menu_prefetches = (
             (1403, [byte(6), byte(0), byte(12), byte(2)], 1),

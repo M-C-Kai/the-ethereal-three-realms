@@ -5,8 +5,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import server as server_module
 from map_o import decode_tile_rle
-from protocol import GameCipher, byte, decode_frame, encode_frame, field_values, integer, long_integer, short, string
+from protocol import GameCipher, binary, byte, decode_frame, encode_frame, field_debug_entries, field_debug_value, field_type_name, field_values, integer, long_integer, short, string, TYPE_SHORT
 from server import (
     RoleStore,
     Settings,
@@ -31,8 +32,15 @@ from server import (
     map_object_remove_frame,
     map_object_interaction_values,
     battle_reset_frame,
+    battle_actor_debug_snapshot,
     battle_actor_frame,
     battle_actor_frames,
+    battle_actor_source_model_for_debug,
+    battle_image_resolve_debug,
+    battle_resource_resolution,
+    format_battle_actor_1048_log,
+    format_map_player_appearance_log,
+    map_player_appearance_debug,
     battle_actor_update_frame,
     battle_image_frames,
     battle_image_resource,
@@ -495,14 +503,24 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(len(frames), 2)
         player_id, player_fields = decode_frame(frames[0])
         self.assertEqual(player_id, 1048)
+        self.assertEqual(len(player_fields), 22)
         self.assertEqual(
             [field.type_id for field in player_fields],
             [4, 4, 4, 4, 4, 4, 6, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 3],
+        )
+        self.assertEqual(
+            field_values(player_fields),
+            [20000, 0, 20000, 100, 0, 2, role['name'], 1, 1, role['id'], 100, 100, 100, 100, 0, 0, 0, 0, 0, 0, 0, int(role['model'])],
         )
         self.assertEqual(field_values(player_fields)[5], 2)
         self.assertEqual(field_values(player_fields)[7:10], [1, 1, role['id']])
         monster_id, monster_fields = decode_frame(frames[1])
         self.assertEqual(monster_id, 1048)
+        self.assertEqual(len(monster_fields), 22)
+        self.assertEqual(
+            field_values(monster_fields),
+            [3_759_999, 0, 0, 100, 0, 1, Settings().monster_name, 2, 1, Settings().monster_id, 100, 100, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0],
+        )
         self.assertEqual(field_values(monster_fields)[7:10], [2, 1, Settings().monster_id])
         self.assertEqual(field_values(monster_fields)[5], 1)
 
@@ -599,6 +617,7 @@ class ProtocolTests(unittest.TestCase):
     def test_local_battle_state_attack_and_finish(self):
         state = LocalBattleState()
         state.begin(10001, 900001)
+        self.assertEqual(state.trace_id, 'BT-10001-900001-1')
         self.assertFalse(state.apply_basic_attack(40))
         # Damage application no longer advances the protocol round.  The APK
         # supplies that round in 1041 and advances it after the matching
@@ -642,6 +661,288 @@ class ProtocolTests(unittest.TestCase):
         entered = map_enter_frames(target)
         self.assertEqual(field_values(decode_frame(entered[0])[1])[4:], [0, 13])
         self.assertEqual(field_values(decode_frame(entered[-1])[1])[2], settings.return_portal_id)
+
+    def test_field_debug_helpers_are_read_only(self):
+        fields = [integer(60), short(34), string('月华'), binary(b'abc')]
+        encoded = encode_frame(1048, fields)
+        self.assertEqual(field_type_name(4), 'int')
+        self.assertEqual(field_type_name(3), 'short')
+        self.assertEqual(field_debug_value(fields[3]), 'bytes[3]')
+        entries = field_debug_entries(fields)
+        self.assertEqual(
+            entries,
+            [
+                {'index': 0, 'type': 'int', 'value': 60},
+                {'index': 1, 'type': 'short', 'value': 34},
+                {'index': 2, 'type': 'string', 'value': '月华'},
+                {'index': 3, 'type': 'binary', 'value': 'bytes[3]'},
+            ],
+        )
+        self.assertEqual(encode_frame(1048, fields), encoded)
+        self.assertEqual(field_values(decode_frame(encoded)[1]), [60, 34, '月华', b'abc'])
+
+    def test_map_player_appearance_debug_matches_1006_without_changing_it(self):
+        settings = Settings()
+        role = default_role(settings)
+        helmet = next(item for item in role_items(role) if item['name'] == '青纹盔')
+        helmet['location'] = 'equipped'
+        payload = player_info(settings, role)
+        message_id, fields = decode_frame(payload)
+        values = field_values(fields)
+        snapshot = map_player_appearance_debug(role, settings)
+        self.assertEqual(message_id, 1006)
+        self.assertEqual(snapshot['model'], values[7])
+        self.assertEqual(snapshot['properties'][6], values[7])
+        self.assertEqual(snapshot['properties'][7], values[8])
+        for property_index in (14, 15, 16, 17, 18, 19, 20):
+            self.assertEqual(snapshot['properties'][property_index], values[property_index + 1])
+        self.assertEqual(snapshot['properties'][20], 3)
+        log_text = format_map_player_appearance_log('1', role, settings)
+        self.assertIn('MAP_PLAYER_APPEARANCE', log_text)
+        self.assertIn("user='1'", log_text)
+        self.assertEqual(decode_frame(player_info(settings, role))[1][0].type_id, fields[0].type_id)
+        self.assertEqual(field_values(decode_frame(player_info(settings, role))[1]), values)
+
+    def test_battle_actor_debug_snapshot_does_not_change_1048(self):
+        role = default_role(Settings())
+        frames = battle_actor_frames(role, Settings(), trace_id='BT-10001-1900001-1')
+        _, player_fields = decode_frame(frames[0])
+        _, monster_fields = decode_frame(frames[1])
+        player_snapshot = battle_actor_debug_snapshot(
+            actor_id=int(role['id']),
+            model=int(role['model']),
+            name=str(role['name']),
+            kind=1,
+            side_code=2,
+            appearance=character_appearance(role),
+            fields=player_fields,
+            trace_id='BT-10001-1900001-1',
+        )
+        monster_snapshot = battle_actor_debug_snapshot(
+            actor_id=Settings().monster_id,
+            model=Settings().monster_model,
+            name=Settings().monster_name,
+            kind=2,
+            side_code=1,
+            fields=monster_fields,
+            trace_id='BT-10001-1900001-1',
+        )
+        self.assertEqual(player_snapshot['source_model'], 20000)
+        self.assertEqual(player_snapshot['source_model'], field_values(player_fields)[0])
+        self.assertEqual(player_snapshot['source_model'], battle_actor_source_model_for_debug(2000, 1, False))
+        self.assertEqual(len(player_snapshot['fields']), 22)
+        self.assertEqual(player_snapshot['fields'][0], {'index': 0, 'type': 'int', 'value': 20000})
+        self.assertEqual(player_snapshot['fields'][15], {'index': 15, 'type': 'short', 'value': 0})
+        self.assertEqual(player_snapshot['fields'][21], {'index': 21, 'type': 'short', 'value': int(role['model'])})
+        self.assertEqual(player_snapshot['appearance_preset'], int(role['model']))
+        self.assertEqual(monster_snapshot['source_model'], 3_759_999)
+        self.assertEqual(monster_snapshot['source_model'], field_values(monster_fields)[0])
+        self.assertEqual(monster_snapshot['source_model'], battle_actor_source_model_for_debug(3_760_000, 2, False))
+        player_log = format_battle_actor_1048_log(player_snapshot)
+        monster_log = format_battle_actor_1048_log(monster_snapshot)
+        self.assertIn('BATTLE_ACTOR_1048 PLAYER', player_log)
+        self.assertIn('battle_trace=BT-10001-1900001-1', player_log)
+        self.assertIn(f'appearance_preset={int(role["model"])}', player_log)
+        self.assertIn('BATTLE_ACTOR_1048 MONSTER', monster_log)
+        self.assertEqual(len(player_fields), 22)
+        self.assertEqual(len(monster_fields), 22)
+        locked = battle_actor_frames(role, Settings())
+        self.assertEqual(field_values(decode_frame(locked[0])[1]), field_values(player_fields))
+        self.assertEqual(field_values(decode_frame(locked[1])[1]), field_values(monster_fields))
+
+    def test_battle_resource_resolution_does_not_change_1502_payloads(self):
+        monster_id = Settings().monster_model
+        monster_path = battle_resource_path(monster_id)
+        monster_resolution = battle_resource_resolution(monster_id)
+        self.assertEqual(monster_resolution['branch'], 'offset')
+        self.assertEqual(monster_resolution['offset_id'], monster_id + 0x200B20)
+        self.assertEqual(Path(str(monster_resolution['resolved_path'])), monster_path)
+
+        alias_path = battle_resource_path(6)
+        alias_resolution = battle_resource_resolution(6)
+        self.assertEqual(alias_resolution['branch'], 'alias')
+        self.assertEqual(alias_resolution['alias'], 100_000)
+        self.assertEqual(Path(str(alias_resolution['resolved_path'])).name, '100000.dat')
+        self.assertEqual(alias_path, Path(str(alias_resolution['resolved_path'])))
+
+        effect_path = battle_resource_path(0)
+        effect_resolution = battle_resource_resolution(0)
+        self.assertEqual(effect_resolution['branch'], 'offset')
+        self.assertEqual(effect_path, Path(str(effect_resolution['resolved_path'])))
+
+        frames = battle_resource_frames(monster_id)
+        self.assertEqual(len(frames), 2)
+        self.assertEqual(decode_frame(frames[0])[0], 1503)
+        self.assertEqual(field_values(decode_frame(frames[0])[1])[:3], [0, monster_id, monster_path.stat().st_size])
+
+        image_frames = battle_image_frames(2, 5_860_104)
+        image_debug = battle_image_resolve_debug(5_860_104)
+        self.assertFalse(image_debug['missing'])
+        self.assertEqual(image_debug['resolved_id'], 5_860_004)
+        self.assertEqual(image_debug['alias'], 5_860_004)
+        self.assertEqual(decode_frame(image_frames[0])[0], 1501)
+        self.assertEqual(decode_frame(image_frames[2]), (1502, []))
+        self.assertEqual(field_values(decode_frame(image_frames[0])[1])[4], 5_860_104)
+
+    def test_kind2_monster_source_model_keeps_signed_minus_one(self):
+        # APK e.af kind=2 reconstructs model as field[0]+1. Negative map
+        # models such as -2004250 must not be clamped to 0 before encoding.
+        self.assertEqual(battle_actor_source_model_for_debug(-2_004_250, 2, False), -2_004_251)
+        self.assertEqual(battle_actor_source_model_for_debug(3_760_000, 2, False), 3_759_999)
+        negative_id, negative_fields = decode_frame(
+            battle_actor_frame(
+                actor_id=1_900_001,
+                model=-2_004_250,
+                name='试炼妖兽',
+                kind=2,
+                side_code=1,
+            )
+        )
+        positive_id, positive_fields = decode_frame(
+            battle_actor_frame(
+                actor_id=1_900_001,
+                model=3_760_000,
+                name='试炼妖兽',
+                kind=2,
+                side_code=1,
+            )
+        )
+        self.assertEqual(negative_id, 1048)
+        self.assertEqual(positive_id, 1048)
+        self.assertEqual(field_values(negative_fields)[0], -2_004_251)
+        self.assertEqual(field_values(positive_fields)[0], 3_759_999)
+        self.assertEqual(field_values(positive_fields)[2], 0)
+        self.assertEqual(field_values(negative_fields)[7], 2)
+        self.assertEqual(field_values(negative_fields)[21], 0)
+        self.assertEqual(field_values(positive_fields)[21], 0)
+
+    def test_player_1048_field21_is_role_model_face_preset(self):
+        # kind=1 h.r() reads Vector[21] as y()/M() selector, matching map
+        # property 6.  Field 8 remains the battle station; field 2 stays
+        # model*10.  Appearance layers 14-20 stay on character_appearance.
+        for model in (19, 6, 7):
+            role = default_role(Settings())
+            role['model'] = model
+            appearance = character_appearance(role)
+            frames = battle_actor_frames(role, Settings())
+            player_id, player_fields = decode_frame(frames[0])
+            monster_id, monster_fields = decode_frame(frames[1])
+            self.assertEqual(player_id, 1048)
+            self.assertEqual(monster_id, 1048)
+            player_values = field_values(player_fields)
+            self.assertEqual(player_fields[21].type_id, TYPE_SHORT)
+            self.assertEqual(player_values[21], model)
+            self.assertEqual(player_values[2], model * 10)
+            self.assertEqual(player_values[7], 1)
+            self.assertEqual(player_values[8], 1)
+            self.assertEqual(
+                player_values[14:21],
+                [
+                    int(appearance.get(14, 0)),
+                    int(appearance.get(15, 0)),
+                    int(appearance.get(16, 0)),
+                    int(appearance.get(17, 0)),
+                    int(appearance.get(18, 0)),
+                    int(appearance.get(19, 0)),
+                    int(appearance.get(20, 0)),
+                ],
+            )
+            self.assertEqual(field_values(monster_fields)[21], 0)
+            self.assertEqual(monster_fields[21].type_id, TYPE_SHORT)
+
+
+class BattleEscapeSettlementTest(unittest.TestCase):
+    """Escape plays the APK fighter-departure queue before closing battle."""
+
+    def test_escape_request_queues_departure_and_playback_barrier(self):
+        begin_request = getattr(server_module, 'battle_escape_request_frames', None)
+        self.assertIsNotNone(begin_request, 'escape request transition is missing')
+
+        state = LocalBattleState()
+        state.begin(10001, 1900001)
+        frames = begin_request(state, 1)
+
+        self.assertEqual(state.phase, 'escape_ack')
+        self.assertTrue(state.active)
+        self.assertEqual([decode_frame(frame)[0] for frame in frames], [1042, 1040])
+        action_fields = decode_frame(frames[0])[1]
+        self.assertEqual(
+            [field.type_id for field in action_fields],
+            [4, 4, 4, 2, 2, 2, 4, 4, 6, 4, 4, 4, 4, 4, 6],
+        )
+        self.assertEqual(
+            field_values(action_fields),
+            [1, 10001, 10001, 6, 1, 0, 0, 0, '逃跑', 1, 10001, 1, 58, 0, ''],
+        )
+        self.assertEqual(field_values(decode_frame(frames[1])[1])[:2], [2, 1])
+
+    def test_escape_ack_waits_for_departure_grace_before_close(self):
+        acknowledge = getattr(server_module, 'battle_escape_acknowledged', None)
+        complete = getattr(server_module, 'battle_escape_completion_frames', None)
+        self.assertIsNotNone(acknowledge, 'escape ACK transition is missing')
+        self.assertIsNotNone(complete, 'escape completion transition is missing')
+
+        state = LocalBattleState()
+        state.begin(10001, 1900001)
+        state.map_id = 58
+        state.player_tile = (9, 28)
+        state.begin_escape()
+
+        self.assertFalse(acknowledge(state, 2, 99))
+        self.assertEqual(state.phase, 'escape_ack')
+        self.assertEqual(complete(state), [])
+
+        self.assertTrue(acknowledge(state, 2, 1))
+        self.assertTrue(state.active)
+        self.assertEqual(state.phase, 'escape_departure')
+        frames = complete(state)
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(decode_frame(frames[0])[0], 1041)
+        self.assertEqual(field_values(decode_frame(frames[0])[1]), [10, 10001])
+        self.assertFalse(state.active)
+        self.assertEqual(state.phase, 'idle')
+        self.assertFalse(state.monster_defeated)
+        self.assertEqual((state.player_hp, state.monster_hp), (100, 100))
+        self.assertEqual(
+            state.escape_guard,
+            {'map_id': 58, 'monster_id': 1900001, 'player_id': 10001, 'origin': (9, 28)},
+        )
+
+    def test_escape_departure_grace_covers_apk_delayed_offscreen_move(self):
+        # main/b.h() waits 500 ms, then h.a() may move for 640 ms in 320x240.
+        self.assertEqual(getattr(server_module, 'BATTLE_ESCAPE_DEPARTURE_GRACE_SECONDS', None), 1.25)
+
+    def test_escape_guard_requires_real_movement_and_acknowledges_retap(self):
+        suppress = getattr(server_module, 'should_suppress_escape_retrigger', None)
+        update_tile = getattr(server_module, 'update_escape_guard_for_movement', None)
+        build_ack = getattr(server_module, 'map_object_interaction_ack_frame', None)
+        self.assertIsNotNone(suppress, 'escape retrigger guard is missing')
+        self.assertIsNotNone(update_tile, 'escape movement release is missing')
+        self.assertIsNotNone(build_ack, 'guarded interaction ACK is missing')
+
+        state = LocalBattleState()
+        state.set_escape_guard(58, 1900001, 10001, None)
+        self.assertTrue(suppress(state.escape_guard, 58, 1900001))
+        self.assertFalse(suppress(state.escape_guard, 58, 1900002))
+        self.assertFalse(suppress(state.escape_guard, 59, 1900001))
+
+        self.assertFalse(update_tile(state, 9, 28))
+        self.assertEqual(state.escape_guard['origin'], (9, 28))
+        self.assertFalse(update_tile(state, 9, 28))
+        self.assertTrue(update_tile(state, 10, 28))
+        self.assertIsNone(state.escape_guard)
+
+        message_id, fields = decode_frame(build_ack(1900001))
+        self.assertEqual(message_id, 1010)
+        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4, 4, 3])
+        self.assertEqual(field_values(fields), [1900001, 0, 0, 0, 0, 7])
+
+    def test_only_command_six_is_player_escape(self):
+        is_escape = getattr(server_module, 'is_player_escape_command', None)
+        self.assertIsNotNone(is_escape, 'C2S escape command classifier is missing')
+        self.assertTrue(is_escape(6))
+        self.assertFalse(is_escape(10))
+        self.assertFalse(is_escape(1))
 
 
 if __name__ == '__main__':
