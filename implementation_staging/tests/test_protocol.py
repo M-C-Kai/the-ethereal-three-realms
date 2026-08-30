@@ -348,7 +348,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(field_values(extension_fields), [0, 0])
         self.assertEqual([field.type_id for field in extension_fields], [2, 2])
 
-        skill_id, skill_fields = decode_frame(character_skill_list())
+        skill_id, skill_fields = decode_frame(character_skill_list(role))
         skill_values = field_values(skill_fields)
         self.assertEqual(skill_id, 1132)
         self.assertEqual(skill_values[:4], [0, 1, '基础技能', 0])
