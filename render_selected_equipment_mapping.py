@@ -21,7 +21,7 @@ IMAGE_DIR = Path(
     r"C:\Users\Kail\Documents\Codex\2026-08-24\new-chat\outputs"
     r"\equipment_resources\output\rebuilt"
 )
-OUTPUT = ROOT / "appearance-layer-audit" / "selected-equipment-mapping.png"
+OUTPUT = ROOT / "docs" / "diagnostics" / "character-appearance" / "appearance-layer-audit" / "selected-equipment-mapping.png"
 
 
 spec = importlib.util.spec_from_file_location("selected_role_renderer", RENDERER_PATH)

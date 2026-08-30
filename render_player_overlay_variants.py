@@ -20,7 +20,7 @@ IMAGE_DIR = Path(
     r"C:\Users\Kail\Documents\Codex\2026-08-24\new-chat\work"
     r"\initial-apk-images\rebuilt"
 )
-OUTPUT = Path(__file__).with_name("player_overlay_variants.png")
+OUTPUT = Path(__file__).resolve().parent / "docs" / "diagnostics" / "character-appearance" / "player_overlay_variants.png"
 
 
 spec = importlib.util.spec_from_file_location("role_renderer", REFERENCE_SCRIPT)
@@ -70,4 +70,5 @@ for item_index, (label, frame) in enumerate(frames):
     draw.text((x + 5, y + 5), label, fill="black")
     draw.rectangle((x, y, x + cell_w - 1, y + cell_h - 1), outline="#999")
 
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 sheet.convert("RGB").save(OUTPUT)

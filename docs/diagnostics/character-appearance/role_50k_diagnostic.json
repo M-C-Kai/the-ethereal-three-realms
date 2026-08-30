@@ -1,0 +1,994 @@
+{
+  "50100": {
+    "image_ids": [
+      50100
+    ],
+    "records": 10,
+    "sequences": 15,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "50200": {
+    "image_ids": [
+      70400,
+      70500
+    ],
+    "records": 13,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "50300": {
+    "image_ids": [
+      50300
+    ],
+    "records": 11,
+    "sequences": 8,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "50400": {
+    "image_ids": [
+      50400,
+      50401
+    ],
+    "records": 32,
+    "sequences": 50,
+    "animations": 3,
+    "preview_sequences": [
+      0,
+      17,
+      34
+    ]
+  },
+  "50600": {
+    "image_ids": [
+      60000
+    ],
+    "records": 7,
+    "sequences": 8,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "50800": {
+    "image_ids": [
+      58802,
+      58801,
+      51900
+    ],
+    "records": 49,
+    "sequences": 20,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "51100": {
+    "image_ids": [
+      51100,
+      52601
+    ],
+    "records": 41,
+    "sequences": 56,
+    "animations": 4,
+    "preview_sequences": [
+      9,
+      10,
+      24,
+      37
+    ]
+  },
+  "51200": {
+    "image_ids": [
+      51300,
+      51200,
+      51100
+    ],
+    "records": 16,
+    "sequences": 18,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "51400": {
+    "image_ids": [
+      51100
+    ],
+    "records": 19,
+    "sequences": 14,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "51500": {
+    "image_ids": [
+      51500
+    ],
+    "records": 15,
+    "sequences": 8,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "51700": {
+    "image_ids": [
+      51300,
+      52601
+    ],
+    "records": 27,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "51800": {
+    "image_ids": [
+      70300,
+      51100
+    ],
+    "records": 29,
+    "sequences": 20,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "51900": {
+    "image_ids": [
+      51900,
+      51100
+    ],
+    "records": 35,
+    "sequences": 14,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "52100": {
+    "image_ids": [
+      52100
+    ],
+    "records": 13,
+    "sequences": 17,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "52200": {
+    "image_ids": [
+      50401
+    ],
+    "records": 23,
+    "sequences": 18,
+    "animations": 1,
+    "preview_sequences": [
+      1
+    ]
+  },
+  "52300": {
+    "image_ids": [
+      50400,
+      52601,
+      52300
+    ],
+    "records": 46,
+    "sequences": 20,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "52500": {
+    "image_ids": [
+      52500
+    ],
+    "records": 9,
+    "sequences": 14,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "52600": {
+    "image_ids": [
+      52602,
+      52601
+    ],
+    "records": 32,
+    "sequences": 50,
+    "animations": 3,
+    "preview_sequences": [
+      0,
+      17,
+      34
+    ]
+  },
+  "52700": {
+    "image_ids": [
+      52700,
+      52100
+    ],
+    "records": 19,
+    "sequences": 21,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "52800": {
+    "image_ids": [
+      52100,
+      52801
+    ],
+    "records": 17,
+    "sequences": 18,
+    "animations": 1,
+    "preview_sequences": [
+      1
+    ]
+  },
+  "52900": {
+    "image_ids": [
+      52901
+    ],
+    "records": 16,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "53000": {
+    "image_ids": [
+      50401,
+      53000
+    ],
+    "records": 36,
+    "sequences": 13,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "53100": {
+    "image_ids": [
+      53100
+    ],
+    "records": 11,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "53200": {
+    "image_ids": [
+      53200
+    ],
+    "records": 13,
+    "sequences": 21,
+    "animations": 1,
+    "preview_sequences": [
+      1
+    ]
+  },
+  "53300": {
+    "image_ids": [
+      50401
+    ],
+    "records": 22,
+    "sequences": 65,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "53400": {
+    "image_ids": [
+      58801
+    ],
+    "records": 22,
+    "sequences": 65,
+    "animations": 1,
+    "preview_sequences": [
+      19
+    ]
+  },
+  "53500": {
+    "image_ids": [
+      50402
+    ],
+    "records": 22,
+    "sequences": 65,
+    "animations": 1,
+    "preview_sequences": [
+      41
+    ]
+  },
+  "54100": {
+    "image_ids": [
+      54100,
+      58801
+    ],
+    "records": 33,
+    "sequences": 23,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "54300": {
+    "image_ids": [
+      54300
+    ],
+    "records": 8,
+    "sequences": 6,
+    "animations": 1,
+    "preview_sequences": [
+      5
+    ]
+  },
+  "54400": {
+    "image_ids": [
+      50400,
+      50401
+    ],
+    "records": 32,
+    "sequences": 17,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "54500": {
+    "image_ids": [
+      54500
+    ],
+    "records": 16,
+    "sequences": 29,
+    "animations": 2,
+    "preview_sequences": [
+      15,
+      0
+    ]
+  },
+  "54800": {
+    "image_ids": [
+      54800,
+      70400
+    ],
+    "records": 11,
+    "sequences": 11,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "55100": {
+    "image_ids": [
+      55101,
+      55102,
+      55400
+    ],
+    "records": 44,
+    "sequences": 64,
+    "animations": 4,
+    "preview_sequences": [
+      0,
+      14,
+      29,
+      46
+    ]
+  },
+  "55300": {
+    "image_ids": [
+      55301
+    ],
+    "records": 11,
+    "sequences": 15,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "55600": {
+    "image_ids": [
+      55600
+    ],
+    "records": 10,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "55700": {
+    "image_ids": [
+      55700
+    ],
+    "records": 10,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      1
+    ]
+  },
+  "55800": {
+    "image_ids": [
+      55800
+    ],
+    "records": 4,
+    "sequences": 4,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "56100": {
+    "image_ids": [
+      56100,
+      56101,
+      56102
+    ],
+    "records": 29,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "56200": {
+    "image_ids": [
+      56100,
+      56101,
+      56200
+    ],
+    "records": 38,
+    "sequences": 17,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "56300": {
+    "image_ids": [
+      56100,
+      56101
+    ],
+    "records": 27,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "56400": {
+    "image_ids": [
+      56400
+    ],
+    "records": 15,
+    "sequences": 22,
+    "animations": 2,
+    "preview_sequences": [
+      0,
+      11
+    ]
+  },
+  "56500": {
+    "image_ids": [
+      56500,
+      61700
+    ],
+    "records": 27,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "56600": {
+    "image_ids": [
+      56100,
+      62401
+    ],
+    "records": 41,
+    "sequences": 37,
+    "animations": 3,
+    "preview_sequences": [
+      9,
+      10,
+      24
+    ]
+  },
+  "57000": {
+    "image_ids": [
+      57000
+    ],
+    "records": 4,
+    "sequences": 4,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "57100": {
+    "image_ids": [
+      57600
+    ],
+    "records": 16,
+    "sequences": 27,
+    "animations": 3,
+    "preview_sequences": [
+      0,
+      16
+    ]
+  },
+  "57200": {
+    "image_ids": [
+      57200
+    ],
+    "records": 13,
+    "sequences": 14,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "57300": {
+    "image_ids": [
+      57300
+    ],
+    "records": 9,
+    "sequences": 11,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "57400": {
+    "image_ids": [
+      57100,
+      60000
+    ],
+    "records": 22,
+    "sequences": 13,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "57500": {
+    "image_ids": [
+      57500
+    ],
+    "records": 13,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "57600": {
+    "image_ids": [
+      57100,
+      60000
+    ],
+    "records": 21,
+    "sequences": 13,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "57800": {
+    "image_ids": [
+      57800
+    ],
+    "records": 28,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58000": {
+    "image_ids": [
+      62402,
+      61700,
+      80301,
+      60300
+    ],
+    "records": 25,
+    "sequences": 41,
+    "animations": 2,
+    "preview_sequences": [
+      0,
+      16
+    ]
+  },
+  "58100": {
+    "image_ids": [
+      58900,
+      55300
+    ],
+    "records": 30,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58200": {
+    "image_ids": [
+      58200
+    ],
+    "records": 8,
+    "sequences": 20,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58300": {
+    "image_ids": [
+      61700,
+      58900
+    ],
+    "records": 36,
+    "sequences": 24,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58400": {
+    "image_ids": [
+      58900,
+      58400
+    ],
+    "records": 29,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58500": {
+    "image_ids": [
+      58500
+    ],
+    "records": 9,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58600": {
+    "image_ids": [
+      61700,
+      58900
+    ],
+    "records": 36,
+    "sequences": 22,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58700": {
+    "image_ids": [
+      58900,
+      61700
+    ],
+    "records": 36,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58800": {
+    "image_ids": [
+      58900,
+      58400,
+      61700
+    ],
+    "records": 51,
+    "sequences": 18,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "58900": {
+    "image_ids": [
+      58900
+    ],
+    "records": 14,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "59100": {
+    "image_ids": [
+      54600
+    ],
+    "records": 4,
+    "sequences": 14,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "59200": {
+    "image_ids": [
+      59200
+    ],
+    "records": 7,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "59500": {
+    "image_ids": [
+      59200
+    ],
+    "records": 7,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "59600": {
+    "image_ids": [
+      59200
+    ],
+    "records": 7,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "60000": {
+    "image_ids": [
+      60000
+    ],
+    "records": 4,
+    "sequences": 3,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "60200": {
+    "image_ids": [
+      60200,
+      57100
+    ],
+    "records": 13,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "60300": {
+    "image_ids": [
+      60300,
+      62100,
+      55800
+    ],
+    "records": 25,
+    "sequences": 52,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      12,
+      25,
+      38
+    ]
+  },
+  "60500": {
+    "image_ids": [
+      60500
+    ],
+    "records": 9,
+    "sequences": 29,
+    "animations": 2,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "61200": {
+    "image_ids": [
+      61200
+    ],
+    "records": 10,
+    "sequences": 14,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "61400": {
+    "image_ids": [
+      61400,
+      62402
+    ],
+    "records": 28,
+    "sequences": 49,
+    "animations": 4,
+    "preview_sequences": [
+      0,
+      11,
+      22,
+      32
+    ]
+  },
+  "61500": {
+    "image_ids": [
+      61500,
+      50401
+    ],
+    "records": 33,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "61600": {
+    "image_ids": [
+      61600
+    ],
+    "records": 10,
+    "sequences": 15,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "61700": {
+    "image_ids": [
+      61700
+    ],
+    "records": 23,
+    "sequences": 18,
+    "animations": 1,
+    "preview_sequences": [
+      1
+    ]
+  },
+  "61800": {
+    "image_ids": [
+      61200,
+      61400
+    ],
+    "records": 18,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "62100": {
+    "image_ids": [
+      62100
+    ],
+    "records": 23,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "62200": {
+    "image_ids": [
+      61400,
+      59200
+    ],
+    "records": 33,
+    "sequences": 8,
+    "animations": 1,
+    "preview_sequences": [
+      7
+    ]
+  },
+  "62300": {
+    "image_ids": [
+      62300
+    ],
+    "records": 3,
+    "sequences": 8,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "62400": {
+    "image_ids": [
+      62402,
+      62401
+    ],
+    "records": 32,
+    "sequences": 50,
+    "animations": 3,
+    "preview_sequences": [
+      0,
+      17,
+      34
+    ]
+  },
+  "62600": {
+    "image_ids": [
+      62600
+    ],
+    "records": 10,
+    "sequences": 8,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "62700": {
+    "image_ids": [
+      62700,
+      60000
+    ],
+    "records": 19,
+    "sequences": 30,
+    "animations": 3,
+    "preview_sequences": [
+      0,
+      10,
+      22
+    ]
+  },
+  "62800": {
+    "image_ids": [
+      56100,
+      56101,
+      62401
+    ],
+    "records": 39,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "63000": {
+    "image_ids": [
+      56100,
+      56101,
+      56200
+    ],
+    "records": 38,
+    "sequences": 16,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  }
+}

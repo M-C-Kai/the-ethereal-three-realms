@@ -1,0 +1,571 @@
+{
+  "2020000": {
+    "image_ids": [
+      2020000
+    ],
+    "records": 38,
+    "sequences": 24,
+    "animations": 4,
+    "preview_sequences": [
+      0,
+      6,
+      12,
+      18
+    ]
+  },
+  "2030000": {
+    "image_ids": [
+      2020000
+    ],
+    "records": 38,
+    "sequences": 24,
+    "animations": 4,
+    "preview_sequences": [
+      0,
+      6,
+      12,
+      18
+    ]
+  },
+  "2040000": {
+    "image_ids": [
+      2040000
+    ],
+    "records": 4,
+    "sequences": 6,
+    "animations": 2,
+    "preview_sequences": [
+      0,
+      3
+    ]
+  },
+  "2050000": {
+    "image_ids": [
+      2050000
+    ],
+    "records": 26,
+    "sequences": 66,
+    "animations": 2,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2100000": {
+    "image_ids": [
+      2100000
+    ],
+    "records": 12,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2100001": {
+    "image_ids": [
+      2100001
+    ],
+    "records": 3,
+    "sequences": 3,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2110000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 7,
+    "sequences": 6,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2120000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 3,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2130000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 9,
+    "sequences": 3,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2140000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 2,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2150000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 3,
+    "sequences": 3,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2160000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 2,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2170000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 2,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2180000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 1,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2190000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 1,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2200000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 1,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2210000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 1,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2220000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 18,
+    "sequences": 17,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2230000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 5,
+    "sequences": 14,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2240000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 6,
+    "sequences": 8,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2250000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 2,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2260000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 4,
+    "sequences": 5,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2270000": {
+    "image_ids": [
+      2270000
+    ],
+    "records": 7,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2280000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 22,
+    "sequences": 11,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2290000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 28,
+    "sequences": 9,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2300000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 26,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2310000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 1,
+    "sequences": 2,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2320000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 17,
+    "sequences": 12,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "2330000": {
+    "image_ids": [
+      2110000
+    ],
+    "records": 28,
+    "sequences": 6,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "1940000": {
+    "image_ids": [
+      1940000
+    ],
+    "records": 6,
+    "sequences": 10,
+    "animations": 1,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "100000": {
+    "image_ids": [
+      11000,
+      12000,
+      13000,
+      14001,
+      15000,
+      16001,
+      17049,
+      18001,
+      19001,
+      20001,
+      21003,
+      22000,
+      23002,
+      24009,
+      25000,
+      26001,
+      27000,
+      28000,
+      29000,
+      30001,
+      30101,
+      30201,
+      30301,
+      30401,
+      30501,
+      30601,
+      30701,
+      30801,
+      30901,
+      31001,
+      31101,
+      31201
+    ],
+    "records": 462,
+    "sequences": 174,
+    "animations": 30,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      138,
+      12,
+      18,
+      24
+    ]
+  },
+  "110000": {
+    "image_ids": [
+      11000,
+      12000,
+      13000,
+      14001,
+      15001,
+      16001,
+      17001,
+      18001,
+      19003,
+      20001,
+      21003,
+      22000,
+      23000,
+      24000,
+      25000,
+      26000,
+      27000,
+      28000,
+      29000
+    ],
+    "records": 319,
+    "sequences": 30,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      6,
+      8,
+      10,
+      11,
+      12,
+      17
+    ]
+  },
+  "120000": {
+    "image_ids": [
+      11000,
+      12000,
+      13000,
+      14001,
+      15001,
+      16001,
+      17001,
+      18001,
+      19003,
+      20001,
+      21003,
+      22002,
+      23000,
+      24000,
+      25000,
+      26000,
+      27000,
+      28000,
+      29000,
+      30001,
+      30101,
+      30201,
+      30301,
+      30401,
+      30501,
+      30601,
+      30701,
+      30801,
+      30901,
+      31001,
+      31101,
+      31201
+    ],
+    "records": 332,
+    "sequences": 48,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      6,
+      12,
+      14,
+      16,
+      17,
+      18,
+      24
+    ]
+  },
+  "130000": {
+    "image_ids": [
+      11000,
+      12000,
+      13000,
+      14001,
+      15001,
+      16001,
+      17001,
+      18001,
+      19003,
+      20001,
+      21003,
+      22001,
+      23001,
+      24001,
+      25000,
+      26000,
+      27000,
+      28000,
+      29000,
+      30001,
+      30101,
+      30201,
+      30301,
+      30401,
+      30501,
+      30601,
+      30701,
+      30801,
+      30901,
+      31001,
+      31101,
+      31201
+    ],
+    "records": 344,
+    "sequences": 48,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      6,
+      12,
+      14,
+      16,
+      17,
+      18,
+      25
+    ]
+  },
+  "140000": {
+    "image_ids": [
+      11000,
+      12000,
+      13000,
+      14011,
+      15000,
+      16001,
+      17001,
+      18001,
+      19001,
+      20001,
+      21003,
+      22000,
+      23000,
+      24000,
+      25000,
+      26000,
+      27000,
+      28001,
+      29007,
+      30001,
+      30101,
+      30201,
+      30301,
+      30401,
+      30501,
+      30601,
+      30701,
+      30801,
+      30901,
+      31001,
+      31101,
+      31201
+    ],
+    "records": 420,
+    "sequences": 46,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      6,
+      12,
+      14,
+      16,
+      17,
+      18,
+      26
+    ]
+  }
+}

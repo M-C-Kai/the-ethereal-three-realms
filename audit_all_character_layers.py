@@ -22,7 +22,7 @@ IMAGE_DIR = Path(
     r"C:\Users\Kail\Documents\Codex\2026-08-24\new-chat\outputs"
     r"\equipment_resources\output\rebuilt"
 )
-OUTPUT_DIR = ROOT / "appearance-layer-audit"
+OUTPUT_DIR = ROOT / "docs" / "diagnostics" / "character-appearance" / "appearance-layer-audit"
 
 
 def load_renderer():

@@ -1,0 +1,1572 @@
+{
+  "2000": {
+    "image_ids": [
+      2000,
+      9999
+    ],
+    "records": 43,
+    "sequences": 20,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8
+    ]
+  },
+  "2001": {
+    "image_ids": [
+      2000,
+      9999
+    ],
+    "records": 43,
+    "sequences": 28,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      24,
+      26,
+      8,
+      13,
+      18,
+      21
+    ]
+  },
+  "2050": {
+    "image_ids": [
+      2050,
+      9999
+    ],
+    "records": 34,
+    "sequences": 39,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      7,
+      14,
+      21,
+      27,
+      33
+    ]
+  },
+  "2051": {
+    "image_ids": [
+      2050,
+      9999
+    ],
+    "records": 34,
+    "sequences": 50,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      7,
+      26,
+      28,
+      14,
+      20,
+      30,
+      40
+    ]
+  },
+  "2100": {
+    "image_ids": [
+      2100,
+      9999
+    ],
+    "records": 26,
+    "sequences": 17,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      6,
+      12
+    ]
+  },
+  "2101": {
+    "image_ids": [
+      2100,
+      9999
+    ],
+    "records": 26,
+    "sequences": 25,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      6,
+      21,
+      23,
+      11,
+      14,
+      17,
+      19
+    ]
+  },
+  "2150": {
+    "image_ids": [
+      2150,
+      9999
+    ],
+    "records": 28,
+    "sequences": 9,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6
+    ]
+  },
+  "2151": {
+    "image_ids": [
+      2150,
+      9999
+    ],
+    "records": 28,
+    "sequences": 30,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      8,
+      19
+    ]
+  },
+  "2200": {
+    "image_ids": [
+      2200,
+      9999,
+      24000
+    ],
+    "records": 30,
+    "sequences": 24,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      12,
+      18
+    ]
+  },
+  "2201": {
+    "image_ids": [
+      2200,
+      9999,
+      24000
+    ],
+    "records": 30,
+    "sequences": 22,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      18,
+      20,
+      4,
+      7,
+      10,
+      14
+    ]
+  },
+  "2300": {
+    "image_ids": [
+      2300,
+      9999
+    ],
+    "records": 22,
+    "sequences": 12,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8
+    ]
+  },
+  "2301": {
+    "image_ids": [
+      2300,
+      9999
+    ],
+    "records": 22,
+    "sequences": 16,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      12,
+      2,
+      6,
+      11
+    ]
+  },
+  "2400": {
+    "image_ids": [
+      2400
+    ],
+    "records": 7,
+    "sequences": 9,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6
+    ]
+  },
+  "2401": {
+    "image_ids": [
+      2400
+    ],
+    "records": 10,
+    "sequences": 30,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      6,
+      8,
+      1,
+      10,
+      15,
+      20
+    ]
+  },
+  "2500": {
+    "image_ids": [
+      2500,
+      9999
+    ],
+    "records": 24,
+    "sequences": 11,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8
+    ]
+  },
+  "2501": {
+    "image_ids": [
+      2500,
+      9999
+    ],
+    "records": 24,
+    "sequences": 29,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      7,
+      9,
+      11,
+      12,
+      13,
+      18
+    ]
+  },
+  "2600": {
+    "image_ids": [
+      2600,
+      9999
+    ],
+    "records": 23,
+    "sequences": 20,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      11,
+      14,
+      17
+    ]
+  },
+  "2601": {
+    "image_ids": [
+      2600,
+      9999
+    ],
+    "records": 23,
+    "sequences": 17,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      7,
+      9,
+      11,
+      12
+    ]
+  },
+  "2650": {
+    "image_ids": [
+      2650,
+      9999
+    ],
+    "records": 7,
+    "sequences": 9,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6
+    ]
+  },
+  "2651": {
+    "image_ids": [
+      2650,
+      9999,
+      58801
+    ],
+    "records": 15,
+    "sequences": 35,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      7,
+      9,
+      3,
+      11,
+      17,
+      23
+    ]
+  },
+  "2700": {
+    "image_ids": [
+      2700,
+      9999
+    ],
+    "records": 26,
+    "sequences": 9,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6
+    ]
+  },
+  "2701": {
+    "image_ids": [
+      2700,
+      9999
+    ],
+    "records": 26,
+    "sequences": 19,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      6,
+      8,
+      10,
+      11,
+      15
+    ]
+  },
+  "2800": {
+    "image_ids": [
+      2800,
+      9999
+    ],
+    "records": 38,
+    "sequences": 28,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      11,
+      17,
+      22
+    ]
+  },
+  "2801": {
+    "image_ids": [
+      2800,
+      9999
+    ],
+    "records": 38,
+    "sequences": 20,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      6,
+      8,
+      10,
+      11,
+      12,
+      17
+    ]
+  },
+  "2900": {
+    "image_ids": [
+      2900,
+      9999
+    ],
+    "records": 41,
+    "sequences": 9,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6
+    ]
+  },
+  "2901": {
+    "image_ids": [
+      2900,
+      9999
+    ],
+    "records": 41,
+    "sequences": 28,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      6,
+      8,
+      10,
+      11,
+      12,
+      20
+    ]
+  },
+  "3000": {
+    "image_ids": [
+      3000,
+      9999
+    ],
+    "records": 51,
+    "sequences": 11,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8
+    ]
+  },
+  "3001": {
+    "image_ids": [
+      3000,
+      9999
+    ],
+    "records": 51,
+    "sequences": 37,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      7,
+      9,
+      11,
+      12,
+      13,
+      25
+    ]
+  },
+  "3050": {
+    "image_ids": [
+      3050,
+      3850,
+      9999
+    ],
+    "records": 14,
+    "sequences": 12,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      8,
+      4
+    ]
+  },
+  "3051": {
+    "image_ids": [
+      3050,
+      3850,
+      9999,
+      62700
+    ],
+    "records": 17,
+    "sequences": 23,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      2,
+      6,
+      15,
+      19
+    ]
+  },
+  "3100": {
+    "image_ids": [
+      3100,
+      3850,
+      9999
+    ],
+    "records": 28,
+    "sequences": 12,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      8,
+      4
+    ]
+  },
+  "3101": {
+    "image_ids": [
+      3100,
+      3850,
+      9999,
+      62700
+    ],
+    "records": 28,
+    "sequences": 28,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      10,
+      1,
+      5,
+      20,
+      24
+    ]
+  },
+  "3150": {
+    "image_ids": [
+      3150,
+      3100,
+      3850,
+      9999
+    ],
+    "records": 28,
+    "sequences": 12,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      8,
+      4
+    ]
+  },
+  "3151": {
+    "image_ids": [
+      3150,
+      3100,
+      3850,
+      56101,
+      9999
+    ],
+    "records": 34,
+    "sequences": 34,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      10,
+      18,
+      26,
+      30
+    ]
+  },
+  "3400": {
+    "image_ids": [
+      3400,
+      12000,
+      13000,
+      3402,
+      15000,
+      16003,
+      18003,
+      19002,
+      3401
+    ],
+    "records": 159,
+    "sequences": 30,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      9,
+      12,
+      18,
+      24
+    ]
+  },
+  "3401": {
+    "image_ids": [
+      3400,
+      12000,
+      13000,
+      3402,
+      15000,
+      16003,
+      18003,
+      19002,
+      3401
+    ],
+    "records": 104,
+    "sequences": 36,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      6,
+      12,
+      14,
+      19,
+      23,
+      16,
+      20
+    ]
+  },
+  "3450": {
+    "image_ids": [
+      3450,
+      9999
+    ],
+    "records": 17,
+    "sequences": 15,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      9,
+      12
+    ]
+  },
+  "3451": {
+    "image_ids": [
+      3450,
+      9999,
+      70300
+    ],
+    "records": 23,
+    "sequences": 36,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      13,
+      18,
+      27
+    ]
+  },
+  "3500": {
+    "image_ids": [
+      3500,
+      9999
+    ],
+    "records": 16,
+    "sequences": 15,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      9,
+      12
+    ]
+  },
+  "3501": {
+    "image_ids": [
+      3500,
+      9999,
+      5891215,
+      57800
+    ],
+    "records": 25,
+    "sequences": 34,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      3,
+      8,
+      13,
+      18
+    ]
+  },
+  "3550": {
+    "image_ids": [
+      3550,
+      9999
+    ],
+    "records": 15,
+    "sequences": 15,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      9,
+      12
+    ]
+  },
+  "3551": {
+    "image_ids": [
+      3550,
+      9999,
+      57000,
+      2060000
+    ],
+    "records": 24,
+    "sequences": 34,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      5,
+      7,
+      9,
+      14,
+      19,
+      27
+    ]
+  },
+  "3600": {
+    "image_ids": [
+      3600,
+      9999
+    ],
+    "records": 15,
+    "sequences": 15,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      9,
+      12
+    ]
+  },
+  "3601": {
+    "image_ids": [
+      3600,
+      9999,
+      30204
+    ],
+    "records": 29,
+    "sequences": 36,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      5,
+      7,
+      3,
+      9,
+      14,
+      19
+    ]
+  },
+  "3700": {
+    "image_ids": [
+      3700,
+      9999
+    ],
+    "records": 8,
+    "sequences": 12,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8
+    ]
+  },
+  "3701": {
+    "image_ids": [
+      3700,
+      9999,
+      52100
+    ],
+    "records": 13,
+    "sequences": 22,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      10,
+      12,
+      13,
+      14,
+      18
+    ]
+  },
+  "3750": {
+    "image_ids": [
+      3750,
+      9999
+    ],
+    "records": 13,
+    "sequences": 12,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      10
+    ]
+  },
+  "3751": {
+    "image_ids": [
+      3750,
+      9999,
+      56500,
+      30803
+    ],
+    "records": 19,
+    "sequences": 29,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      13,
+      19,
+      24
+    ]
+  },
+  "3800": {
+    "image_ids": [
+      3800,
+      9999
+    ],
+    "records": 17,
+    "sequences": 9,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6
+    ]
+  },
+  "3801": {
+    "image_ids": [
+      3800,
+      9999,
+      56101,
+      56500
+    ],
+    "records": 24,
+    "sequences": 36,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      6,
+      8,
+      10,
+      15,
+      20,
+      28
+    ]
+  },
+  "3900": {
+    "image_ids": [
+      3900,
+      9999,
+      24000
+    ],
+    "records": 50,
+    "sequences": 9,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6
+    ]
+  },
+  "3901": {
+    "image_ids": [
+      3900,
+      9999,
+      24000
+    ],
+    "records": 50,
+    "sequences": 22,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      3,
+      8,
+      9,
+      10,
+      16
+    ]
+  },
+  "4000": {
+    "image_ids": [
+      3000,
+      9999
+    ],
+    "records": 35,
+    "sequences": 27,
+    "animations": 6,
+    "preview_sequences": [
+      2,
+      3,
+      6,
+      9,
+      15,
+      21
+    ]
+  },
+  "4001": {
+    "image_ids": [
+      4000,
+      9999
+    ],
+    "records": 35,
+    "sequences": 20,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      5,
+      3,
+      8,
+      14
+    ]
+  },
+  "4100": {
+    "image_ids": [
+      4100,
+      9999
+    ],
+    "records": 23,
+    "sequences": 36,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      6,
+      12,
+      18,
+      24,
+      30
+    ]
+  },
+  "4101": {
+    "image_ids": [
+      4100,
+      9999
+    ],
+    "records": 23,
+    "sequences": 26,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      6,
+      1,
+      14,
+      20
+    ]
+  },
+  "4200": {
+    "image_ids": [
+      4200,
+      9999
+    ],
+    "records": 30,
+    "sequences": 23,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      7,
+      11,
+      14,
+      21
+    ]
+  },
+  "4201": {
+    "image_ids": [
+      4200,
+      9999
+    ],
+    "records": 30,
+    "sequences": 46,
+    "animations": 10,
+    "preview_sequences": [
+      3,
+      23,
+      6,
+      30,
+      38
+    ]
+  },
+  "4300": {
+    "image_ids": [
+      4300,
+      9999
+    ],
+    "records": 31,
+    "sequences": 18,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      12,
+      6
+    ]
+  },
+  "4301": {
+    "image_ids": [
+      4300,
+      9999
+    ],
+    "records": 31,
+    "sequences": 32,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      6,
+      7,
+      14,
+      23
+    ]
+  },
+  "4400": {
+    "image_ids": [
+      4400,
+      9999,
+      24020
+    ],
+    "records": 34,
+    "sequences": 27,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      3,
+      6,
+      9,
+      15,
+      21
+    ]
+  },
+  "4401": {
+    "image_ids": [
+      4400,
+      9999,
+      24020
+    ],
+    "records": 37,
+    "sequences": 46,
+    "animations": 10,
+    "preview_sequences": [
+      3,
+      27,
+      32,
+      39
+    ]
+  },
+  "4500": {
+    "image_ids": [
+      4500,
+      50500
+    ],
+    "records": 42,
+    "sequences": 98,
+    "animations": 6,
+    "preview_sequences": [
+      32,
+      40,
+      48,
+      0,
+      8,
+      16
+    ]
+  },
+  "4501": {
+    "image_ids": [
+      4500,
+      50500
+    ],
+    "records": 42,
+    "sequences": 98,
+    "animations": 10,
+    "preview_sequences": [
+      40,
+      56,
+      88,
+      93,
+      8,
+      24,
+      64,
+      76
+    ]
+  },
+  "4600": {
+    "image_ids": [
+      4600,
+      9999
+    ],
+    "records": 32,
+    "sequences": 6,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4
+    ]
+  },
+  "4601": {
+    "image_ids": [
+      4600,
+      9999
+    ],
+    "records": 32,
+    "sequences": 26,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      17
+    ]
+  },
+  "4700": {
+    "image_ids": [
+      4700,
+      9999
+    ],
+    "records": 28,
+    "sequences": 12,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      10
+    ]
+  },
+  "4701": {
+    "image_ids": [
+      4700,
+      9999
+    ],
+    "records": 28,
+    "sequences": 28,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      10,
+      12,
+      20
+    ]
+  },
+  "4800": {
+    "image_ids": [
+      4800,
+      9999
+    ],
+    "records": 39,
+    "sequences": 39,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      7,
+      14,
+      21,
+      27,
+      33
+    ]
+  },
+  "4801": {
+    "image_ids": [
+      4800,
+      9999
+    ],
+    "records": 39,
+    "sequences": 34,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      7,
+      14,
+      16,
+      18,
+      26
+    ]
+  },
+  "4900": {
+    "image_ids": [
+      4900,
+      9999
+    ],
+    "records": 40,
+    "sequences": 30,
+    "animations": 6,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      12,
+      18,
+      24
+    ]
+  },
+  "4901": {
+    "image_ids": [
+      4900,
+      9999
+    ],
+    "records": 40,
+    "sequences": 55,
+    "animations": 10,
+    "preview_sequences": [
+      0,
+      4,
+      8,
+      10,
+      12,
+      34
+    ]
+  },
+  "5101": {
+    "image_ids": [
+      5100,
+      9999,
+      22000,
+      24000,
+      17000
+    ],
+    "records": 39,
+    "sequences": 12,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      3,
+      5,
+      8
+    ]
+  },
+  "5201": {
+    "image_ids": [
+      5200,
+      9999,
+      24000,
+      26000
+    ],
+    "records": 25,
+    "sequences": 12,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      3,
+      5,
+      9
+    ]
+  },
+  "5301": {
+    "image_ids": [
+      5300,
+      9999
+    ],
+    "records": 22,
+    "sequences": 14,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      3,
+      5,
+      6
+    ]
+  },
+  "5401": {
+    "image_ids": [
+      5400,
+      9999
+    ],
+    "records": 21,
+    "sequences": 12,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      3,
+      5,
+      6,
+      9
+    ]
+  },
+  "5501": {
+    "image_ids": [
+      5400,
+      9999
+    ],
+    "records": 21,
+    "sequences": 12,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      3,
+      5,
+      6,
+      9
+    ]
+  },
+  "5601": {
+    "image_ids": [
+      5600,
+      24000,
+      9999
+    ],
+    "records": 23,
+    "sequences": 12,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      4,
+      6,
+      7,
+      9
+    ]
+  },
+  "5701": {
+    "image_ids": [
+      5700,
+      9999
+    ],
+    "records": 23,
+    "sequences": 18,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      3,
+      5,
+      10
+    ]
+  },
+  "5901": {
+    "image_ids": [
+      5900
+    ],
+    "records": 24,
+    "sequences": 13,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      6,
+      7
+    ]
+  },
+  "6201": {
+    "image_ids": [
+      6200
+    ],
+    "records": 17,
+    "sequences": 11,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      4,
+      6,
+      7
+    ]
+  },
+  "6301": {
+    "image_ids": [
+      95500,
+      13000,
+      14000,
+      15000,
+      16003,
+      19002
+    ],
+    "records": 68,
+    "sequences": 23,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      6,
+      8,
+      9,
+      17
+    ]
+  },
+  "6401": {
+    "image_ids": [
+      6400
+    ],
+    "records": 18,
+    "sequences": 12,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      7
+    ]
+  },
+  "6501": {
+    "image_ids": [
+      6500
+    ],
+    "records": 16,
+    "sequences": 10,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      4,
+      5
+    ]
+  },
+  "6601": {
+    "image_ids": [
+      6600,
+      9999
+    ],
+    "records": 15,
+    "sequences": 9,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      4
+    ]
+  },
+  "6701": {
+    "image_ids": [
+      90030,
+      23000,
+      60300
+    ],
+    "records": 24,
+    "sequences": 9,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      3,
+      5,
+      6
+    ]
+  },
+  "6801": {
+    "image_ids": [
+      12000,
+      13000,
+      6800,
+      15000,
+      18002,
+      19002,
+      22000
+    ],
+    "records": 56,
+    "sequences": 14,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      6,
+      8,
+      9
+    ]
+  },
+  "6901": {
+    "image_ids": [
+      6900
+    ],
+    "records": 14,
+    "sequences": 10,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      4,
+      5
+    ]
+  },
+  "7001": {
+    "image_ids": [
+      7000
+    ],
+    "records": 17,
+    "sequences": 13,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      6,
+      8
+    ]
+  },
+  "7101": {
+    "image_ids": [
+      7100
+    ],
+    "records": 16,
+    "sequences": 9,
+    "animations": 5,
+    "preview_sequences": [
+      0,
+      4
+    ]
+  },
+  "7200": {
+    "image_ids": [
+      7200,
+      9999
+    ],
+    "records": 22,
+    "sequences": 5,
+    "animations": 6,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "7300": {
+    "image_ids": [
+      7300,
+      9999
+    ],
+    "records": 4,
+    "sequences": 2,
+    "animations": 6,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "7400": {
+    "image_ids": [
+      7400,
+      9999
+    ],
+    "records": 3,
+    "sequences": 2,
+    "animations": 6,
+    "preview_sequences": [
+      0
+    ]
+  },
+  "7500": {
+    "image_ids": [
+      7500,
+      24207,
+      9999
+    ],
+    "records": 15,
+    "sequences": 2,
+    "animations": 6,
+    "preview_sequences": [
+      0
+    ]
+  }
+}
