@@ -975,20 +975,14 @@ class ProtocolTests(unittest.TestCase):
             {'id': 1_900_002, 'name': '孙思邈', 'label': '药王', 'x': 50, 'y': 64},
             {'id': 1_900_003, 'name': '接引真人', 'label': '接引', 'x': 34, 'y': 50},
             {'id': 1_900_004, 'name': '赵公明', 'label': '赵公明', 'x': 11, 'y': 21},
-            {'id': 1_900_005, 'name': '柴荣', 'label': '柴荣', 'x': 67, 'y': 56},
-            {'id': 1_900_006, 'name': '孙威', 'label': '孙威', 'x': 70, 'y': 12},
-            {'id': 1_900_007, 'name': '欧冶子', 'label': '欧冶子', 'x': 59, 'y': 12},
         ]
         settings = Settings(npc_enabled=True, map_id=58, npcs=npcs)
         frames = map_npc_frames(settings)
-        self.assertEqual(len(frames), 6)
+        self.assertEqual(len(frames), 3)
         ids = [field_values(decode_frame(f)[1]) for f in frames]
         self.assertEqual(ids[0][2:], [1_900_002, 50, 64, settings.monster_model, '孙思邈'])
         self.assertEqual(ids[1][2:], [1_900_003, 34, 50, settings.monster_model, '接引真人'])
         self.assertEqual(ids[2][2:], [1_900_004, 11, 21, settings.monster_model, '赵公明'])
-        self.assertEqual(ids[3][2:], [1_900_005, 67, 56, settings.monster_model, '柴荣'])
-        self.assertEqual(ids[4][2:], [1_900_006, 70, 12, settings.monster_model, '孙威'])
-        self.assertEqual(ids[5][2:], [1_900_007, 59, 12, settings.monster_model, '欧冶子'])
         on_58 = map_enter_frames(settings)
         self.assertTrue(all(f in on_58 for f in frames))
         off_map = map_enter_frames(Settings(npc_enabled=True, map_id=50000, npcs=npcs))

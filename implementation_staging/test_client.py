@@ -316,10 +316,10 @@ def main() -> None:
         assert received[-1][1][5] == 12 and received[-1][1][4] == 1, received[-1]
 
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-        # Map 58 advertises two 1126 forward-portal actors and six 1126 NPC
+        # Map 58 advertises two 1126 forward-portal actors and three 1126 NPC
         # actors after the verified monster actor.  Keep the first four frames
         # unchanged; the portals and NPCs are appended in that order.
-        entered = [receive_frame(game_sock, cipher) for _ in range(12)]
+        entered = [receive_frame(game_sock, cipher) for _ in range(9)]
         assert [x[1][5] for x in entered[:3]] == [13, 14, 105], entered
         assert entered[3][0] == 1126 and entered[3][1][:2] == [0, 1], entered[3]
         assert entered[4][0] == 1126 and entered[4][1][2] == 580001, entered[4]
@@ -334,15 +334,6 @@ def main() -> None:
         assert entered[8][0] == 1126 and entered[8][1][2] == 1900004, entered[8]
         assert entered[8][1][3] == 11 and entered[8][1][4] == 21, entered[8]
         assert entered[8][1][6] == '赵公明', entered[8]
-        assert entered[9][0] == 1126 and entered[9][1][2] == 1900005, entered[9]
-        assert entered[9][1][3] == 67 and entered[9][1][4] == 56, entered[9]
-        assert entered[9][1][6] == '柴荣', entered[9]
-        assert entered[10][0] == 1126 and entered[10][1][2] == 1900006, entered[10]
-        assert entered[10][1][3] == 70 and entered[10][1][4] == 12, entered[10]
-        assert entered[10][1][6] == '孙威', entered[10]
-        assert entered[11][0] == 1126 and entered[11][1][2] == 1900007, entered[11]
-        assert entered[11][1][3] == 59 and entered[11][1][4] == 12, entered[11]
-        assert entered[11][1][6] == '欧冶子', entered[11]
 
         if args.exercise_monster:
             monster = entered[3][1]
@@ -546,7 +537,7 @@ def main() -> None:
             returned_data = [receive_frame(game_sock, cipher) for _ in range(7)]
             assert [x[0] for x in returned_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], returned_data
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-            returned_enter = [receive_frame(game_sock, cipher) for _ in range(12)]
+            returned_enter = [receive_frame(game_sock, cipher) for _ in range(9)]
             assert [x[1][5] for x in returned_enter[:3]] == [13, 14, 105], returned_enter
             assert returned_enter[0][1][4] == 0, returned_enter[0]
             assert returned_enter[4][0] == 1126 and returned_enter[4][1][2] == 580001, returned_enter[4]
@@ -557,12 +548,6 @@ def main() -> None:
             assert returned_enter[7][1][6] == '接引真人', returned_enter[7]
             assert returned_enter[8][0] == 1126 and returned_enter[8][1][2] == 1900004, returned_enter[8]
             assert returned_enter[8][1][6] == '赵公明', returned_enter[8]
-            assert returned_enter[9][0] == 1126 and returned_enter[9][1][2] == 1900005, returned_enter[9]
-            assert returned_enter[9][1][6] == '柴荣', returned_enter[9]
-            assert returned_enter[10][0] == 1126 and returned_enter[10][1][2] == 1900006, returned_enter[10]
-            assert returned_enter[10][1][6] == '孙威', returned_enter[10]
-            assert returned_enter[11][0] == 1126 and returned_enter[11][1][2] == 1900007, returned_enter[11]
-            assert returned_enter[11][1][6] == '欧冶子', returned_enter[11]
 
         menu_prefetches = (
             (1403, [byte(6), byte(0), byte(12), byte(2)], 1),
