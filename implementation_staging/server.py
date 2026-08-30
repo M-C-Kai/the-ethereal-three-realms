@@ -109,9 +109,8 @@ class Settings:
     return_portal_name: str = '返回仙石村'
     return_portal_x: int = 9
     return_portal_y: int = 6
-    # Hand-placed map-58 NPCs.  Each entry is a dict with id/name/label/x/y and
-    # may carry dat_id/model to give the NPC its own sprite.  They reuse the
-    # known-good actor shape and only spawn on map 58.
+    # Hand-placed map-58 NPCs. Each entry is a dict with id/name/label/x/y and
+    # dat_id for the native 2030 b/t actor sprite. They only spawn on map 58.
     npc_enabled: bool = True
     npcs: list = field(default_factory=list)
     heartbeat_interval_seconds: float = 25.0
@@ -217,21 +216,9 @@ class LocalBattleState:
     def clear_escape_guard(self) -> None:
         self.escape_guard = None
 
-    def begin_escape(self) -> None:
-        """Wait for the APK's action=2 acknowledgement."""
-        if self.active:
-            self.phase = 'escape_ack'
-
-    def acknowledge_escape(self) -> bool:
-        """Enter the client-side fighter-departure grace phase."""
-        if not self.active or self.phase != 'escape_ack':
-            return False
-        self.phase = 'escape_departure'
-        return True
-
-    def complete_escape(self) -> bool:
-        """Close only after the off-screen movement grace phase."""
-        if not self.active or self.phase != 'escape_departure':
+    def escape(self) -> bool:
+        """Finish server state as the APK starts its native escape movement."""
+        if not self.active:
             return False
         origin = self.player_tile
         self.finish()
@@ -254,9 +241,6 @@ BATTLE_DROP_TEMPLATE_ID = 260_000_001
 BATTLE_DROP_NAME = '小还丹'
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
-# main/b.h() ACKs action=2 before its separate departure vector runs. The
-# vector waits 500 ms and can move for 640 ms in the 320x240 battle canvas.
-BATTLE_ESCAPE_DEPARTURE_GRACE_SECONDS = 1.25
 # 1042 only appends records to the APK's battle queue. The following full
 # 1040/action=2 calls the battle screen's i() method and starts playback. The
 # client then returns the short [action=2, round] acknowledgement after the
@@ -1398,6 +1382,37 @@ NPC_DIRECTION_UP = 2
 NPC_DIRECTION_LEFT = 3
 
 _DIRECTION_RANGE = (NPC_DIRECTION_DOWN, NPC_DIRECTION_RIGHT, NPC_DIRECTION_UP, NPC_DIRECTION_LEFT)
+NPC_STREAM_RADIUS = 20
+
+# 1005 path directions are produced by APK a/c/x.a(x1, y1, x2, y2).
+_MAP_PATH_DELTAS = {
+    0: (0, 1),
+    1: (-1, 1),
+    2: (-1, 0),
+    3: (-1, -1),
+    4: (0, -1),
+    5: (1, -1),
+    6: (1, 0),
+    7: (1, 1),
+    8: (0, 0),
+}
+
+
+def map_movement_final_tile(values: list[object]) -> tuple[int, int]:
+    """Decode the final tile from the APK's compact 1005 movement path."""
+    if len(values) < 2:
+        raise ValueError('map movement requires a starting tile')
+    x, y = int(values[0]), int(values[1])
+    step_count = min(max(0, int(values[2])) if len(values) > 2 else 0, max(0, len(values) - 3))
+    for raw_direction in values[3:3 + step_count]:
+        direction = int(raw_direction)
+        try:
+            dx, dy = _MAP_PATH_DELTAS[direction]
+        except KeyError as exc:
+            raise ValueError(f'unsupported map movement direction {direction}') from exc
+        x += dx
+        y += dy
+    return x, y
 
 
 def map_actor_direction_frame(object_id: int, direction: int) -> bytes:
@@ -1414,6 +1429,19 @@ def map_actor_direction_frame(object_id: int, direction: int) -> bytes:
         byte(1),
         integer(int(object_id)),
         byte(direction),
+    ])
+
+
+def map_actor_selection_frame(object_id: int) -> bytes:
+    """Select one generic actor through the local APK compatibility branch.
+
+    The patched client resolves the id in the same generic actor container used
+    by subtype=0 and assigns it as the current target. The original entity
+    renderer then draws its bundled 0x203230 selection ring beneath the actor.
+    """
+    return encode_frame(1126, [
+        byte(2),
+        integer(int(object_id)),
     ])
 
 
@@ -1468,21 +1496,23 @@ def map_portal_frame(settings: Settings) -> bytes:
 
 
 def map_npc_frame(settings: Settings, npc: dict) -> bytes:
-    """Return the verified 1126 generic-actor shape for one map-58 NPC.
+    """Spawn one map-58 NPC through the client's native 2030 NPC path.
 
-    Each NPC carries its own sprite via ``npc['model']`` (raw model id). The
-    client loads ``role/<model + 2100000>.dat`` (see tools/role_dat.py), so a
-    distinct ``model`` makes every NPC render with its own sprite. Falls back to
-    ``monster_model`` when an entry omits ``model``.
+    ``main/e.X`` constructs ``pmsj.work.b/t`` from this record.  Unlike the
+    generic 1126 actor, that class participates in the map's built-in target
+    selection, draws the bundled selection ring, and supplies the portrait and
+    title used by the native NPC dialogue overlay.
     """
-    return encode_frame(1126, [
-        byte(0),
-        byte(1),
+    return encode_frame(2030, [
         integer(int(npc['id'])),
         integer(int(npc['x'])),
         integer(int(npc['y'])),
-        integer(int(npc.get('model', settings.monster_model))),
+        integer(int(npc['dat_id'])),
+        integer(int(npc.get('direction', NPC_DIRECTION_DOWN))),
+        integer(0),
         string(str(npc['name'])),
+        integer(0),
+        string(str(npc.get('label') or '')),
     ])
 
 
@@ -1491,6 +1521,62 @@ def map_npc_frames(settings: Settings) -> list[bytes]:
     if not settings.npc_enabled or settings.map_id != 58:
         return []
     return [map_npc_frame(settings, npc) for npc in settings.npcs]
+
+
+def map_npcs_near(settings: Settings, x: int, y: int) -> list[dict]:
+    """Return NPCs retained by the client's native 20-tile stream window."""
+    if not settings.npc_enabled or settings.map_id != 58:
+        return []
+    return [
+        npc for npc in settings.npcs
+        if abs(int(npc['x']) - int(x)) <= NPC_STREAM_RADIUS
+        and abs(int(npc['y']) - int(y)) <= NPC_STREAM_RADIUS
+    ]
+
+
+def map_npc_for_object_id(settings: Settings, object_id: int) -> dict | None:
+    """Return the configured map-58 NPC matching a clicked actor id."""
+    if not settings.npc_enabled or settings.map_id != 58:
+        return None
+    return next(
+        (npc for npc in settings.npcs if int(npc['id']) == int(object_id)),
+        None,
+    )
+
+
+def map_npc_dialogue_frames(npc: dict) -> list[bytes]:
+    """Open the compact map-overlay NPC dialogue used by the original client.
+
+    Protocol 2032 opens screen 6 (``pmsj.work.e.cb`` / ``6.ui``).  Its records
+    are eight fields wide: type 1 supplies the wrapped introduction text, type
+    2 supplies an option row, and type 100 finalizes layout after resolving the
+    native 2030 NPC by id for its title and portrait.
+    """
+    npc_id = int(npc['id'])
+    introduction = str(npc.get('introduction') or npc.get('label') or npc['name'])
+
+    def dialogue_record(kind: int, *, option_id: int = 0, text: str = '', icon: int = 0) -> list[Field]:
+        return [
+            integer(0),
+            integer(0),
+            integer(0),
+            short(0),
+            integer(option_id),
+            byte(kind),
+            string(text),
+            integer(icon),
+        ]
+
+    records = [
+        *dialogue_record(1, text=introduction),
+        *dialogue_record(2, option_id=0, text='结束对话'),
+        *dialogue_record(100),
+    ]
+    return [encode_frame(2032, [
+        integer(npc_id),
+        byte(3),
+        *records,
+    ])]
 
 
 def map_object_remove_frame(object_id: int) -> bytes:
@@ -1529,7 +1615,7 @@ def map_object_interaction_ack_frame(object_id: int) -> bytes:
 
 
 def map_object_interaction_values(values: list[object]) -> tuple[int, int | None, int | None, int | None]:
-    """Decode the active APK's 2031 generic-map-object request.
+    """Decode the active APK's 2031 map-object request.
 
     ``main/e.a(IISS)`` writes ``[object_id, 0, x, y, action, 0]``.  Keep
     the optional fields tolerant because older builds omit the trailing
@@ -2266,63 +2352,25 @@ def battle_action_show_frame(state: LocalBattleState, round_number: int | None =
     ])
 
 
-def battle_escape_animation_frames(
-    state: LocalBattleState,
-    round_number: int | None = None,
-) -> list[bytes]:
-    """Queue the APK's native fighter departure without changing battle data."""
-    shown_round = state.round if round_number is None else round_number
-    action = encode_frame(1042, [
-        integer(shown_round),
-        integer(state.player_id),
-        integer(state.player_id),
-        byte(6),
-        byte(1),
-        byte(0),
-        integer(0),
-        integer(0),
-        string('逃跑'),
-        integer(1),
-        integer(state.player_id),
-        integer(1),
-        integer(58),
-        integer(0),
-        string(''),
-    ])
-    return [action, battle_action_show_frame(state, shown_round)]
+def battle_escape_frame(player_id: int) -> bytes:
+    """Start the APK's dedicated smooth escape-and-close transition.
+
+    S->C 1041/10 calls ``pmsj.work.e.j.escapeStart()``. The client moves the
+    local fighter to its off-screen escape point over 1300 ms, blocks further
+    battle input during that movement, and closes the battle as soon as the
+    fighter reports ``escapeDone()``.
+    """
+    return encode_frame(1041, [integer(10), integer(player_id)])
 
 
 def battle_escape_request_frames(
     state: LocalBattleState,
     round_number: int | None = None,
 ) -> list[bytes]:
-    """Arm the ACK phase before starting the fighter departure queue."""
-    state.begin_escape()
-    return battle_escape_animation_frames(state, round_number)
-
-
-def battle_escape_frame(player_id: int) -> bytes:
-    """Close the battle after the escaping fighter has departed."""
-    return encode_frame(1041, [integer(10), integer(player_id)])
-
-
-def battle_escape_acknowledged(
-    state: LocalBattleState,
-    ack_action: int,
-    ack_round: int,
-) -> bool:
-    """Accept the early action=2 ACK without closing over the departure move."""
-    if not state.active or state.phase != 'escape_ack':
-        return False
-    if int(ack_action) != 2 or int(ack_round) != int(state.round):
-        return False
-    return state.acknowledge_escape()
-
-
-def battle_escape_completion_frames(state: LocalBattleState) -> list[bytes]:
-    """Build the single final close after the departure grace interval."""
+    """Settle escape once and immediately start the client's native transition."""
+    del round_number  # Escape protocol 1041 has no round field.
     player_id = state.player_id
-    if not state.complete_escape():
+    if not state.escape():
         return []
     return [battle_escape_frame(player_id)]
 
@@ -2396,13 +2444,6 @@ def map_enter_frames(settings: Settings, role_id: int | None = None) -> list[byt
     frames.append(map_actor_direction_frame(settings.monster_id, settings.monster_direction))
     if settings.portal_enabled:
         frames.append(map_actor_direction_frame(settings.portal_id, settings.portal_direction))
-    if settings.map_id == 58 and settings.npc_enabled:
-        for npc in settings.npcs:
-            frames.append(
-                map_actor_direction_frame(
-                    int(npc['id']), int(npc.get('direction', NPC_DIRECTION_DOWN))
-                )
-            )
     return frames
 
 
@@ -2475,12 +2516,12 @@ class LocalGameServer:
         send_lock: asyncio.Lock,
         battle_state: LocalBattleState,
     ) -> None:
-        """Handle a generic 1126 actor request without guessing battle data.
+        """Handle a map actor request without guessing battle data.
 
-        The APK sends protocol 2031 for a generic map actor. Its verified
-        action is 6 and the payload includes the actor id and tile. Portal
-        activation is a complete transition. A monster now starts the local
-        single-target battle probe using the confirmed 1040/action=1 shape.
+        Native 2030 NPCs use action 0; generic actors use action 6, and both
+        payloads include the actor id and tile. Portal activation is a complete
+        transition. A monster starts the local single-target battle probe using
+        the confirmed 1040/action=1 shape.
         """
         current_settings = settings_for_role(self.settings, active_role)
         LOG.info(
@@ -2518,6 +2559,23 @@ class LocalGameServer:
             await self._send(
                 writer,
                 notice_and_world(target_settings, active_role)[1],
+                cipher=cipher,
+                lock=send_lock,
+            )
+            return
+
+        npc = map_npc_for_object_id(current_settings, object_id)
+        if npc is not None:
+            LOG.info(
+                'npc interaction user=%r npc_id=%d name=%r source=%s; opening native map dialogue',
+                username,
+                object_id,
+                str(npc['name']),
+                source,
+            )
+            await self._send(
+                writer,
+                *map_npc_dialogue_frames(npc),
                 cipher=cipher,
                 lock=send_lock,
             )
@@ -2626,6 +2684,7 @@ class LocalGameServer:
         active_role: dict[str, object] | None = None
         game_cipher: GameCipher | None = None
         battle_state = LocalBattleState()
+        streamed_npc_ids: set[int] = set()
         send_lock = asyncio.Lock()
         heartbeat_task: asyncio.Task[None] | None = None
         try:
@@ -2699,6 +2758,7 @@ class LocalGameServer:
                             LOG.warning('unknown role selected user=%r role_id=%d', username, role_id)
                         else:
                             world_sent = False
+                            streamed_npc_ids.clear()
                             LOG.info('role selected user=%r role_id=%d name=%r', username, role_id, active_role['name'])
                             sect_id = normalized_sect_id(active_role)
                             LOG.info(
@@ -2764,14 +2824,15 @@ class LocalGameServer:
 
                 elif message_id == 1005 and len(values) >= 2:
                     old_tile = battle_state.player_tile
+                    movement_x, movement_y = map_movement_final_tile(values)
                     guard_had_no_origin = bool(
                         battle_state.escape_guard
                         and battle_state.escape_guard.get('origin') is None
                     )
                     guard_cleared = update_escape_guard_for_movement(
                         battle_state,
-                        int(values[0]),
-                        int(values[1]),
+                        movement_x,
+                        movement_y,
                     )
                     if guard_cleared:
                         LOG.info(
@@ -2786,6 +2847,30 @@ class LocalGameServer:
                             username,
                             battle_state.player_tile,
                         )
+                    current_settings = settings_for_role(self.settings, active_role)
+                    nearby_npcs = map_npcs_near(current_settings, movement_x, movement_y)
+                    nearby_ids = {int(npc['id']) for npc in nearby_npcs}
+                    entered_npcs = [
+                        npc for npc in nearby_npcs
+                        if int(npc['id']) not in streamed_npc_ids
+                    ]
+                    streamed_npc_ids.intersection_update(nearby_ids)
+                    if entered_npcs:
+                        LOG.info(
+                            'NPC_REGION_STREAM user=%r map=%d tile=%d,%d ids=%r',
+                            username,
+                            current_settings.map_id,
+                            movement_x,
+                            movement_y,
+                            [int(npc['id']) for npc in entered_npcs],
+                        )
+                        await self._send(
+                            writer,
+                            *(map_npc_frame(current_settings, npc) for npc in entered_npcs),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                        streamed_npc_ids.update(int(npc['id']) for npc in entered_npcs)
 
                 elif message_id == 1010 and values:
                     action = int(values[0])
@@ -2829,6 +2914,9 @@ class LocalGameServer:
                             cipher=game_cipher,
                             lock=send_lock,
                         )
+                        streamed_npc_ids.clear()
+                        if current_settings.map_id == 58 and current_settings.npc_enabled:
+                            streamed_npc_ids.update(int(npc['id']) for npc in current_settings.npcs)
                     elif action == 7 and len(values) > 1:
                         # Compatibility with an older map-object path seen in
                         # some client builds. The active APK uses 2031 below.
@@ -2853,9 +2941,8 @@ class LocalGameServer:
                     else:
                         LOG.info('ignored client map action=%d', action)
                 elif message_id == 2031 and values:
-                    # main/k.a(n) encodes [object_id, 0, x, y, action, 0]
-                    # for a generic 1126 actor; action 6 is the verified
-                    # approach/interact request used by the active APK.
+                    # main/k encodes [object_id, 0, x, y, action, 0]. Native
+                    # 2030 NPCs use action 0; generic 1126 actors use action 6.
                     object_id, object_x, object_y, object_action = map_object_interaction_values(values)
                     await self._handle_map_object_interaction(
                         username=username,
@@ -2869,6 +2956,26 @@ class LocalGameServer:
                         cipher=game_cipher,
                         send_lock=send_lock,
                         battle_state=battle_state,
+                    )
+                elif message_id == 1533 and values:
+                    # The native dialogue sends [byte(0), int(option_id)]
+                    # when a row is tapped.  The local NPC currently exposes
+                    # only the terminal option, so acknowledge it in the log
+                    # and let the client keep the panel open until Back is
+                    # pressed (the APK closes the panel locally on Back).
+                    LOG.info('npc dialogue option selected user=%r values=%r', username, values)
+                elif message_id == 2032 and values:
+                    # Screen 6 closes the compact native NPC overlay locally,
+                    # then reports [byte(option_id), byte(101), string(input)]
+                    # and enables the global wait overlay. S->C 1010 clears
+                    # that overlay before dispatching action 7; action 7 has no
+                    # inbound map mutation branch, so this is a no-op ACK.
+                    LOG.info('native npc dialogue option selected user=%r values=%r; acknowledging', username, values)
+                    await self._send(
+                        writer,
+                        map_object_interaction_ack_frame(0),
+                        cipher=game_cipher,
+                        lock=send_lock,
                     )
                 elif message_id == 1502 and len(values) >= 3:
                     # Fields are [action, count, id...]. Action 1 requests a
@@ -2953,39 +3060,6 @@ class LocalGameServer:
                             ack_round,
                             battle_state.round,
                         )
-                        if battle_state.phase == 'escape_ack':
-                            if not battle_escape_acknowledged(
-                                battle_state,
-                                ack_action,
-                                ack_round,
-                            ):
-                                continue
-                            LOG.info(
-                                'BATTLE_ESCAPE_DEPARTURE_GRACE battle_trace=%s user=%r seconds=%.2f phase=%s',
-                                battle_state.trace_id,
-                                username,
-                                BATTLE_ESCAPE_DEPARTURE_GRACE_SECONDS,
-                                battle_state.phase,
-                            )
-                            await asyncio.sleep(BATTLE_ESCAPE_DEPARTURE_GRACE_SECONDS)
-                            escape_frames = battle_escape_completion_frames(battle_state)
-                            if escape_frames:
-                                await self._send(
-                                    writer,
-                                    *escape_frames,
-                                    cipher=game_cipher,
-                                    lock=send_lock,
-                                )
-                                LOG.info(
-                                    'BATTLE_ESCAPE_COMPLETE battle_trace=%s user=%r player_id=%d monster_id=%d active=%s phase=%s',
-                                    battle_state.trace_id,
-                                    username,
-                                    battle_state.player_id,
-                                    battle_state.monster_id,
-                                    battle_state.active,
-                                    battle_state.phase,
-                                )
-                            continue
                         if battle_state.phase == 'round_ack':
                             if battle_state.monster_hp <= 0:
                                 reward_item = None
@@ -3079,11 +3153,12 @@ class LocalGameServer:
                             battle_state.round,
                         )
                         LOG.info(
-                            'BATTLE_ESCAPE_ANIMATION battle_trace=%s user=%r player_id=%d round=%d phase=%s',
+                            'BATTLE_ESCAPE_START battle_trace=%s user=%r player_id=%d round=%d active=%s phase=%s protocol=1041/10',
                             battle_state.trace_id,
                             username,
                             battle_state.player_id,
                             battle_state.round,
+                            battle_state.active,
                             battle_state.phase,
                         )
                         await self._send(

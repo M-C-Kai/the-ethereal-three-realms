@@ -316,10 +316,10 @@ def main() -> None:
         assert received[-1][1][5] == 12 and received[-1][1][4] == 1, received[-1]
 
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-        # Map 58 advertises two 1126 forward-portal actors and seven 1126 NPC
+        # Map 58 advertises two 1126 forward-portal actors and six 1126 NPC
         # actors after the verified monster actor.  Keep the first four frames
         # unchanged; the portals and NPCs are appended in that order.
-        entered = [receive_frame(game_sock, cipher) for _ in range(13)]
+        entered = [receive_frame(game_sock, cipher) for _ in range(12)]
         assert [x[1][5] for x in entered[:3]] == [13, 14, 105], entered
         assert entered[3][0] == 1126 and entered[3][1][:2] == [0, 1], entered[3]
         assert entered[4][0] == 1126 and entered[4][1][2] == 580001, entered[4]
@@ -343,9 +343,6 @@ def main() -> None:
         assert entered[11][0] == 1126 and entered[11][1][2] == 1900007, entered[11]
         assert entered[11][1][3] == 59 and entered[11][1][4] == 12, entered[11]
         assert entered[11][1][6] == '欧冶子', entered[11]
-        assert entered[12][0] == 1126 and entered[12][1][2] == 1900008, entered[12]
-        assert entered[12][1][3] == 20 and entered[12][1][4] == 12, entered[12]
-        assert entered[12][1][6] == '宠物仙子', entered[12]
 
         if args.exercise_monster:
             monster = entered[3][1]
@@ -433,9 +430,8 @@ def main() -> None:
                 # different action (退出观战, quit spectator) and must NOT be sent
                 # as a player escape request. The original client first consumes
                 # a 1042 action-6 record whose inert effect enters the fighter-exit
-                # state machine. main/b's departure vector is not part of the
-                # action=2 ACK barrier, so the server must keep the battle open
-                # for its APK-derived grace interval before sending final close.
+                # state machine. Only after its 1040/action=2 playback barrier is
+                # acknowledged may the server send 1041 [10, player_id] to close.
                 game_sock.sendall(cipher.encrypt_frame(encode_frame(1041, [
                     integer(6), byte(1), integer(role_id), integer(1), integer(0), integer(0), integer(0), integer(0)
                 ])))
@@ -446,12 +442,8 @@ def main() -> None:
                 ], escape_action
                 playback = expect_tolerant(game_sock, 1040, cipher)
                 assert playback[0:2] == [2, 1], playback
-                ack_started = time.monotonic()
                 game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(1)])))
-                close = expect_tolerant(game_sock, 1041, cipher)
-                elapsed = time.monotonic() - ack_started
-                assert elapsed >= 1.15, ('escape closed before departure movement', elapsed)
-                return close
+                return expect_tolerant(game_sock, 1041, cipher)
 
             def _guarded_interaction_ack(expected_object_id: int):
                 # b/ab.aj() enables the global wait overlay before sending the
@@ -554,7 +546,7 @@ def main() -> None:
             returned_data = [receive_frame(game_sock, cipher) for _ in range(7)]
             assert [x[0] for x in returned_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], returned_data
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-            returned_enter = [receive_frame(game_sock, cipher) for _ in range(13)]
+            returned_enter = [receive_frame(game_sock, cipher) for _ in range(12)]
             assert [x[1][5] for x in returned_enter[:3]] == [13, 14, 105], returned_enter
             assert returned_enter[0][1][4] == 0, returned_enter[0]
             assert returned_enter[4][0] == 1126 and returned_enter[4][1][2] == 580001, returned_enter[4]
@@ -571,8 +563,6 @@ def main() -> None:
             assert returned_enter[10][1][6] == '孙威', returned_enter[10]
             assert returned_enter[11][0] == 1126 and returned_enter[11][1][2] == 1900007, returned_enter[11]
             assert returned_enter[11][1][6] == '欧冶子', returned_enter[11]
-            assert returned_enter[12][0] == 1126 and returned_enter[12][1][2] == 1900008, returned_enter[12]
-            assert returned_enter[12][1][6] == '宠物仙子', returned_enter[12]
 
         menu_prefetches = (
             (1403, [byte(6), byte(0), byte(12), byte(2)], 1),

@@ -3,12 +3,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# smali inserted into pmsj/work/main/e.smali method Q as a new 1126 subtype=1
-# branch.  It reads [byte(count), int(object_id), byte(direction)] records, finds
-# the matching pmsj/work/b/n in the same generic container (b/m.u) that 1126
-# subtype=0 used, then calls b/n.q(direction) + b/n.I() to rotate it in place.
-# Direction is validated to 0..3; out-of-range records are skipped.  The original
-# subtype=0 branch is untouched.
+# Smali inserted into pmsj/work/main/e.smali method Q. Subtype=1 rotates generic
+# actors in place. Subtype=2 finds one actor by id in b/m.u and assigns it through
+# b/m.a(n), reusing the APK's original under-foot selection-ring renderer.
 HANDLER = """\
     :pswitch_dir
     const/4 v0, 0x1
@@ -58,6 +55,30 @@ HANDLER = """\
     goto :goto_dir
     :dir_done
     return-void
+    :pswitch_select
+    const/4 v0, 0x1
+    invoke-virtual {p0, v0}, Lpmsj/work/main/w;->d(I)I
+    move-result v0
+    invoke-static {}, Lpmsj/work/b/m;->d()Lpmsj/work/b/m;
+    move-result-object v1
+    iget-object v2, v1, Lpmsj/work/b/m;->u:Ljava/util/Vector;
+    invoke-virtual {v2}, Ljava/util/Vector;->size()I
+    move-result v3
+    const/4 v4, 0x0
+    :goto_select
+    if-ge v4, v3, :select_done
+    invoke-virtual {v2, v4}, Ljava/util/Vector;->elementAt(I)Ljava/lang/Object;
+    move-result-object v5
+    check-cast v5, Lpmsj/work/b/n;
+    iget v6, v5, Lpmsj/work/b/n;->j:I
+    if-ne v6, v0, :select_next
+    invoke-virtual {v1, v5}, Lpmsj/work/b/m;->a(Lpmsj/work/b/n;)V
+    goto :select_done
+    :select_next
+    add-int/lit8 v4, v4, 0x1
+    goto :goto_select
+    :select_done
+    return-void
 """
 
 
@@ -101,7 +122,7 @@ def patch_e_smali(text: str) -> str:
         for i in range(ps_idx + 1, end_idx)
         if lines[i].strip().startswith(':pswitch')
     ]
-    if len(cases) not in (1, 2):
+    if len(cases) not in (1, 2, 3):
         raise SystemExit(f"unexpected 1126 subtype count: {len(cases)}")
 
     data_label_idx = next(
@@ -116,15 +137,10 @@ def patch_e_smali(text: str) -> str:
 
     handler_lines = HANDLER.rstrip("\n").split("\n")
     if len(cases) == 1:
-        # Clean APK: add subtype 1 immediately before the switch table.
+        # Clean APK: add both local compatibility branches before the table.
         lines[data_label_idx:data_label_idx] = handler_lines
-        ps_idx += len(handler_lines)
-        end_idx += len(handler_lines)
-        lines.insert(end_idx, "        :pswitch_dir")
     else:
-        # Already patched APK/worktree: replace the complete subtype-1 branch.
-        # This upgrades both the stale short-count handler and labels normalized
-        # by a DEX disassembler, without appending an accidental subtype 2.
+        # Already patched APK/worktree: replace every local branch in one pass.
         subtype_one_label = cases[1][1]
         handler_idx = next(
             (
@@ -137,20 +153,26 @@ def patch_e_smali(text: str) -> str:
             raise SystemExit("1126 subtype=1 handler label not found in method Q")
         lines[handler_idx:data_label_idx] = handler_lines
 
-        # Re-find the switch after replacing a differently sized old handler.
-        ps_idx = next(
-            i for i in range(q_start, len(lines))
-            if lines[i].strip() == ".packed-switch 0x0"
-        )
-        end_idx = next(
-            i for i in range(ps_idx, len(lines))
-            if lines[i].strip() == ".end packed-switch"
-        )
-        case_indices = [
-            i for i in range(ps_idx + 1, end_idx)
-            if lines[i].strip().startswith(':pswitch')
-        ]
-        lines[case_indices[1]] = "        :pswitch_dir"
+    # Re-find and normalize the switch after inserting/replacing handlers.
+    ps_idx = next(
+        i for i in range(q_start, len(lines))
+        if lines[i].strip() == ".packed-switch 0x0"
+    )
+    end_idx = next(
+        i for i in range(ps_idx, len(lines))
+        if lines[i].strip() == ".end packed-switch"
+    )
+    current_cases = [
+        lines[i].strip()
+        for i in range(ps_idx + 1, end_idx)
+        if lines[i].strip().startswith(':pswitch')
+    ]
+    base_label = current_cases[0]
+    lines[ps_idx + 1:end_idx] = [
+        f"        {base_label}",
+        "        :pswitch_dir",
+        "        :pswitch_select",
+    ]
     return "\n".join(lines)
 
 
@@ -173,7 +195,7 @@ def main() -> None:
         print(f"already patched: {target}")
     else:
         target.write_text(patched, encoding="utf-8")
-        print(f"patched 1126 subtype=1 into: {target}")
+        print(f"patched 1126 subtype=1/2 into: {target}")
 
 
 if __name__ == "__main__":

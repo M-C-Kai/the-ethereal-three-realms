@@ -126,7 +126,7 @@
 | 1519 | 双向 | 接收 main/e.H，分发:8637<br>发送 pmsj/work/e/z.smali:1030（2处） | APK静态使用；本地服未接入 |
 | 1520 | 双向 | 接收 main/e.q，分发:8786<br>发送 pmsj/work/e/aj.smali:194 | APK静态使用；本地服未接入 |
 | 1523 | 双向 | 接收 main/e.P，分发:5510<br>发送 pmsj/work/e/dr.smali:101（7处） | APK静态使用；本地服未接入 |
-| 1533 | 双向 | 接收内联 main/e:5386<br>发送 pmsj/work/e/dt.smali:358（3处） | APK静态使用；本地服未接入 |
+| 1533 | 双向 | 接收内联 main/e:5386<br>发送 pmsj/work/e/dt.smali:358（3处） | NPC 对话面板：本地服下发正文/选项，客户端回传选项 id |
 | 1534 | C→S | 发送 pmsj/work/e/bk.smali:271（6处） | APK静态使用；本地服未接入 |
 | 1731 | 双向 | 接收 main/e.ay，分发:8686<br>发送 pmsj/work/e/au.smali:986（9处） | APK静态使用；本地服未接入 |
 | 1999 | C→S | 发送 pmsj/work/main/w.smali:834 | APK静态使用；本地服未接入 |
