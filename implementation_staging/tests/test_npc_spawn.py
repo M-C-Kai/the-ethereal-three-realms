@@ -23,9 +23,9 @@ class NpcSpawnTests(unittest.TestCase):
 
     def test_npc_catalog_supplements_models_without_touching_config(self):
         by_id = {n["id"]: n for n in self.settings.npcs}
-        # 柴荣 comes from config.json (model -2003970 / dat_id 96030), not the catalog.
-        self.assertEqual(by_id[1900005]["dat_id"], 96030)
-        self.assertEqual(by_id[1900005]["model"], -2003970)
+        # 柴荣 comes from config.json (mirrored 96031 / model -2003969), not the catalog.
+        self.assertEqual(by_id[1900005]["dat_id"], 96031)
+        self.assertEqual(by_id[1900005]["model"], -2003969)
         # The other six get distinct sprites from data/npcs.json overrides.
         expected = {
             1900002: (90000, -2010000),

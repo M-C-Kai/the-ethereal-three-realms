@@ -1815,21 +1815,35 @@ def battle_actor_update_frame(
     )
 
 
+def _battle_role_resource_candidates(model_id: int) -> list[tuple[str, int, Path]]:
+    project_dir = Path(__file__).resolve().parent
+    role_dirs = (
+        project_dir / 'data' / 'role',
+        project_dir / 'build' / 'weapon-apk-extracted' / 'assets' / 'res' / 'role',
+    )
+    alias = BATTLE_RESOURCE_ALIASES.get(model_id)
+    mapped = model_id + BATTLE_RESOURCE_MODEL_OFFSET
+    ids: list[tuple[str, int]] = [('direct', model_id)]
+    if alias is not None:
+        ids.append(('alias', alias))
+    if mapped != model_id:
+        ids.append(('offset', mapped))
+    return [
+        (branch, resolved_id, role_dir / f'{resolved_id}.dat')
+        for branch, resolved_id in ids
+        for role_dir in role_dirs
+    ]
+
+
 def battle_resource_resolution(model_id: int) -> dict[str, object]:
     """Describe which 1502 action=1 lookup branch would be used.
 
     Read-only: this function does not encode 1503 and is not consulted by
     ``battle_resource_path`` when building a response.
     """
-    role_dir = Path(__file__).resolve().parent / 'build' / 'weapon-apk-extracted' / 'assets' / 'res' / 'role'
     alias = BATTLE_RESOURCE_ALIASES.get(model_id)
     mapped = model_id + BATTLE_RESOURCE_MODEL_OFFSET
-    candidates: list[tuple[str, int, Path]] = [('direct', model_id, role_dir / f'{model_id}.dat')]
-    if alias is not None:
-        candidates.append(('alias', alias, role_dir / f'{alias}.dat'))
-    if mapped != model_id:
-        candidates.append(('offset', mapped, role_dir / f'{mapped}.dat'))
-    for branch, resolved_id, path in candidates:
+    for branch, resolved_id, path in _battle_role_resource_candidates(model_id):
         if path.is_file():
             return {
                 'requested_id': model_id,
@@ -1890,16 +1904,8 @@ def format_battle_resource_query_log(
 
 
 def battle_resource_path(model_id: int) -> Path | None:
-    """Resolve a logical battle model to a bundled APK role .dat file."""
-    role_dir = Path(__file__).resolve().parent / 'build' / 'weapon-apk-extracted' / 'assets' / 'res' / 'role'
-    candidates = [role_dir / f'{model_id}.dat']
-    alias = BATTLE_RESOURCE_ALIASES.get(model_id)
-    if alias is not None:
-        candidates.append(role_dir / f'{alias}.dat')
-    mapped = model_id + BATTLE_RESOURCE_MODEL_OFFSET
-    if mapped != model_id:
-        candidates.append(role_dir / f'{mapped}.dat')
-    for candidate in candidates:
+    """Resolve a logical model to a local override or bundled APK role .dat."""
+    for _branch, _resolved_id, candidate in _battle_role_resource_candidates(model_id):
         if candidate.is_file():
             return candidate
     return None
