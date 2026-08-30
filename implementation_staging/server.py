@@ -84,6 +84,9 @@ class Settings:
     monster_model: int = 3_760_000
     monster_x: int = 10
     monster_y: int = 6
+    # Initial facing for the 1126 subtype=0 monster actor, applied right after it
+    # is spawned via a 1126 subtype=1 direction frame. 0=down, 1=right, 2=up, 3=left.
+    monster_direction: int = 0
     # Minimal cross-map test portal.  The client treats 1126 actors as
     # interactable map objects and sends 1010/action=7 with this id when the
     # player reaches the actor's tile.
@@ -92,6 +95,9 @@ class Settings:
     portal_name: str = '跨地图传送点'
     portal_x: int = 64
     portal_y: int = 67
+    # Initial facing for the 1126 subtype=0 portal actor (it reuses the generic
+    # b/n entity). Applied via a 1126 subtype=1 direction frame.
+    portal_direction: int = 0
     portal_target_map_id: int = 50000
     portal_target_map_name: str = '传送测试区'
     portal_target_spawn_x: int = 8
@@ -1382,6 +1388,51 @@ def map_action(settings: Settings, action: int, status: int = 0, role_id: int | 
     ])
 
 
+# 1126 subtype=1 (local-compat extension) sets the facing of an existing generic
+# map actor (pmsj.work.b/n) in place.  The client looks the actor up by id in the
+# same container that 1126 subtype=0 used (b/m.u), then calls b/n.q(direction) and
+# b/n.I().  Facing values match the APK's b/n.n byte (four cardinal directions).
+NPC_DIRECTION_DOWN = 0
+NPC_DIRECTION_RIGHT = 1
+NPC_DIRECTION_UP = 2
+NPC_DIRECTION_LEFT = 3
+
+_DIRECTION_RANGE = (NPC_DIRECTION_DOWN, NPC_DIRECTION_RIGHT, NPC_DIRECTION_UP, NPC_DIRECTION_LEFT)
+
+
+def map_actor_direction_frame(object_id: int, direction: int) -> bytes:
+    """Return a 1126 subtype=1 frame setting one actor's facing in place.
+
+    Strict wire format: [byte(1), byte(1), integer(object_id), byte(direction)].
+    The client never moves, recreates, or renames the actor -- it only calls
+    b/n.q(direction) then b/n.I() on the existing entity.
+    """
+    if direction not in _DIRECTION_RANGE:
+        raise ValueError(f'NPC direction must be 0..3, got {direction}')
+    return encode_frame(1126, [
+        byte(1),
+        byte(1),
+        integer(int(object_id)),
+        byte(direction),
+    ])
+
+
+def map_actor_directions_frame(items: list[tuple[int, int]]) -> bytes:
+    """Batch form of map_actor_direction_frame.
+
+    Wire format: [byte(1), byte(count), integer(id1), byte(dir1), ...].
+    """
+    if not items:
+        raise ValueError('direction frame requires at least one actor')
+    encoded = [byte(1), byte(len(items))]
+    for object_id, direction in items:
+        if direction not in _DIRECTION_RANGE:
+            raise ValueError(f'NPC direction must be 0..3, got {direction}')
+        encoded.append(integer(int(object_id)))
+        encoded.append(byte(direction))
+    return encode_frame(1126, encoded)
+
+
 def map_monster_frame(settings: Settings) -> bytes:
     """Return the verified 1126 actor-spawn frame for the local monster.
 
@@ -2332,6 +2383,20 @@ def map_enter_frames(settings: Settings, role_id: int | None = None) -> list[byt
     if settings.portal_enabled:
         frames.append(map_portal_frame(settings))
     frames.extend(map_npc_frames(settings))
+    # After every 1126 subtype=0 actor is created, set their initial facing with
+    # 1126 subtype=1 (local-compat extension): the client finds the actor by id in
+    # the same generic container and rotates it in place.  The direction frame is
+    # never appended to the subtype=0 record (that would break its fixed field read).
+    frames.append(map_actor_direction_frame(settings.monster_id, settings.monster_direction))
+    if settings.portal_enabled:
+        frames.append(map_actor_direction_frame(settings.portal_id, settings.portal_direction))
+    if settings.map_id == 58 and settings.npc_enabled:
+        for npc in settings.npcs:
+            frames.append(
+                map_actor_direction_frame(
+                    int(npc['id']), int(npc.get('direction', NPC_DIRECTION_DOWN))
+                )
+            )
     return frames
 
 
