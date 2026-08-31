@@ -54,6 +54,8 @@ if ($LASTEXITCODE -ne 0) { throw "apktool decode failed (exit $LASTEXITCODE)" }
 Assert-NativeSuccess 'NPC direction/selection smali patch'
 & $PythonExe (Join-Path $ProjectDir 'tools\patch_battle_escape.py') $SmaliDir
 Assert-NativeSuccess 'battle escape timing/status smali patch'
+& $PythonExe (Join-Path $ProjectDir 'tools\patch_battle_weapon.py') $SmaliDir
+Assert-NativeSuccess 'battle idle weapon asset patch'
 
 if ($UseApkToolJar) {
     & $JavaExe -jar $ApkToolJar b $SmaliDir -o $RebuiltApk -p $FrameworkDir

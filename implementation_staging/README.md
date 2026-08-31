@@ -72,7 +72,9 @@ python -m unittest discover -s tests -v
 若 `apktool` 不在 PATH，可向 `build_local_apk.ps1` 传入本机已有的
 `-ApkToolJar C:\path\to\apktool.jar`；该方式需要脚本中配置的本地 Java 17。
 
-脚本会修改 `channel.o`、执行 zipalign，并生成 v1/v2/v3 签名。测试密钥库密码固定为 `localtest123`，只能用于本地测试。为允许覆盖安装，后续构建必须继续使用项目内同一个 `local-test-keystore.p12`。
+脚本会修改 `channel.o`，重新应用 NPC、战斗逃跑和战斗待机武器补丁，执行 zipalign，并生成 v1/v2/v3 签名。待机武器补丁会严格校验
+`assets/res/role/100000.dat` 的补丁前/后哈希，防止从历史 APK 重建时再次丢失武器显示。测试密钥库密码固定为
+`localtest123`，只能用于本地测试。为允许覆盖安装，后续构建必须继续使用项目内同一个 `local-test-keystore.p12`。
 
 ## 协议说明与安全
 
