@@ -57,6 +57,21 @@ Assert-NativeSuccess 'battle escape timing/status smali patch'
 & $PythonExe (Join-Path $ProjectDir 'tools\patch_battle_weapon.py') $SmaliDir
 Assert-NativeSuccess 'battle idle weapon asset patch'
 
+# The client only renders a distinct map id after loading both of its local
+# map resources.  Kunlun reuses the proven map 58 composite-tile reference
+# while keeping its own generated logical tile/collision map.
+$DecodedMapDir = Join-Path $SmaliDir 'assets\res\map'
+$ChanganMapRef = Join-Path $DecodedMapDir '58.map.ref'
+$KunlunMapO = Join-Path $ProjectDir 'maps\60001.map.o'
+if (-not (Test-Path -LiteralPath $ChanganMapRef)) {
+    throw "source APK is missing required map reference: $ChanganMapRef"
+}
+if (-not (Test-Path -LiteralPath $KunlunMapO)) {
+    throw "generated Kunlun map is missing: $KunlunMapO"
+}
+Copy-Item -LiteralPath $ChanganMapRef -Destination (Join-Path $DecodedMapDir '60001.map.ref') -Force
+Copy-Item -LiteralPath $KunlunMapO -Destination (Join-Path $DecodedMapDir '60001.map.o') -Force
+
 if ($UseApkToolJar) {
     & $JavaExe -jar $ApkToolJar b $SmaliDir -o $RebuiltApk -p $FrameworkDir
 } else {

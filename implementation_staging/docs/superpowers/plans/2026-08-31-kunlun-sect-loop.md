@@ -153,7 +153,7 @@ Expected: `wrote maps\60001.map.o: 1288 bytes, 32x32, 1 definitions`。
 "60001": {
   "name": "昆仑",
   "map_o_file": "maps/60001.map.o",
-  "map_ref_available": true,
+  "map_ref_available": false,
   "fallback_width": 32,
   "fallback_height": 32,
   "spawn": {"x": 8, "y": 6},
