@@ -10,6 +10,9 @@
 | `smali/pmsj/work/b/j.smali` | 物品基类；模板大类、品质和通用动作 |
 | `smali/pmsj/work/b/g.smali` | 装备物品子类及装备附加字段 |
 | `smali/pmsj/work/b/a.smali` | 客户端背包/装备物品集合 |
+| `build/apk_decoded/smali/pmsj/work/b/ab.smali` | 人物属性访问器；`g()` 读取属性 62（背包容量），`n()` 读取属性 59（仓库容量） |
+| `build/apk_decoded/smali/pmsj/work/e/au.smali` | 仓库存放菜单；确认 `1009` 动作 47（NPC 兼容动作 29），本轮仅记录不实现 |
+| `build/apk_decoded/smali/pmsj/work/e/ea.smali` | 仓库界面和取出菜单；确认属性 59、位置 51、`1009` 动作 48（NPC 兼容动作 30），本轮仅记录不实现 |
 | `smali/pmsj/work/b/v.smali` | 人物属性到角色叠加资源的转换 |
 | `smali/pmsj/work/e/af.smali` | 人物装备面板；14 个装备槽位及其名称 |
 | `smali/pmsj/work/d/a.smali` | UI 物品控件；图标字段到图片资源的调用 |
@@ -27,4 +30,3 @@
 ```text
 C:\Users\Kail\Documents\Codex\2026-08-24\new-chat\work\apk-initial-role-reference
 ```
-

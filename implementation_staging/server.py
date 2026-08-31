@@ -7,9 +7,17 @@ import json
 import logging
 import struct
 import time
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from map_registry import (
+    MapActorDefinition,
+    MapDefinition,
+    MapRegistry,
+    PortalDefinition,
+    default_map_registry,
+    load_map_registry,
+)
 from map_o import MapO, MapOError
 from protocol import (
     Field,
@@ -66,10 +74,14 @@ class Settings:
     role_id: int = 10001
     role_name: str = '本地侠客'
     role_model: int = 2000
+    default_map_id: int = 58
+    map_registry: MapRegistry = field(default_factory=default_map_registry)
+    # Deprecated aliases retained for protocol helpers and older local tests.
+    # Map entry, entities and routing use ``map_registry`` below.
     map_id: int = 58
-    map_name: str = '仙石村'
-    map_width: int = 16
-    map_height: int = 12
+    map_name: str = '长安'
+    map_width: int = 96
+    map_height: int = 96
     spawn_x: int = 60
     spawn_y: int = 67
     # Protocol 1126 carries generic map actors.  The client adds 0x200b20 to
@@ -106,7 +118,7 @@ class Settings:
     portal_target_map_ref_available: bool = True
     map_ref_available: bool = True
     return_portal_id: int = 580002
-    return_portal_name: str = '返回仙石村'
+    return_portal_name: str = '返回长安'
     return_portal_x: int = 9
     return_portal_y: int = 6
     # Hand-placed map-58 NPCs. Each entry is a dict with id/name/label/x/y and
@@ -122,23 +134,73 @@ class Settings:
         if not path.exists():
             return cls()
         payload = json.loads(path.read_text(encoding='utf-8'))
-        allowed = {item.name for item in fields(cls)}
-        settings = cls(**{key: value for key, value in payload.items() if key in allowed})
-        # The NPC resource catalog (data/npcs.json) is a SUPPLEMENT to the config
-        # `npcs` baseline: config stays the source of identity (name/label/x/y);
-        # the catalog only overrides matching ids (e.g. dat_id/model) and adds
-        # NPCs that do not exist in config.
+        npc_catalog = None
         catalog = Path(__file__).with_name('data') / 'npcs.json'
         if catalog.exists():
             try:
-                extras = json.loads(catalog.read_text(encoding='utf-8'))
-                base = {n['id']: dict(n) for n in settings.npcs}
-                for entry in extras:
-                    base.setdefault(entry['id'], {}).update(entry)
-                settings.npcs = list(base.values())
-            except Exception:
-                pass
+                loaded_catalog = json.loads(catalog.read_text(encoding='utf-8'))
+                if isinstance(loaded_catalog, list):
+                    npc_catalog = loaded_catalog
+            except (OSError, ValueError) as exc:
+                LOG.warning('failed to load NPC catalog %s: %s', catalog, exc)
+
+        registry = load_map_registry(payload, npc_catalog=npc_catalog)
+        allowed = {item.name for item in fields(cls)} - {'map_registry'}
+        values = {key: value for key, value in payload.items() if key in allowed}
+        values['default_map_id'] = registry.default_map_id
+        settings = cls(map_registry=registry, **values)
+
+        # Keep the old public attributes coherent during the compatibility
+        # cycle; new map code reads the typed definition instead.
+        initial = registry.require(registry.default_map_id)
+        settings.map_id = initial.id
+        settings.map_name = initial.name
+        settings.map_width = initial.fallback_width
+        settings.map_height = initial.fallback_height
+        settings.spawn_x = initial.spawn_x
+        settings.spawn_y = initial.spawn_y
+        settings.map_o_file = initial.map_o_file
+        settings.map_ref_available = initial.map_ref_available
+        settings.npcs = [dict(vars(npc)) for npc in initial.npcs]
+        if initial.monster is not None:
+            settings.monster_id = initial.monster.id
+            settings.monster_name = initial.monster.name
+            settings.monster_model = initial.monster.model
+            settings.monster_x = initial.monster.x
+            settings.monster_y = initial.monster.y
+            settings.monster_direction = initial.monster.direction
+        if initial.portals:
+            portal = initial.portals[0]
+            target = registry.require(portal.target_map_id)
+            settings.portal_enabled = True
+            settings.portal_id = portal.id
+            settings.portal_name = portal.name
+            settings.portal_x = portal.x
+            settings.portal_y = portal.y
+            settings.portal_direction = portal.direction
+            settings.portal_target_map_id = target.id
+            settings.portal_target_map_name = target.name
+            settings.portal_target_spawn_x = portal.target_x
+            settings.portal_target_spawn_y = portal.target_y
+            settings.portal_target_map_o_file = target.map_o_file
+            settings.portal_target_map_ref_available = target.map_ref_available
         return settings
+
+
+@dataclass
+class LocalNpcDialogueState:
+    """Connection-local guard for one native 2032 NPC dialogue."""
+
+    map_id: int | None = None
+    npc_id: int | None = None
+
+    def select(self, map_id: int, npc_id: int) -> None:
+        self.map_id = int(map_id)
+        self.npc_id = int(npc_id)
+
+    def clear(self) -> None:
+        self.map_id = None
+        self.npc_id = None
 
 
 @dataclass
@@ -241,6 +303,7 @@ BATTLE_DROP_TEMPLATE_ID = 260_000_001
 BATTLE_DROP_NAME = '小还丹'
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
+DEFAULT_BAG_CAPACITY = 40
 # 1042 only appends records to the APK's battle queue. The following full
 # 1040/action=2 calls the battle screen's i() method and starts playback. The
 # client then returns the short [action=2, round] acknowledgement after the
@@ -267,6 +330,12 @@ SECTS = {
     12: '兰若寺',
     13: '古仙人',
 }
+
+TEST_SECT_ID = 1
+TEST_SKILL_ID = 10001
+TEST_SKILL_NAME = '协议测试技能'
+TEST_SKILL_DEFAULT_LEVEL = 3
+TEST_SKILL_MAX_LEVEL = 20
 
 ROLE_STATS = (
     (2, 16, 7, 28, 7, 18, 3, 15, 2, 15, 7, 14, 8, 15, 3, 11, 17, 28, 2, 16, 7, 28, 7, 18),
@@ -414,6 +483,7 @@ def role_stats(model: int) -> list[int]:
 
 
 def default_role(settings: Settings) -> dict[str, object]:
+    initial_map = settings.map_registry.require(settings.default_map_id)
     role = {
         'id': settings.role_id,
         'name': settings.role_name,
@@ -426,9 +496,12 @@ def default_role(settings: Settings) -> dict[str, object]:
         'experience': 0,
         'auto_level': True,
         'stats': [0] * 8,
-        'map_id': settings.map_id,
-        'map_name': settings.map_name,
+        'map_id': initial_map.id,
+        'map_name': initial_map.name,
+        'map_x': initial_map.spawn_x,
+        'map_y': initial_map.spawn_y,
         'mount_model': 0,
+        'bag_capacity': DEFAULT_BAG_CAPACITY,
     }
     role['items'] = starter_items(int(role['id']))
     return role
@@ -451,41 +524,42 @@ def join_sect(role: dict[str, object], sect_id: int) -> bool:
     return True
 
 
-def settings_for_map(settings: Settings, map_id: int) -> Settings:
-    """Return the wire settings for a map in the small local map registry.
-
-    The target map uses the generated, fully walkable 50000.map.o payload.
-    The APK carries a matching 50000.map.ref/.map.o alias so the normal
-    cross-map reload path can resolve its local tile resources.
-    """
-    if int(map_id) == int(settings.portal_target_map_id):
-        return replace(
-            settings,
-            map_id=int(settings.portal_target_map_id),
-            map_name=str(settings.portal_target_map_name),
-            spawn_x=int(settings.portal_target_spawn_x),
-            spawn_y=int(settings.portal_target_spawn_y),
-            monster_x=12,
-            monster_y=8,
-            map_o_file=str(settings.portal_target_map_o_file),
-            portal_enabled=True,
-            portal_id=int(settings.return_portal_id),
-            portal_name=str(settings.return_portal_name),
-            portal_x=int(settings.return_portal_x),
-            portal_y=int(settings.return_portal_y),
-            portal_target_map_id=int(settings.map_id),
-            portal_target_map_name=str(settings.map_name),
-            portal_target_spawn_x=int(settings.spawn_x),
-            portal_target_spawn_y=int(settings.spawn_y),
-            portal_target_map_o_file=str(settings.map_o_file),
-            map_ref_available=bool(settings.portal_target_map_ref_available),
-        )
-    return replace(settings, map_id=int(map_id))
+def settings_for_map(settings: Settings, map_id: int) -> MapDefinition:
+    """Return one independently validated map definition."""
+    return settings.map_registry.require(map_id)
 
 
-def settings_for_role(settings: Settings, role: dict[str, object] | None) -> Settings:
-    map_id = int(role.get('map_id', settings.map_id)) if role is not None else int(settings.map_id)
-    return settings_for_map(settings, map_id)
+def settings_for_role(settings: Settings, role: dict[str, object] | None) -> MapDefinition:
+    map_id = (
+        int(role.get('map_id', settings.default_map_id))
+        if role is not None
+        else settings.default_map_id
+    )
+    definition = settings_for_map(settings, map_id)
+    if role is None:
+        return definition
+    return definition.with_spawn(
+        int(role.get('map_x', definition.spawn_x)),
+        int(role.get('map_y', definition.spawn_y)),
+    )
+
+
+def apply_portal_transition(
+    settings: Settings,
+    role: dict[str, object],
+    object_id: int,
+) -> MapDefinition | None:
+    """Apply one current-map portal and return its target definition."""
+    current_map_id = int(role.get('map_id', settings.default_map_id))
+    portal = settings.map_registry.portal(current_map_id, object_id)
+    if portal is None:
+        return None
+    target = settings.map_registry.require(portal.target_map_id)
+    role['map_id'] = target.id
+    role['map_name'] = target.name
+    role['map_x'] = portal.target_x
+    role['map_y'] = portal.target_y
+    return target.with_spawn(portal.target_x, portal.target_y)
 
 
 def starter_items(role_id: int) -> list[dict[str, object]]:
@@ -661,6 +735,32 @@ class RoleStore:
             if 'sect_id' not in role:
                 role['sect_id'] = 0
                 changed = True
+            if 'bag_capacity' not in role:
+                role['bag_capacity'] = DEFAULT_BAG_CAPACITY
+                changed = True
+            try:
+                current_map = self.settings.map_registry.require(
+                    int(role.get('map_id', self.settings.default_map_id))
+                )
+            except (TypeError, ValueError):
+                current_map = self.settings.map_registry.require(self.settings.default_map_id)
+                LOG.warning(
+                    'role %s referenced unknown map %r; migrating to default map %d',
+                    role.get('id', 0),
+                    role.get('map_id'),
+                    current_map.id,
+                )
+                role['map_id'] = current_map.id
+                changed = True
+            if role.get('map_name') != current_map.name:
+                role['map_name'] = current_map.name
+                changed = True
+            if 'map_x' not in role:
+                role['map_x'] = current_map.spawn_x
+                changed = True
+            if 'map_y' not in role:
+                role['map_y'] = current_map.spawn_y
+                changed = True
             changed = self._ensure_items(role) or changed
         if changed:
             self._save()
@@ -681,6 +781,7 @@ class RoleStore:
         race, gender = role_race_and_gender(model)
         role_id = int(self.data.get('next_role_id', self.settings.role_id + 1))
         self.data['next_role_id'] = role_id + 1
+        initial_map = self.settings.map_registry.require(self.settings.default_map_id)
         role: dict[str, object] = {
             'id': role_id,
             'name': name.strip() or f'本地侠客{role_id}',
@@ -693,8 +794,11 @@ class RoleStore:
             'experience': 0,
             'auto_level': True,
             'stats': role_stats(model),
-            'map_id': self.settings.map_id,
-            'map_name': self.settings.map_name,
+            'map_id': initial_map.id,
+            'map_name': initial_map.name,
+            'map_x': initial_map.spawn_x,
+            'map_y': initial_map.spawn_y,
+            'bag_capacity': DEFAULT_BAG_CAPACITY,
         }
         role['items'] = starter_items(role_id)
         roles.append(role)
@@ -821,6 +925,10 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
     properties[56] = integer(100)
     properties[57] = integer(100)
     properties[58] = integer(100)
+    # APK pmsj/work/b/ab.g() reads character property 62 as the personal
+    # inventory capacity. Property 59 is the separate warehouse capacity and
+    # deliberately remains untouched while warehouse support is out of scope.
+    properties[62] = integer(bag_capacity(role))
     # The original item subclass gates the weapon "装备" menu through
     # character property 63 (weapon-family permission bitmask).  Bit 0 is
     # the starter weapon family used by template 100001001; leaving this
@@ -854,11 +962,11 @@ def character_extension_info() -> bytes:
 def character_skill_list(role: dict[str, object]) -> bytes:
     """Return the minimal action-0 skill list appropriate for one role."""
     sect_id = normalized_sect_id(role)
-    if sect_id == 1:
-        skill_id = 10001
-        skill_name = '协议测试技能'
-        level = 3
-        max_level = 20
+    if sect_id == TEST_SECT_ID:
+        skill_id = TEST_SKILL_ID
+        skill_name = TEST_SKILL_NAME
+        level = sect_skill_level(role)
+        max_level = TEST_SKILL_MAX_LEVEL
         proficiency = 123
         max_proficiency = 1000
         flags = 1  # APK: field[6] bit 0 enables proficiency display.
@@ -899,17 +1007,17 @@ def character_skill_list(role: dict[str, object]) -> bytes:
 def sect_skill_list(role: dict[str, object]) -> bytes:
     """Return the minimal protocol-1103 list consumed by the sect-skill page."""
     sect_id = normalized_sect_id(role)
-    if sect_id != 1:
+    if sect_id != TEST_SECT_ID:
         LOG.info(
             'SKILL_1103_LIST role_id=%s sect_id=%d count=0',
             role.get('id', 0), sect_id,
         )
         return encode_frame(1103, [byte(0), byte(0)])
 
-    skill_id = 10001
-    skill_name = '协议测试技能'
-    level = 3
-    max_level = 20
+    skill_id = TEST_SKILL_ID
+    skill_name = TEST_SKILL_NAME
+    level = sect_skill_level(role)
+    max_level = TEST_SKILL_MAX_LEVEL
     slot = 1
     record = [
         string(skill_name),
@@ -928,6 +1036,93 @@ def sect_skill_list(role: dict[str, object]) -> bytes:
         level, max_level, slot,
     )
     return encode_frame(1103, [byte(0), byte(1), *record])
+
+
+def sect_skill_level(role: dict[str, object]) -> int:
+    """Return the persisted level of the local sect-skill probe."""
+    if normalized_sect_id(role) != TEST_SECT_ID:
+        return 0
+    levels = role.get('skill_levels')
+    if not isinstance(levels, dict):
+        return TEST_SKILL_DEFAULT_LEVEL
+    try:
+        level = int(levels.get(str(TEST_SKILL_ID), TEST_SKILL_DEFAULT_LEVEL))
+    except (TypeError, ValueError):
+        level = TEST_SKILL_DEFAULT_LEVEL
+    return max(0, min(TEST_SKILL_MAX_LEVEL, level))
+
+
+def sect_skill_detail_frame(role: dict[str, object], skill_id: int) -> bytes:
+    """Answer the native 1103/action-2 skill detail and learning-condition query.
+
+    ``pmsj/work/e/dy.a(main/w)`` reads the first three fields as
+    ``action, skill id, current level``.  It then consumes five integer
+    conditions, effect/current/next strings, and the required-item
+    ``int, string, int`` triple.  Returning nothing leaves the client's
+    global wait flag set.
+    """
+    if normalized_sect_id(role) != TEST_SECT_ID or int(skill_id) != TEST_SKILL_ID:
+        return encode_frame(1103, [byte(3)])
+    return encode_frame(1103, [
+        byte(2),
+        integer(TEST_SKILL_ID),
+        integer(sect_skill_level(role)),
+        integer(1),  # Required character level.
+        integer(0),  # Silver cost for the local probe.
+        integer(0),  # Experience cost for the local probe.
+        integer(0),  # First prerequisite-skill level.
+        integer(0),  # Second prerequisite-skill level.
+        string('本地测试技能效果：用于验证技能学习与升级。'),
+        string('协议测试技能说明'),
+        string('下一级效果：技能等级提高。'),
+        integer(0),  # Required item template id; zero means no item.
+        string(''),  # Required item display name.
+        integer(0),  # Required item quantity.
+    ])
+
+
+def sect_skill_request_frames(
+    role: dict[str, object],
+    values: list[object],
+) -> tuple[bytes, ...]:
+    """Handle the confirmed native sect-skill request actions."""
+    if not values:
+        return (encode_frame(1103, [byte(3)]),)
+    action = int(values[0])
+    if action == 6:
+        return (sect_skill_list(role),)
+
+    skill_id = int(values[1]) if len(values) > 1 else 0
+    valid_skill = (
+        normalized_sect_id(role) == TEST_SECT_ID
+        and skill_id == TEST_SKILL_ID
+    )
+    if action == 2:
+        return (sect_skill_detail_frame(role, skill_id),)
+    if action == 3 and valid_skill:
+        current_level = sect_skill_level(role)
+        if current_level < TEST_SKILL_MAX_LEVEL:
+            levels = role.get('skill_levels')
+            if not isinstance(levels, dict):
+                levels = {}
+                role['skill_levels'] = levels
+            levels[str(TEST_SKILL_ID)] = current_level + 1
+            LOG.info(
+                'SKILL_1103_LEARN role_id=%s skill_id=%d level=%d->%d',
+                role.get('id', 0), TEST_SKILL_ID, current_level, current_level + 1,
+            )
+        # Action 0 replaces the record in b/y by skill id; action 5 redraws
+        # the native sect page.  1132 keeps the character skill container in
+        # sync for the battle/person screens.
+        return (
+            sect_skill_list(role),
+            encode_frame(1103, [byte(5)]),
+            character_skill_list(role),
+        )
+
+    # Action 3 is a native no-op response.  It still passes through main/e's
+    # dispatcher and clears the global wait flag for stale/invalid requests.
+    return (encode_frame(1103, [byte(3)]),)
 
 
 def initial_skill_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
@@ -961,6 +1156,39 @@ def role_items(role: dict[str, object]) -> list[dict[str, object]]:
         items = [item for item in items if isinstance(item, dict)]
         role['items'] = items
     return items  # type: ignore[return-value]
+
+
+def bag_capacity(role: dict[str, object]) -> int:
+    """Return the persisted personal-inventory slot limit."""
+    try:
+        return max(0, int(role.get('bag_capacity', DEFAULT_BAG_CAPACITY)))
+    except (TypeError, ValueError):
+        return DEFAULT_BAG_CAPACITY
+
+
+def bag_item_count(role: dict[str, object]) -> int:
+    """Count occupied bag slots; stack quantity does not consume extra slots."""
+    return sum(item.get('location', 'bag') == 'bag' for item in role_items(role))
+
+
+def try_move_item_to_bag(role: dict[str, object], item: dict[str, object]) -> bool:
+    """Move one owned item into the bag only when a slot is available."""
+    if item.get('location', 'bag') == 'bag':
+        return True
+    if bag_item_count(role) >= bag_capacity(role):
+        return False
+    item['location'] = 'bag'
+    return True
+
+
+def item_action_location_valid(action: int, item: dict[str, object]) -> bool:
+    """Match 1009 bag/equipment actions to the APK's item containers."""
+    location = str(item.get('location', 'bag'))
+    if int(action) in {3, 4, 5}:
+        return location == 'bag'
+    if int(action) == 6:
+        return location == 'equipped'
+    return True
 
 
 def character_appearance(role: dict[str, object]) -> dict[int, int]:
@@ -1300,7 +1528,10 @@ def apply_one_level(role: dict[str, object]) -> bool:
     return True
 
 
-def apply_battle_rewards(role: dict[str, object], experience: int = BATTLE_EXP_REWARD) -> tuple[dict[str, object], bool]:
+def apply_battle_rewards(
+    role: dict[str, object],
+    experience: int = BATTLE_EXP_REWARD,
+) -> tuple[dict[str, object] | None, bool]:
     """Persist one trial victory and return the changed item plus level-up flag."""
     old_level = max(1, int(role.get('level', 1)))
     role['experience'] = max(0, int(role.get('experience', 0))) + max(0, experience)
@@ -1314,7 +1545,10 @@ def apply_battle_rewards(role: dict[str, object], experience: int = BATTLE_EXP_R
          and str(candidate.get('location', 'bag')) == 'bag'),
         None,
     )
+    level_up = int(role.get('level', 1)) > old_level
     if item is None:
+        if bag_item_count(role) >= bag_capacity(role):
+            return None, level_up
         item = {
             'id': (int(role.get('id', 0)) * 100) + 17,
             'template_id': BATTLE_DROP_TEMPLATE_ID,
@@ -1339,32 +1573,36 @@ def apply_battle_rewards(role: dict[str, object], experience: int = BATTLE_EXP_R
             int(item.get('max_quantity', 99)),
             int(item.get('quantity', 0)) + 1,
         )
-    return item, int(role.get('level', 1)) > old_level
+    return item, level_up
 
 
 def notice_and_world(settings: Settings, role: dict[str, object] | None = None) -> list[bytes]:
     role = role if role is not None else default_role(settings)
-    map_id = int(role.get('map_id', settings.map_id))
-    map_name = str(role.get('map_name', settings.map_name))
+    current_map = settings_for_role(settings, role)
     notice = encode_frame(1123, [byte(0), integer(0), string('本地服务正常')])
     # 1110 字段 1/2 are the logical map id used by the client. The patched
     # APK carries the matching 50000.map.ref alias for the target map.
-    client_map_id = map_id
+    client_map_id = current_map.id
     world = encode_frame(1110, [
         integer(0),
         integer(client_map_id),
         integer(client_map_id),
-        string(map_name),
+        string(current_map.name),
     ])
     return [notice, world]
 
 
-def map_action(settings: Settings, action: int, status: int = 0, role_id: int | None = None) -> bytes:
+def map_action(
+    definition: MapDefinition,
+    action: int,
+    status: int = 0,
+    role_id: int | None = None,
+) -> bytes:
     # 游戏端读取 1010 应答时固定从字段 5 取动作码。
     return encode_frame(1010, [
-        integer(settings.role_id if role_id is None else role_id),
-        short(settings.spawn_x),
-        short(settings.spawn_y),
+        integer(10001 if role_id is None else role_id),
+        short(definition.spawn_x),
+        short(definition.spawn_y),
         integer(0),
         integer(status),
         # 客户端在 1010 响应中用 w.b(5) 读取动作码，必须是 short。
@@ -1383,6 +1621,7 @@ NPC_DIRECTION_LEFT = 3
 
 _DIRECTION_RANGE = (NPC_DIRECTION_DOWN, NPC_DIRECTION_RIGHT, NPC_DIRECTION_UP, NPC_DIRECTION_LEFT)
 NPC_STREAM_RADIUS = 20
+SECT_MENTOR_LEARN_OPTION = 1
 
 # 1005 path directions are produced by APK a/c/x.a(x1, y1, x2, y2).
 _MAP_PATH_DELTAS = {
@@ -1461,7 +1700,7 @@ def map_actor_directions_frame(items: list[tuple[int, int]]) -> bytes:
     return encode_frame(1126, encoded)
 
 
-def map_monster_frame(settings: Settings) -> bytes:
+def map_monster_frame(definition: MapDefinition) -> bytes:
     """Return the verified 1126 actor-spawn frame for the local monster.
 
     ``pmsj.work.main.e.Q`` decodes subtype 0 as a list of generic map actors:
@@ -1469,33 +1708,50 @@ def map_monster_frame(settings: Settings) -> bytes:
     id/x/y/raw-model/name.  The client adds 0x200b20 to raw-model before
     loading the sprite resource.
     """
+    monster = definition.monster
+    if monster is None:
+        raise ValueError(f'map {definition.id} has no monster')
     return encode_frame(1126, [
         byte(0),
         byte(1),
-        integer(settings.monster_id),
-        integer(settings.monster_x),
-        integer(settings.monster_y),
-        integer(settings.monster_model),
-        string(settings.monster_name),
+        integer(monster.id),
+        integer(monster.x),
+        integer(monster.y),
+        integer(monster.model),
+        string(monster.name),
     ])
 
 
-def map_portal_frame(settings: Settings) -> bytes:
+def map_portal_frame(portal: PortalDefinition) -> bytes:
     """Return the verified 1126 generic-actor shape for the test portal."""
     return encode_frame(1126, [
         byte(0),
         byte(1),
-        integer(settings.portal_id),
-        integer(settings.portal_x),
-        integer(settings.portal_y),
+        integer(portal.id),
+        integer(portal.x),
+        integer(portal.y),
         # Reuse the known-good local actor sprite.  The important part of the
         # portal is its actor id/position; no new client resource is required.
-        integer(settings.monster_model),
-        string(settings.portal_name),
+        integer(portal.model),
+        string(portal.name),
     ])
 
 
-def map_npc_frame(settings: Settings, npc: dict) -> bytes:
+def map_portal_frames(definition: MapDefinition) -> list[bytes]:
+    """Spawn every portal registered for one map, in configuration order."""
+    return [map_portal_frame(portal) for portal in definition.portals]
+
+
+def map_return_portal_frame(definition: MapDefinition) -> bytes:
+    """Compatibility helper for the first portal on a return map."""
+    try:
+        portal = definition.portals[0]
+    except IndexError as exc:
+        raise ValueError(f'map {definition.id} has no return portal') from exc
+    return map_portal_frame(portal)
+
+
+def map_npc_frame(definition: MapDefinition, npc: MapActorDefinition) -> bytes:
     """Spawn one map-58 NPC through the client's native 2030 NPC path.
 
     ``main/e.X`` constructs ``pmsj.work.b/t`` from this record.  Unlike the
@@ -1504,47 +1760,47 @@ def map_npc_frame(settings: Settings, npc: dict) -> bytes:
     title used by the native NPC dialogue overlay.
     """
     return encode_frame(2030, [
-        integer(int(npc['id'])),
-        integer(int(npc['x'])),
-        integer(int(npc['y'])),
-        integer(int(npc['dat_id'])),
-        integer(int(npc.get('direction', NPC_DIRECTION_DOWN))),
+        integer(npc.id),
+        integer(npc.x),
+        integer(npc.y),
+        integer(npc.dat_id),
+        integer(npc.direction),
         integer(0),
-        string(str(npc['name'])),
+        string(npc.name),
         integer(0),
-        string(str(npc.get('label') or '')),
+        string(npc.label),
     ])
 
 
-def map_npc_frames(settings: Settings) -> list[bytes]:
-    """Return the 1126 spawn frames for every enabled map-58 NPC."""
-    if not settings.npc_enabled or settings.map_id != 58:
-        return []
-    return [map_npc_frame(settings, npc) for npc in settings.npcs]
+def map_npc_frames(definition: MapDefinition) -> list[bytes]:
+    """Return native NPC spawn frames for the current map definition."""
+    return [map_npc_frame(definition, npc) for npc in definition.npcs]
 
 
-def map_npcs_near(settings: Settings, x: int, y: int) -> list[dict]:
+def map_npcs_near(definition: MapDefinition, x: int, y: int) -> list[MapActorDefinition]:
     """Return NPCs retained by the client's native 20-tile stream window."""
-    if not settings.npc_enabled or settings.map_id != 58:
-        return []
     return [
-        npc for npc in settings.npcs
-        if abs(int(npc['x']) - int(x)) <= NPC_STREAM_RADIUS
-        and abs(int(npc['y']) - int(y)) <= NPC_STREAM_RADIUS
+        npc for npc in definition.npcs
+        if abs(npc.x - int(x)) <= NPC_STREAM_RADIUS
+        and abs(npc.y - int(y)) <= NPC_STREAM_RADIUS
     ]
 
 
-def map_npc_for_object_id(settings: Settings, object_id: int) -> dict | None:
-    """Return the configured map-58 NPC matching a clicked actor id."""
-    if not settings.npc_enabled or settings.map_id != 58:
-        return None
+def map_npc_for_object_id(
+    definition: MapDefinition,
+    object_id: int,
+) -> MapActorDefinition | None:
+    """Return the current map's NPC matching a clicked actor id."""
     return next(
-        (npc for npc in settings.npcs if int(npc['id']) == int(object_id)),
+        (npc for npc in definition.npcs if npc.id == int(object_id)),
         None,
     )
 
 
-def map_npc_dialogue_frames(npc: dict) -> list[bytes]:
+def map_npc_dialogue_frames(
+    npc: MapActorDefinition,
+    role: dict[str, object] | None = None,
+) -> list[bytes]:
     """Open the compact map-overlay NPC dialogue used by the original client.
 
     Protocol 2032 opens screen 6 (``pmsj.work.e.cb`` / ``6.ui``).  Its records
@@ -1552,8 +1808,17 @@ def map_npc_dialogue_frames(npc: dict) -> list[bytes]:
     2 supplies an option row, and type 100 finalizes layout after resolving the
     native 2030 NPC by id for its title and portrait.
     """
-    npc_id = int(npc['id'])
-    introduction = str(npc.get('introduction') or npc.get('label') or npc['name'])
+    npc_id = npc.id
+    is_sect_mentor = npc.service == 'sect_skill_mentor' and npc.sect_id is not None
+    sect_matches = (
+        is_sect_mentor
+        and role is not None
+        and normalized_sect_id(role) == npc.sect_id
+    )
+    if is_sect_mentor and not sect_matches:
+        introduction = f'仅限{SECTS.get(npc.sect_id, "本门")}弟子学习。'
+    else:
+        introduction = npc.introduction or npc.label or npc.name
 
     def dialogue_record(kind: int, *, option_id: int = 0, text: str = '', icon: int = 0) -> list[Field]:
         return [
@@ -1567,16 +1832,38 @@ def map_npc_dialogue_frames(npc: dict) -> list[bytes]:
             integer(icon),
         ]
 
-    records = [
-        *dialogue_record(1, text=introduction),
-        *dialogue_record(2, option_id=0, text='结束对话'),
-        *dialogue_record(100),
-    ]
+    records = [*dialogue_record(1, text=introduction)]
+    if sect_matches:
+        records.extend(dialogue_record(
+            2,
+            option_id=SECT_MENTOR_LEARN_OPTION,
+            text='学习门派技能',
+        ))
+    records.extend(dialogue_record(2, option_id=0, text='结束对话'))
+    records.extend(dialogue_record(100))
     return [encode_frame(2032, [
         integer(npc_id),
-        byte(3),
+        byte(len(records) // 8),
         *records,
     ])]
+
+
+def sect_skill_screen_frame(mode: int = 1) -> bytes:
+    """Open external screen 179, remapped by the APK to sect screen 602.
+
+    ``main/e`` dispatches the generic UI action from short field 5, reads the
+    external screen id from integer field 4 and the mode from integer field 3.
+    It maps external id 0xb3 to 0x25a; mode 1 is the mentor learning variant
+    rather than the remote view variant.
+    """
+    return encode_frame(1010, [
+        integer(0),
+        short(0),
+        short(0),
+        integer(mode),
+        integer(179),
+        short(69),
+    ])
 
 
 def map_object_remove_frame(object_id: int) -> bytes:
@@ -1612,6 +1899,37 @@ def map_object_interaction_ack_frame(object_id: int) -> bytes:
         integer(0),
         short(7),
     ])
+
+
+def npc_dialogue_option_frames(
+    settings: Settings,
+    role: dict[str, object] | None,
+    state: LocalNpcDialogueState,
+    option_id: int,
+) -> list[bytes]:
+    """Acknowledge one 2032 option and open mentor mode only if still valid."""
+    frames = [map_object_interaction_ack_frame(0)]
+    try:
+        if role is None or int(option_id) != SECT_MENTOR_LEARN_OPTION:
+            return frames
+        try:
+            definition = settings_for_role(settings, role)
+        except ValueError:
+            return frames
+        if state.map_id != definition.id or state.npc_id is None:
+            return frames
+        npc = map_npc_for_object_id(definition, state.npc_id)
+        if (
+            npc is None
+            or npc.service != 'sect_skill_mentor'
+            or npc.sect_id is None
+            or normalized_sect_id(role) != npc.sect_id
+        ):
+            return frames
+        frames.append(sect_skill_screen_frame(1))
+        return frames
+    finally:
+        state.clear()
 
 
 def map_object_interaction_values(values: list[object]) -> tuple[int, int | None, int | None, int | None]:
@@ -1833,15 +2151,32 @@ def battle_actor_frame(
 
 def battle_actor_frames(
     role: dict[str, object],
-    settings: Settings,
+    settings: Settings | MapDefinition,
     trace_id: str = '',
 ) -> list[bytes]:
     """Return one player and one monster record for the local battle probe."""
+    if isinstance(settings, MapDefinition):
+        monster = settings.monster
+        if monster is None:
+            raise ValueError(f'map {settings.id} has no battle monster')
+        default_role_model = 2000
+        default_role_name = '本地侠客'
+    else:
+        monster = MapActorDefinition(
+            id=int(settings.monster_id),
+            name=str(settings.monster_name),
+            model=int(settings.monster_model),
+            x=int(settings.monster_x),
+            y=int(settings.monster_y),
+            direction=int(settings.monster_direction),
+        )
+        default_role_model = settings.role_model
+        default_role_name = settings.role_name
     return [
         battle_actor_frame(
             actor_id=int(role['id']),
-            model=int(role.get('model', settings.role_model)),
-            name=str(role.get('name', settings.role_name)),
+            model=int(role.get('model', default_role_model)),
+            name=str(role.get('name', default_role_name)),
             kind=1,
             # main/b.h.e() treats the local fighter's side as grid 0. Side 3
             # is a special non-grid list and cannot be resolved by normal
@@ -1852,9 +2187,9 @@ def battle_actor_frames(
             trace_id=trace_id,
         ),
         battle_actor_frame(
-            actor_id=int(settings.monster_id),
-            model=int(settings.monster_model),
-            name=str(settings.monster_name),
+            actor_id=monster.id,
+            model=monster.model,
+            name=monster.name,
             kind=2,
             side_code=1,
             slot=1,
@@ -2380,15 +2715,15 @@ def battle_end_frame() -> bytes:
     return encode_frame(1040, [byte(4)])
 
 
-def map_data_frames(settings: Settings, role_id: int | None = None) -> list[bytes]:
-    configured = Path(settings.map_o_file)
+def map_data_frames(definition: MapDefinition, role_id: int | None = None) -> list[bytes]:
+    configured = Path(definition.map_o_file)
     map_path = configured if configured.is_absolute() else Path(__file__).resolve().parent / configured
     try:
         generated = MapO.from_file(map_path.read_bytes())
     except (OSError, MapOError) as exc:
         LOG.warning('cannot load generated map %s; using flat fallback: %s', map_path, exc)
-        width = max(2, min(127, settings.map_width))
-        height = max(2, min(127, settings.map_height))
+        width = definition.fallback_width
+        height = definition.fallback_height
         generated = MapO(
             width=width,
             height=height,
@@ -2412,38 +2747,42 @@ def map_data_frames(settings: Settings, role_id: int | None = None) -> list[byte
     assert isinstance(mirror, bytes)
 
     return [
-        map_action(settings, 11, role_id=role_id),
+        map_action(definition, 11, role_id=role_id),
         encode_frame(1407, [byte(0), byte(map_type), byte(width), byte(height)]),
         encode_frame(1407, [byte(1), short(len(tile_definitions)), binary(tile_definitions)]),
         encode_frame(1407, [byte(3), short(len(encoded_tiles)), binary(encoded_tiles)]),
         encode_frame(1407, [byte(5), short(len(collision)), binary(collision)]),
         encode_frame(1407, [byte(7), short(len(mirror)), binary(mirror)]),
-        # status=1：不要找本地 map.o；上面的 1407 数据就是本次地图数据。
-        map_action(settings, 12, status=1, role_id=role_id),
+        # status=1 skips the APK-local map.o lookup; 1407 still supplies the
+        # authoritative logical map data used by the server transition.
+        map_action(definition, 12, status=1, role_id=role_id),
     ]
 
 
-def map_enter_frames(settings: Settings, role_id: int | None = None) -> list[bytes]:
-    # Only map 58 has an APK-local map.ref in this build.  For the synthetic
-    # target map, status=1 skips the local lookup after the server has already
-    # supplied the map.o-equivalent data through 1407.
-    ref_status = 0 if settings.map_ref_available else 1
+def map_enter_frames(definition: MapDefinition, role_id: int | None = None) -> list[bytes]:
+    # Distinct drawable map ids must carry matching APK-local map.ref/map.o
+    # resources.  status=0 asks the client to load those resources before it
+    # acknowledges entry; status=1 is reserved for definitions without them.
+    ref_status = 0 if definition.map_ref_available else 1
     frames = [
-        map_action(settings, 13, status=ref_status, role_id=role_id),
-        map_action(settings, 14, role_id=role_id),
-        map_action(settings, 105, role_id=role_id),
-        map_monster_frame(settings),
+        map_action(definition, 13, status=ref_status, role_id=role_id),
+        map_action(definition, 14, role_id=role_id),
+        map_action(definition, 105, role_id=role_id),
     ]
-    if settings.portal_enabled:
-        frames.append(map_portal_frame(settings))
-    frames.extend(map_npc_frames(settings))
+    if definition.monster is not None:
+        frames.append(map_monster_frame(definition))
+    frames.extend(map_portal_frames(definition))
+    frames.extend(map_npc_frames(definition))
     # After every 1126 subtype=0 actor is created, set their initial facing with
     # 1126 subtype=1 (local-compat extension): the client finds the actor by id in
     # the same generic container and rotates it in place.  The direction frame is
     # never appended to the subtype=0 record (that would break its fixed field read).
-    frames.append(map_actor_direction_frame(settings.monster_id, settings.monster_direction))
-    if settings.portal_enabled:
-        frames.append(map_actor_direction_frame(settings.portal_id, settings.portal_direction))
+    if definition.monster is not None:
+        frames.append(map_actor_direction_frame(definition.monster.id, definition.monster.direction))
+    frames.extend(
+        map_actor_direction_frame(portal.id, portal.direction)
+        for portal in definition.portals
+    )
     return frames
 
 
@@ -2458,6 +2797,18 @@ class LocalGameServer:
         self.roles = RoleStore(settings)
         self._next_session_id = 1000
         self._sessions: dict[tuple[int, int], str] = {}
+
+    def handle_sect_skill_request(
+        self,
+        role: dict[str, object],
+        values: list[object],
+    ) -> tuple[bytes, ...]:
+        """Apply one 1103 transition and persist any resulting level change."""
+        before_level = sect_skill_level(role)
+        response_frames = sect_skill_request_frames(role, values)
+        if sect_skill_level(role) != before_level:
+            self.roles.save()
+        return response_frames
 
     async def _send(
         self,
@@ -2515,6 +2866,7 @@ class LocalGameServer:
         cipher: GameCipher | None,
         send_lock: asyncio.Lock,
         battle_state: LocalBattleState,
+        npc_dialogue_state: LocalNpcDialogueState,
     ) -> None:
         """Handle a map actor request without guessing battle data.
 
@@ -2528,37 +2880,33 @@ class LocalGameServer:
             'map object interaction source=%s user=%r map=%d object_id=%d tile=%s,%s action=%s',
             source,
             username,
-            current_settings.map_id,
+            current_settings.id,
             object_id,
             object_x,
             object_y,
             action,
         )
 
-        if (
-            active_role is not None
-            and current_settings.portal_enabled
-            and object_id == int(current_settings.portal_id)
-        ):
-            target_map = int(current_settings.portal_target_map_id)
-            target_name = str(current_settings.portal_target_map_name)
-            active_role['map_id'] = target_map
-            active_role['map_name'] = target_name
+        if active_role is not None:
+            target_settings = apply_portal_transition(self.settings, active_role, object_id)
+        else:
+            target_settings = None
+        if target_settings is not None:
+            npc_dialogue_state.clear()
             self.roles.save()
             LOG.info(
                 'portal activated user=%r role_id=%d object_id=%d map %d -> %d',
                 username,
                 int(active_role['id']),
                 object_id,
-                current_settings.map_id,
-                target_map,
+                current_settings.id,
+                target_settings.id,
             )
-            target_settings = settings_for_map(self.settings, target_map)
             # 1110 is the same world/map descriptor used by the original map
             # transition. The client then requests 1010/12 and 1010/13.
             await self._send(
                 writer,
-                notice_and_world(target_settings, active_role)[1],
+                notice_and_world(self.settings, active_role)[1],
                 cipher=cipher,
                 lock=send_lock,
             )
@@ -2566,25 +2914,27 @@ class LocalGameServer:
 
         npc = map_npc_for_object_id(current_settings, object_id)
         if npc is not None:
+            npc_dialogue_state.select(current_settings.id, npc.id)
             LOG.info(
                 'npc interaction user=%r npc_id=%d name=%r source=%s; opening native map dialogue',
                 username,
                 object_id,
-                str(npc['name']),
+                npc.name,
                 source,
             )
             await self._send(
                 writer,
-                *map_npc_dialogue_frames(npc),
+                *map_npc_dialogue_frames(npc, active_role),
                 cipher=cipher,
                 lock=send_lock,
             )
             return
 
-        if object_id == int(current_settings.monster_id):
+        monster = current_settings.monster
+        if monster is not None and object_id == monster.id:
             if should_suppress_escape_retrigger(
                 battle_state.escape_guard,
-                current_settings.map_id,
+                current_settings.id,
                 object_id,
             ):
                 LOG.info(
@@ -2592,7 +2942,7 @@ class LocalGameServer:
                     username,
                     int(active_role['id']) if active_role is not None else battle_state.player_id,
                     object_id,
-                    current_settings.map_id,
+                    current_settings.id,
                     source,
                 )
                 await self._send(
@@ -2625,7 +2975,7 @@ class LocalGameServer:
                 return
             role = active_role if active_role is not None else default_role(self.settings)
             battle_state.begin(int(role['id']), object_id)
-            battle_state.map_id = int(current_settings.map_id)
+            battle_state.map_id = current_settings.id
             battle_state.contact_tile = (
                 (int(object_x), int(object_y))
                 if object_x is not None and object_y is not None
@@ -2674,7 +3024,7 @@ class LocalGameServer:
             )
             return
 
-        LOG.info('ignored map object action id=%d map=%d', object_id, current_settings.map_id)
+        LOG.info('ignored map object action id=%d map=%d', object_id, current_settings.id)
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info('peername')
@@ -2684,6 +3034,7 @@ class LocalGameServer:
         active_role: dict[str, object] | None = None
         game_cipher: GameCipher | None = None
         battle_state = LocalBattleState()
+        npc_dialogue_state = LocalNpcDialogueState()
         streamed_npc_ids: set[int] = set()
         send_lock = asyncio.Lock()
         heartbeat_task: asyncio.Task[None] | None = None
@@ -2849,20 +3200,20 @@ class LocalGameServer:
                         )
                     current_settings = settings_for_role(self.settings, active_role)
                     nearby_npcs = map_npcs_near(current_settings, movement_x, movement_y)
-                    nearby_ids = {int(npc['id']) for npc in nearby_npcs}
+                    nearby_ids = {npc.id for npc in nearby_npcs}
                     entered_npcs = [
                         npc for npc in nearby_npcs
-                        if int(npc['id']) not in streamed_npc_ids
+                        if npc.id not in streamed_npc_ids
                     ]
                     streamed_npc_ids.intersection_update(nearby_ids)
                     if entered_npcs:
                         LOG.info(
                             'NPC_REGION_STREAM user=%r map=%d tile=%d,%d ids=%r',
                             username,
-                            current_settings.map_id,
+                            current_settings.id,
                             movement_x,
                             movement_y,
-                            [int(npc['id']) for npc in entered_npcs],
+                            [npc.id for npc in entered_npcs],
                         )
                         await self._send(
                             writer,
@@ -2870,7 +3221,7 @@ class LocalGameServer:
                             cipher=game_cipher,
                             lock=send_lock,
                         )
-                        streamed_npc_ids.update(int(npc['id']) for npc in entered_npcs)
+                        streamed_npc_ids.update(npc.id for npc in entered_npcs)
 
                 elif message_id == 1010 and values:
                     action = int(values[0])
@@ -2883,7 +3234,7 @@ class LocalGameServer:
                         LOG.info('level mode changed user=%r automatic=%s', username, not manual)
                     elif action == 12:
                         current_settings = settings_for_role(self.settings, active_role)
-                        LOG.info('client requested map data map=%d', current_settings.map_id)
+                        LOG.info('client requested map data map=%d', current_settings.id)
                         role_id = int(active_role['id']) if active_role is not None else self.settings.role_id
                         await self._send(
                             writer,
@@ -2897,15 +3248,18 @@ class LocalGameServer:
                         # encounter; never carry a completed battle into the
                         # newly loaded scene.
                         battle_state.reset_encounter()
+                        npc_dialogue_state.clear()
+                        monster = current_settings.monster
                         LOG.info(
-                            'client requested map reference; map=%d entering at %d,%d; spawning monster id=%d model=%d at %d,%d',
-                            current_settings.map_id,
+                            'client requested map reference; map=%d entering at %d,%d; monster=%s',
+                            current_settings.id,
                             current_settings.spawn_x,
                             current_settings.spawn_y,
-                            current_settings.monster_id,
-                            current_settings.monster_model,
-                            current_settings.monster_x,
-                            current_settings.monster_y,
+                            (
+                                f'id={monster.id} model={monster.model} at {monster.x},{monster.y}'
+                                if monster is not None
+                                else 'disabled'
+                            ),
                         )
                         role_id = int(active_role['id']) if active_role is not None else self.settings.role_id
                         await self._send(
@@ -2915,8 +3269,7 @@ class LocalGameServer:
                             lock=send_lock,
                         )
                         streamed_npc_ids.clear()
-                        if current_settings.map_id == 58 and current_settings.npc_enabled:
-                            streamed_npc_ids.update(int(npc['id']) for npc in current_settings.npcs)
+                        streamed_npc_ids.update(npc.id for npc in current_settings.npcs)
                     elif action == 7 and len(values) > 1:
                         # Compatibility with an older map-object path seen in
                         # some client builds. The active APK uses 2031 below.
@@ -2932,12 +3285,13 @@ class LocalGameServer:
                             cipher=game_cipher,
                             send_lock=send_lock,
                             battle_state=battle_state,
+                            npc_dialogue_state=npc_dialogue_state,
                         )
                     elif action == 15:
                         # Sent by the APK after it receives action=105
                         # (actionEnterMapOK).  This is a client acknowledgement,
                         # not a request for another map frame.
-                        LOG.info('map entry acknowledged by client map=%d', settings_for_role(self.settings, active_role).map_id)
+                        LOG.info('map entry acknowledged by client map=%d', settings_for_role(self.settings, active_role).id)
                     else:
                         LOG.info('ignored client map action=%d', action)
                 elif message_id == 2031 and values:
@@ -2956,6 +3310,7 @@ class LocalGameServer:
                         cipher=game_cipher,
                         send_lock=send_lock,
                         battle_state=battle_state,
+                        npc_dialogue_state=npc_dialogue_state,
                     )
                 elif message_id == 1533 and values:
                     # The native dialogue sends [byte(0), int(option_id)]
@@ -2968,12 +3323,26 @@ class LocalGameServer:
                     # Screen 6 closes the compact native NPC overlay locally,
                     # then reports [byte(option_id), byte(101), string(input)]
                     # and enables the global wait overlay. S->C 1010 clears
-                    # that overlay before dispatching action 7; action 7 has no
-                    # inbound map mutation branch, so this is a no-op ACK.
-                    LOG.info('native npc dialogue option selected user=%r values=%r; acknowledging', username, values)
+                    # that overlay before dispatching action 7. A validated
+                    # sect mentor selection appends action 69 to open the
+                    # native learning-mode screen; all other paths are ACK-only.
+                    option_id = int(values[0])
+                    response_frames = npc_dialogue_option_frames(
+                        self.settings,
+                        active_role,
+                        npc_dialogue_state,
+                        option_id,
+                    )
+                    LOG.info(
+                        'native npc dialogue option selected user=%r option=%d values=%r mentor_mode=%s',
+                        username,
+                        option_id,
+                        values,
+                        len(response_frames) > 1,
+                    )
                     await self._send(
                         writer,
-                        map_object_interaction_ack_frame(0),
+                        *response_frames,
                         cipher=game_cipher,
                         lock=send_lock,
                     )
@@ -3268,16 +3637,22 @@ class LocalGameServer:
                         cipher=game_cipher,
                         lock=send_lock,
                     )
-                elif (
-                    message_id == 1103
-                    and active_role is not None
-                    and values
-                    and int(values[0]) == 6
-                ):
-                    LOG.info('sect skill list requested values=%r', values)
+                elif message_id == 1103 and active_role is not None and values:
+                    action = int(values[0])
+                    before_level = sect_skill_level(active_role)
+                    response_frames = self.handle_sect_skill_request(active_role, values)
+                    after_level = sect_skill_level(active_role)
+                    LOG.info(
+                        'sect skill request action=%d values=%r response_count=%d level=%d->%d',
+                        action,
+                        values,
+                        len(response_frames),
+                        before_level,
+                        after_level,
+                    )
                     await self._send(
                         writer,
-                        sect_skill_list(active_role),
+                        *response_frames,
                         cipher=game_cipher,
                         lock=send_lock,
                     )
@@ -3332,7 +3707,7 @@ class LocalGameServer:
                             cipher=game_cipher,
                             lock=send_lock,
                         )
-                    elif action == 3 and item is not None:
+                    elif action == 3 and item is not None and item_action_location_valid(action, item):
                         previous_appearance = character_appearance(active_role)
                         role_items(active_role).remove(item)
                         self.roles.save()
@@ -3342,7 +3717,7 @@ class LocalGameServer:
                         if appearance_frame is not None:
                             replies.append(appearance_frame)
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
-                    elif action == 4 and item is not None:
+                    elif action == 4 and item is not None and item_action_location_valid(action, item):
                         mount_model = item.get('mount_model')
                         if mount_model is not None:
                             current_mount = int(active_role.get('mount_model', 0))
@@ -3373,7 +3748,12 @@ class LocalGameServer:
                         self.roles.save()
                         LOG.info('item used item_id=%d name=%r remaining=%d', item_id, item.get('name'), quantity)
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
-                    elif action == 5 and item is not None and is_equipment(item):
+                    elif (
+                        action == 5
+                        and item is not None
+                        and is_equipment(item)
+                        and item_action_location_valid(action, item)
+                    ):
                         mount_model = item.get('mount_model')
                         if mount_model is not None:
                             updates: list[bytes] = []
@@ -3419,10 +3799,24 @@ class LocalGameServer:
                         self.roles.save()
                         LOG.info('item equipped item_id=%d name=%r slot=%d', item_id, item.get('name'), slot)
                         await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
-                    elif action == 6 and item is not None and item.get('location') == 'equipped':
+                    elif action == 6 and item is not None and item_action_location_valid(action, item):
+                        previous_appearance = character_appearance(active_role)
+                        if not try_move_item_to_bag(active_role, item):
+                            LOG.info(
+                                'item unequip rejected full_bag item_id=%d occupied=%d capacity=%d',
+                                item_id,
+                                bag_item_count(active_role),
+                                bag_capacity(active_role),
+                            )
+                            await self._send(
+                                writer,
+                                top_message_frame('背包已满，无法卸下装备'),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                            continue
                         mount_model = item.get('mount_model')
                         if mount_model is not None:
-                            item['location'] = 'bag'
                             active_role['mount_model'] = 0
                             self.roles.save()
                             LOG.info('mount unequipped item_id=%d model=0 slot=%d', item_id, MOUNT_EQUIPMENT_SLOT)
@@ -3435,8 +3829,6 @@ class LocalGameServer:
                                 lock=send_lock,
                             )
                             continue
-                        previous_appearance = character_appearance(active_role)
-                        item['location'] = 'bag'
                         self.roles.save()
                         LOG.info('item unequipped item_id=%d name=%r', item_id, item.get('name'))
                         replies = [item_frame(item, operation=3), encode_frame(1009, [short(6)])]

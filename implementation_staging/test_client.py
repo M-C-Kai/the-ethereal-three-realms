@@ -135,6 +135,16 @@ def main() -> None:
     parser.add_argument('--exercise-monster', action='store_true')
     parser.add_argument('--exercise-monster-kill', action='store_true')
     parser.add_argument('--exercise-monster-escape', action='store_true')
+    parser.add_argument(
+        '--exercise-skill-only',
+        action='store_true',
+        help='Exercise 1103 detail/learn and exit; selected role must belong to local sect 1',
+    )
+    parser.add_argument(
+        '--exercise-kunlun-only',
+        action='store_true',
+        help='Exercise the Kunlun portal/mentor learning-mode UI without changing skill level',
+    )
     parser.add_argument('--hold-seconds', type=float, default=0, help='Stay in the map and answer 1012 heartbeats')
     args = parser.parse_args()
 
@@ -188,12 +198,84 @@ def main() -> None:
         extension = expect(game_sock, 1089, cipher)
         assert extension == [0, 0], extension
         skills = expect(game_sock, 1132, cipher)
-        assert skills[0:4] == [0, 1, '基础技能', 0] and len(skills) == 16, skills
+        assert skills[0:2] == [0, 1] and len(skills) == 16, skills
         sect_skills = expect(game_sock, 1103, cipher)
         assert sect_skills[0] == 0 and sect_skills[1] in (0, 1), sect_skills
+        current_skill_level = None
+        if sect_skills[1] == 1:
+            assert sect_skills[2:4] == ['协议测试技能', 10001], sect_skills
+            assert skills[2:4] == ['协议测试技能', 10001], skills
+            current_skill_level = int(sect_skills[4])
+        else:
+            assert skills[2:4] == ['基础技能', 0], skills
         item_records = [expect(game_sock, 1008, cipher) for _ in range(16)]
         items = {str(values[8]): values for values in item_records}
         assert len(items) == 16 and {'青锋剑', '青纹项链', '青纹长靴', '小还丹', '坐骑验证令'} <= set(items), items
+
+        if args.exercise_kunlun_only:
+            assert current_skill_level is not None, 'selected role must belong to Kunlun'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1123, [
+                byte(0), byte(53), short(2000), short(15)
+            ])))
+            assert expect(game_sock, 1123, cipher)[2] == '本地服务正常'
+            initial_world = expect(game_sock, 1110, cipher)
+            assert initial_world[1] == 58 and initial_world[3] == '长安', initial_world
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(580005)])))
+            kunlun_world = expect(game_sock, 1110, cipher)
+            assert kunlun_world[1] == 60001 and kunlun_world[3] == '昆仑', kunlun_world
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(12), integer(0)])))
+            kunlun_data = [receive_frame(game_sock, cipher) for _ in range(7)]
+            assert [frame[0] for frame in kunlun_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], kunlun_data
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(0)])))
+            kunlun_enter = [receive_frame(game_sock, cipher) for _ in range(6)]
+            assert [frame[1][5] for frame in kunlun_enter[:3]] == [13, 14, 105], kunlun_enter
+            assert kunlun_enter[0][1][4] == 1, kunlun_enter[0]
+            assert kunlun_enter[3][0] == 1126 and kunlun_enter[3][1][2] == 6000101, kunlun_enter[3]
+            assert kunlun_enter[4][0] == 2030 and kunlun_enter[4][1][0] == 1900101, kunlun_enter[4]
+            assert kunlun_enter[4][1][6] == '昆仑导师', kunlun_enter[4]
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2031, [
+                integer(1900101), integer(0), short(12), short(8), short(0), short(0)
+            ])))
+            mentor_dialogue = expect(game_sock, 2032, cipher)
+            assert mentor_dialogue[:2] == [1900101, 4], mentor_dialogue
+            assert mentor_dialogue[14:17] == [1, 2, '学习门派技能'], mentor_dialogue
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2032, [
+                byte(1), byte(101), string('')
+            ])))
+            mentor_ack = expect(game_sock, 1010, cipher)
+            mentor_screen = expect(game_sock, 1010, cipher)
+            assert mentor_ack == [0, 0, 0, 0, 0, 7], mentor_ack
+            assert mentor_screen == [179, 0, 0, 0, 1, 69], mentor_screen
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(6000101)])))
+            returned_world = expect(game_sock, 1110, cipher)
+            assert returned_world[1] == 58 and returned_world[3] == '长安', returned_world
+            print('OK: 长安 -> 昆仑 -> 昆仑导师学习模式 -> 长安')
+            return
+
+        if args.exercise_skill_only:
+            assert current_skill_level is not None, 'selected role does not expose the local sect skill'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1103, [
+                byte(2), integer(10001), byte(current_skill_level), byte(1), byte(1)
+            ])))
+            detail = expect(game_sock, 1103, cipher)
+            assert detail[:3] == [2, 10001, current_skill_level] and len(detail) == 14, detail
+            assert detail[11:] == [0, '', 0], detail
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1103, [byte(3), integer(10001)])))
+            refreshed = expect(game_sock, 1103, cipher)
+            expected_skill_level = min(20, current_skill_level + 1)
+            assert refreshed[:5] == [0, 1, '协议测试技能', 10001, expected_skill_level], refreshed
+            assert expect(game_sock, 1103, cipher) == [5], 'sect skill redraw'
+            refreshed_character = expect(game_sock, 1132, cipher)
+            assert refreshed_character[:5] == [0, 1, '协议测试技能', 10001, expected_skill_level], refreshed_character
+            print('OK')
+            return
 
         weapon_id = int(items['青锋剑'][1])
         potion_id = int(items['小还丹'][1])
@@ -308,7 +390,7 @@ def main() -> None:
         notice = expect(game_sock, 1123, cipher)
         world = expect(game_sock, 1110, cipher)
         assert notice[2] == '本地服务正常', notice
-        assert world[1] == 58, world
+        assert world[1] == 58 and world[3] == '长安', world
 
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(12), integer(0)])))
         received = [receive_frame(game_sock, cipher) for _ in range(7)]
@@ -316,24 +398,26 @@ def main() -> None:
         assert received[-1][1][5] == 12 and received[-1][1][4] == 1, received[-1]
 
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-        # Map 58 advertises two 1126 forward-portal actors and three 1126 NPC
-        # actors after the verified monster actor.  Keep the first four frames
-        # unchanged; the portals and NPCs are appended in that order.
-        entered = [receive_frame(game_sock, cipher) for _ in range(9)]
+        # Map 58 advertises the monster and three generic 1126 portals, then
+        # three native 2030 NPCs and one direction frame per generic actor.
+        entered = [receive_frame(game_sock, cipher) for _ in range(14)]
         assert [x[1][5] for x in entered[:3]] == [13, 14, 105], entered
         assert entered[3][0] == 1126 and entered[3][1][:2] == [0, 1], entered[3]
         assert entered[4][0] == 1126 and entered[4][1][2] == 580001, entered[4]
         assert entered[5][0] == 1126 and entered[5][1][2] == 580003, entered[5]
         assert entered[5][1][3] == 34 and entered[5][1][4] == 7, entered[5]
-        assert entered[6][0] == 1126 and entered[6][1][2] == 1900002, entered[6]
-        assert entered[6][1][3] == 50 and entered[6][1][4] == 64, entered[6]
-        assert entered[6][1][6] == '孙思邈', entered[6]
-        assert entered[7][0] == 1126 and entered[7][1][2] == 1900003, entered[7]
-        assert entered[7][1][3] == 34 and entered[7][1][4] == 50, entered[7]
-        assert entered[7][1][6] == '接引真人', entered[7]
-        assert entered[8][0] == 1126 and entered[8][1][2] == 1900004, entered[8]
-        assert entered[8][1][3] == 11 and entered[8][1][4] == 21, entered[8]
-        assert entered[8][1][6] == '赵公明', entered[8]
+        assert entered[6][0] == 1126 and entered[6][1][2] == 580005, entered[6]
+        assert entered[6][1][3] == 62 and entered[6][1][4] == 67, entered[6]
+        assert entered[7][0] == 2030 and entered[7][1][0] == 1900002, entered[7]
+        assert entered[7][1][1] == 50 and entered[7][1][2] == 64, entered[7]
+        assert entered[7][1][6] == '孙思邈', entered[7]
+        assert entered[8][0] == 2030 and entered[8][1][0] == 1900003, entered[8]
+        assert entered[8][1][1] == 34 and entered[8][1][2] == 50, entered[8]
+        assert entered[8][1][6] == '接引真人', entered[8]
+        assert entered[9][0] == 2030 and entered[9][1][0] == 1900004, entered[9]
+        assert entered[9][1][1] == 11 and entered[9][1][2] == 21, entered[9]
+        assert entered[9][1][6] == '赵公明', entered[9]
+        assert [frame[1][2] for frame in entered[10:14]] == [1900001, 580001, 580003, 580005], entered[10:14]
 
         if args.exercise_monster:
             monster = entered[3][1]
@@ -518,36 +602,39 @@ def main() -> None:
             assert _escape() == [10, role_id], '1010 re-enter escape confirmation'
 
         if args.exercise_portal:
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(580001)])))
-            switched_world = expect(game_sock, 1110, cipher)
-            assert switched_world[1] == 50000 and switched_world[3] == '传送测试区', switched_world
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(12), integer(0)])))
-            switched_data = [receive_frame(game_sock, cipher) for _ in range(7)]
-            assert [x[0] for x in switched_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], switched_data
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(0)])))
-            switched_enter = [receive_frame(game_sock, cipher) for _ in range(5)]
-            assert [x[1][5] for x in switched_enter[:3]] == [13, 14, 105], switched_enter
-            assert switched_enter[0][1][4] == 0, switched_enter[0]
-            assert switched_enter[4][0] == 1126 and switched_enter[4][1][2] == 580002, switched_enter[4]
+            for forward_portal_id in (580001, 580003):
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(forward_portal_id)])))
+                switched_world = expect(game_sock, 1110, cipher)
+                assert switched_world[1] == 50000 and switched_world[3] == '传送测试区', switched_world
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(12), integer(0)])))
+                switched_data = [receive_frame(game_sock, cipher) for _ in range(7)]
+                assert [x[0] for x in switched_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], switched_data
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(0)])))
+                switched_enter = [receive_frame(game_sock, cipher) for _ in range(7)]
+                assert [x[1][5] for x in switched_enter[:3]] == [13, 14, 105], switched_enter
+                assert switched_enter[0][1][4] == 0, switched_enter[0]
+                assert switched_enter[4][0] == 1126 and switched_enter[4][1][2] == 580002, switched_enter[4]
+                assert [frame[1][2] for frame in switched_enter[5:7]] == [1900001, 580002], switched_enter[5:7]
 
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(580002)])))
-            returned_world = expect(game_sock, 1110, cipher)
-            assert returned_world[1] == 58 and returned_world[3] == '仙石村', returned_world
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(12), integer(0)])))
-            returned_data = [receive_frame(game_sock, cipher) for _ in range(7)]
-            assert [x[0] for x in returned_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], returned_data
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-            returned_enter = [receive_frame(game_sock, cipher) for _ in range(9)]
-            assert [x[1][5] for x in returned_enter[:3]] == [13, 14, 105], returned_enter
-            assert returned_enter[0][1][4] == 0, returned_enter[0]
-            assert returned_enter[4][0] == 1126 and returned_enter[4][1][2] == 580001, returned_enter[4]
-            assert returned_enter[5][0] == 1126 and returned_enter[5][1][2] == 580003, returned_enter[5]
-            assert returned_enter[6][0] == 1126 and returned_enter[6][1][2] == 1900002, returned_enter[6]
-            assert returned_enter[6][1][6] == '孙思邈', returned_enter[6]
-            assert returned_enter[7][0] == 1126 and returned_enter[7][1][2] == 1900003, returned_enter[7]
-            assert returned_enter[7][1][6] == '接引真人', returned_enter[7]
-            assert returned_enter[8][0] == 1126 and returned_enter[8][1][2] == 1900004, returned_enter[8]
-            assert returned_enter[8][1][6] == '赵公明', returned_enter[8]
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(7), integer(580002)])))
+                returned_world = expect(game_sock, 1110, cipher)
+                assert returned_world[1] == 58 and returned_world[3] == '长安', returned_world
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(12), integer(0)])))
+                returned_data = [receive_frame(game_sock, cipher) for _ in range(7)]
+                assert [x[0] for x in returned_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], returned_data
+                game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
+                returned_enter = [receive_frame(game_sock, cipher) for _ in range(14)]
+                assert [x[1][5] for x in returned_enter[:3]] == [13, 14, 105], returned_enter
+                assert returned_enter[0][1][4] == 0, returned_enter[0]
+                assert returned_enter[4][0] == 1126 and returned_enter[4][1][2] == 580001, returned_enter[4]
+                assert returned_enter[5][0] == 1126 and returned_enter[5][1][2] == 580003, returned_enter[5]
+                assert returned_enter[6][0] == 1126 and returned_enter[6][1][2] == 580005, returned_enter[6]
+                assert returned_enter[7][0] == 2030 and returned_enter[7][1][0] == 1900002, returned_enter[7]
+                assert returned_enter[7][1][6] == '孙思邈', returned_enter[7]
+                assert returned_enter[8][0] == 2030 and returned_enter[8][1][0] == 1900003, returned_enter[8]
+                assert returned_enter[8][1][6] == '接引真人', returned_enter[8]
+                assert returned_enter[9][0] == 2030 and returned_enter[9][1][0] == 1900004, returned_enter[9]
+                assert returned_enter[9][1][6] == '赵公明', returned_enter[9]
 
         menu_prefetches = (
             (1403, [byte(6), byte(0), byte(12), byte(2)], 1),

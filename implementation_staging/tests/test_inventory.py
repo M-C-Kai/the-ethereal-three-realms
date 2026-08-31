@@ -1,0 +1,139 @@
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from protocol import decode_frame, field_values
+import server as server_module
+from server import RoleStore, Settings, default_role, player_info
+
+
+class InventoryCapacityTests(unittest.TestCase):
+    def test_new_role_player_info_reports_40_bag_slots(self):
+        role = default_role(Settings())
+
+        message_id, fields = decode_frame(player_info(Settings(), role))
+        values = field_values(fields)
+
+        self.assertEqual(message_id, 1006)
+        self.assertEqual(values[63], 40)  # property 62: APK bag capacity
+
+    def test_legacy_role_gains_persisted_40_slot_bag_without_losing_items(self):
+        with tempfile.TemporaryDirectory() as directory:
+            role_path = Path(directory) / 'roles.json'
+            legacy_role = default_role(Settings())
+            legacy_role.pop('bag_capacity')
+            legacy_role['name'] = '旧档角色'
+            original_item_ids = [item['id'] for item in legacy_role['items']]
+            role_path.write_text(json.dumps({
+                'next_role_id': 10002,
+                'accounts': {'legacy': [legacy_role]},
+            }, ensure_ascii=False), encoding='utf-8')
+
+            migrated = RoleStore(Settings(role_data_file=str(role_path))).roles_for('legacy')[0]
+
+            self.assertEqual(migrated.get('bag_capacity'), 40)
+            self.assertEqual(migrated['name'], '旧档角色')
+            self.assertEqual([item['id'] for item in migrated['items']], original_item_ids)
+            persisted = json.loads(role_path.read_text(encoding='utf-8'))
+            self.assertEqual(persisted['accounts']['legacy'][0].get('bag_capacity'), 40)
+
+    def test_additional_created_role_starts_with_40_slot_bag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            role_path = Path(directory) / 'roles.json'
+            store = RoleStore(Settings(role_data_file=str(role_path)))
+            created = store.create('tester', '第二角色', 6, 1)
+
+            self.assertEqual(created.get('bag_capacity'), 40)
+            reloaded = RoleStore(Settings(role_data_file=str(role_path))).find(
+                'tester', int(created['id'])
+            )
+            self.assertIsNotNone(reloaded)
+            self.assertEqual(reloaded.get('bag_capacity'), 40)
+
+    def test_full_bag_rejects_unequip_without_moving_item(self):
+        move_to_bag = getattr(server_module, 'try_move_item_to_bag', None)
+        self.assertIsNotNone(move_to_bag, 'bag capacity transition helper is missing')
+        if move_to_bag is None:
+            return
+        role = {
+            'bag_capacity': 40,
+            'items': [
+                {'id': item_id, 'location': 'bag'}
+                for item_id in range(1, 41)
+            ],
+        }
+        equipped = {'id': 100, 'location': 'equipped'}
+        role['items'].append(equipped)
+
+        moved = move_to_bag(role, equipped)
+
+        self.assertFalse(moved)
+        self.assertEqual(equipped['location'], 'equipped')
+        self.assertEqual(
+            sum(item['location'] == 'bag' for item in role['items']),
+            40,
+        )
+
+    def test_available_slot_allows_unequip_into_bag(self):
+        role = {
+            'bag_capacity': 40,
+            'items': [
+                {'id': item_id, 'location': 'bag'}
+                for item_id in range(1, 40)
+            ],
+        }
+        equipped = {'id': 100, 'location': 'equipped'}
+        role['items'].append(equipped)
+
+        moved = server_module.try_move_item_to_bag(role, equipped)
+
+        self.assertTrue(moved)
+        self.assertEqual(equipped['location'], 'bag')
+        self.assertEqual(
+            sum(item['location'] == 'bag' for item in role['items']),
+            40,
+        )
+
+    def test_item_actions_require_the_apk_location_they_operate_on(self):
+        valid_location = getattr(server_module, 'item_action_location_valid', None)
+        self.assertIsNotNone(valid_location, 'item action location guard is missing')
+        if valid_location is None:
+            return
+        bag = {'location': 'bag'}
+        equipped = {'location': 'equipped'}
+        warehouse = {'location': 'warehouse'}
+
+        for action in (3, 4, 5):
+            self.assertTrue(valid_location(action, bag))
+            self.assertFalse(valid_location(action, equipped))
+            self.assertFalse(valid_location(action, warehouse))
+        self.assertTrue(valid_location(6, equipped))
+        self.assertFalse(valid_location(6, bag))
+        self.assertFalse(valid_location(6, warehouse))
+
+    def test_full_bag_skips_new_battle_drop_but_keeps_experience_reward(self):
+        role = default_role(Settings())
+        role['items'] = [
+            {
+                'id': item_id,
+                'template_id': 300_000_000 + item_id,
+                'location': 'bag',
+            }
+            for item_id in range(1, 41)
+        ]
+
+        reward_item, level_up = server_module.apply_battle_rewards(role)
+
+        self.assertIsNone(reward_item)
+        self.assertFalse(level_up)
+        self.assertEqual(role['experience'], 50)
+        self.assertEqual(len(role['items']), 40)
+
+
+if __name__ == '__main__':
+    unittest.main()

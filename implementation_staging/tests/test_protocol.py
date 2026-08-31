@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from map_o import decode_tile_rle
-from protocol import GameCipher, binary, byte, decode_frame, encode_frame, field_debug_entries, field_debug_value, field_type_name, field_values, integer, long_integer, short, string, TYPE_SHORT
+from protocol import GameCipher, binary, byte, decode_frame, encode_frame, field_debug_entries, field_debug_value, field_type_name, field_values, integer, long_integer, short, string
 import server as server_module
 from server import (
     RoleStore,
@@ -165,7 +165,7 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(created['race'], 1)
             self.assertEqual(created['gender'], 0)
             self.assertEqual(created.get('sect_id'), 0)
-            self.assertEqual(created['map_name'], '仙石村')
+            self.assertEqual(created['map_name'], '长安')
             self.assertEqual(len(role_items(created)), 16)
             self.assertEqual(
                 {int(item.get('equipment_slot', 0)) for item in role_items(created) if int(item.get('equipment_slot', 0)) > 0},
@@ -387,7 +387,7 @@ class ProtocolTests(unittest.TestCase):
             10: (7, 270001),
         }
         before = character_appearance(role)
-        self.assertEqual(before, {2: 0, 7: 0, 14: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0})
+        self.assertEqual(before, {7: 0, 14: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0})
         for item in role_items(role):
             if int(item.get('equipment_slot', 0)) in visible_appearance:
                 item['location'] = 'equipped'
@@ -503,9 +503,100 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual([decode_frame(frame)[0] for frame in frames], [1132, 1103])
         self.assertEqual(field_values(decode_frame(frames[1])[1])[:2], [0, 1])
 
+    def test_sect_skill_detail_request_returns_native_learning_conditions(self):
+        """1103/action 2 must answer the detail page instead of leaving its wait overlay set."""
+        role = default_role(Settings())
+        role['sect_id'] = 1
+
+        frame = server_module.sect_skill_detail_frame(role, 10001)
+
+        message_id, fields = decode_frame(frame)
+        self.assertEqual(message_id, 1103)
+        self.assertEqual(
+            field_values(fields),
+            [
+                2,
+                10001,
+                3,
+                1,
+                0,
+                0,
+                0,
+                0,
+                '本地测试技能效果：用于验证技能学习与升级。',
+                '协议测试技能说明',
+                '下一级效果：技能等级提高。',
+                0,
+                '',
+                0,
+            ],
+        )
+        self.assertEqual(
+            [field.type_id for field in fields],
+            [2, 4, 4, 4, 4, 4, 4, 4, 6, 6, 6, 4, 6, 4],
+        )
+
+    def test_sect_skill_learn_request_records_level_and_refreshes_both_containers(self):
+        """1103/action 3 must change role state and return frames that release and refresh the UI."""
+        role = default_role(Settings())
+        role['sect_id'] = 1
+
+        frames = server_module.sect_skill_request_frames(role, [3, 10001])
+
+        self.assertEqual(role['skill_levels'], {'10001': 4})
+        self.assertEqual([decode_frame(frame)[0] for frame in frames], [1103, 1103, 1132])
+        list_values = field_values(decode_frame(frames[0])[1])
+        self.assertEqual(list_values[:5], [0, 1, '协议测试技能', 10001, 4])
+        self.assertEqual(field_values(decode_frame(frames[1])[1]), [5])
+        character_values = field_values(decode_frame(frames[2])[1])
+        self.assertEqual(character_values[:5], [0, 1, '协议测试技能', 10001, 4])
+
+    def test_server_skill_transition_is_saved_and_survives_role_store_reload(self):
+        """The network transition boundary must persist the upgraded level, not only mutate memory."""
+        with tempfile.TemporaryDirectory() as temporary:
+            role_path = Path(temporary) / 'roles.json'
+            settings = Settings(role_data_file=str(role_path))
+            game_server = server_module.LocalGameServer(settings)
+            role = game_server.roles.roles_for('skill-persistence')[0]
+            role['sect_id'] = 1
+            game_server.roles.save()
+
+            frames = game_server.handle_sect_skill_request(role, [3, 10001])
+
+            self.assertEqual([decode_frame(frame)[0] for frame in frames], [1103, 1103, 1132])
+            reloaded = RoleStore(settings).find('skill-persistence', int(role['id']))
+            self.assertIsNotNone(reloaded)
+            self.assertEqual(reloaded['skill_levels'], {'10001': 4})
+
+    def test_sect_skill_level_normalizes_legacy_values_and_stops_at_maximum(self):
+        """Legacy values are wire-safe and action 3 never advances beyond level 20."""
+        role = default_role(Settings())
+        role['sect_id'] = 1
+        self.assertEqual(server_module.sect_skill_level(role), 3)
+        for raw, expected in [('bad', 3), (-5, 0), (99, 20)]:
+            role['skill_levels'] = {'10001': raw}
+            self.assertEqual(server_module.sect_skill_level(role), expected)
+
+        role['skill_levels'] = {'10001': 20}
+        frames = server_module.sect_skill_request_frames(role, [3, 10001])
+        self.assertEqual(role['skill_levels'], {'10001': 20})
+        self.assertEqual(field_values(decode_frame(frames[0])[1])[:5], [0, 1, '协议测试技能', 10001, 20])
+
+    def test_invalid_sect_skill_learn_still_acknowledges_without_mutating_role(self):
+        """A stale skill id must clear the native wait flag without inventing role state."""
+        role = default_role(Settings())
+        role['sect_id'] = 1
+
+        frames = server_module.sect_skill_request_frames(role, [3, 99999])
+
+        self.assertNotIn('skill_levels', role)
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(field_values(decode_frame(frames[0])[1]), [3])
+
     def test_map_flow(self):
         settings = Settings()
-        frames = map_data_frames(settings)
+        changan = server_module.settings_for_map(settings, 58)
+        frames = map_data_frames(changan)
         self.assertEqual([decode_frame(x)[0] for x in frames], [1010, 1407, 1407, 1407, 1407, 1407, 1010])
         header_values = field_values(decode_frame(frames[1])[1])
         tile_values = field_values(decode_frame(frames[3])[1])
@@ -517,23 +608,35 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(final_values[4:], [1, 12])
         self.assertEqual(decode_frame(frames[-1])[1][5].type_id, 3)
 
-        enter_frames = map_enter_frames(settings)
+        enter_frames = map_enter_frames(changan)
         enter_actions = [field_values(decode_frame(x)[1])[5] for x in enter_frames[:3]]
         self.assertEqual(enter_actions, [13, 14, 105])
         monster_id, monster_fields = decode_frame(enter_frames[3])
         self.assertEqual(monster_id, 1126)
-        self.assertEqual(field_values(monster_fields), [0, 1, settings.monster_id, 10, 6, 3_760_000, '试炼妖兽'])
+        self.assertEqual(field_values(monster_fields), [0, 1, changan.monster.id, 9, 28, -2_004_250, '试炼妖兽'])
         self.assertEqual([field.type_id for field in monster_fields], [2, 2, 4, 4, 4, 4, 6])
-        self.assertGreaterEqual(settings.monster_id, 1_000_000)
+        self.assertGreaterEqual(changan.monster.id, 1_000_000)
 
-        standalone_id, standalone_fields = decode_frame(map_monster_frame(settings))
+        standalone_id, standalone_fields = decode_frame(map_monster_frame(changan))
         self.assertEqual(standalone_id, 1126)
-        self.assertEqual(field_values(standalone_fields)[2], settings.monster_id)
+        self.assertEqual(field_values(standalone_fields)[2], changan.monster.id)
 
-        remove_id, remove_fields = decode_frame(map_object_remove_frame(settings.monster_id))
+        remove_id, remove_fields = decode_frame(map_object_remove_frame(changan.monster.id))
         self.assertEqual(remove_id, 1010)
-        self.assertEqual(field_values(remove_fields), [settings.monster_id, 0, 0, 0, 0, 18])
+        self.assertEqual(field_values(remove_fields), [changan.monster.id, 0, 0, 0, 0, 18])
         self.assertEqual([field.type_id for field in remove_fields], [4, 3, 3, 4, 4, 3])
+
+    def test_current_map_definition_drives_battle_monster(self):
+        settings = Settings()
+        changan = server_module.settings_for_map(settings, 58)
+        role = default_role(settings)
+
+        _, monster_fields = decode_frame(battle_actor_frames(role, changan)[1])
+        values = field_values(monster_fields)
+
+        self.assertEqual(values[0], -2_004_251)
+        self.assertEqual(values[6], '试炼妖兽')
+        self.assertEqual(values[9], 1_900_001)
 
     def test_map_object_interaction_2031_layout(self):
         object_id, object_x, object_y, action = map_object_interaction_values(
@@ -629,40 +732,39 @@ class ProtocolTests(unittest.TestCase):
         end_id, end_fields = decode_frame(battle_end_frame())
         self.assertEqual((end_id, field_values(end_fields)), (1040, [4]))
 
-    def test_battle_actor_frames_match_apk_participant_parser(self):
-        role = default_role(Settings())
-        frames = battle_actor_frames(role, Settings())
-        self.assertEqual(len(frames), 2)
-        player_id, player_fields = decode_frame(frames[0])
-        self.assertEqual(player_id, 1048)
-        self.assertEqual(len(player_fields), 22)
-        self.assertEqual(
-            [field.type_id for field in player_fields],
-            [4, 4, 4, 4, 4, 4, 6, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 3],
-        )
-        self.assertEqual(
-            field_values(player_fields),
-            [20000, 0, 0, 100, 0, 2, role['name'], 1, 1, role['id'], 100, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0, int(role['model'])],
-        )
-        self.assertEqual(field_values(player_fields)[5], 2)
-        self.assertEqual(field_values(player_fields)[7:10], [1, 1, role['id']])
-        monster_id, monster_fields = decode_frame(frames[1])
-        self.assertEqual(monster_id, 1048)
-        self.assertEqual(len(monster_fields), 22)
-        self.assertEqual(
-            field_values(monster_fields),
-            [3_759_999, 0, 0, 100, 0, 1, Settings().monster_name, 2, 1, Settings().monster_id, 100, 100, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0],
-        )
-        self.assertEqual(field_values(monster_fields)[7:10], [2, 1, Settings().monster_id])
-        self.assertEqual(field_values(monster_fields)[5], 1)
+    def test_battle_actor_frames_preserve_structure_and_runtime_identity(self):
+        settings = Settings(monster_id=1_900_123, monster_name='动态妖兽')
+        field_types = [4, 4, 4, 4, 4, 4, 6, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 3]
+
+        for role_id, role_name in ((10031, '动态角色甲'), (10072, '动态角色乙')):
+            with self.subTest(role_id=role_id, role_name=role_name):
+                role = default_role(settings)
+                role['id'] = role_id
+                role['name'] = role_name
+                frames = battle_actor_frames(role, settings)
+
+                self.assertEqual(len(frames), 2)
+                player_id, player_fields = decode_frame(frames[0])
+                monster_id, monster_fields = decode_frame(frames[1])
+                self.assertEqual((player_id, monster_id), (1048, 1048))
+                self.assertEqual((len(player_fields), len(monster_fields)), (22, 22))
+                self.assertEqual([field.type_id for field in player_fields], field_types)
+                self.assertEqual([field.type_id for field in monster_fields], field_types)
+
+                player_values = field_values(player_fields)
+                monster_values = field_values(monster_fields)
+                self.assertEqual(player_values[6], role_name)
+                self.assertEqual(player_values[9], role_id)
+                self.assertEqual(monster_values[6], settings.monster_name)
+                self.assertEqual(monster_values[9], settings.monster_id)
 
         # A full 1048 refresh remains available for resync/reconnect paths,
         # while normal combat HP is changed by the type-22 effect in 1042.
         state = LocalBattleState()
-        state.begin(int(role['id']), Settings().monster_id)
+        state.begin(int(role['id']), settings.monster_id)
         state.monster_hp = 90
         update_id, update_fields = decode_frame(
-            battle_actor_update_frame(role, Settings(), state, state.monster_id)
+            battle_actor_update_frame(role, settings, state, state.monster_id)
         )
         self.assertEqual(update_id, 1048)
         self.assertEqual(field_values(update_fields)[3], 90)
@@ -782,11 +884,13 @@ class ProtocolTests(unittest.TestCase):
     def test_battle_escape_leaves_hp_and_monster_state_untouched(self):
         state = LocalBattleState()
         state.begin(10001, 900001)
+        state.map_id = 58
+        state.player_tile = (9, 28)
         full_monster_hp = state.monster_hp
         full_player_hp = state.player_hp
         # Escape mirrors a clean finish(): no attack HRP/no counterattack and
         # the monster remains on the map so the player can re-engage it.
-        state.finish()
+        self.assertTrue(state.escape())
         self.assertFalse(state.active)
         self.assertEqual(state.phase, 'idle')
         self.assertFalse(state.monster_defeated)
@@ -804,10 +908,9 @@ class ProtocolTests(unittest.TestCase):
         # player escape request. It must never take the player-escape branch.
         self.assertFalse(is_player_escape_command(10))
 
-    def test_final_escape_close_is_single_1041_without_victory_frames(self):
-        # After the separate 1042 departure queue is acknowledged, the final
-        # S->C close is exactly one 1041 [10, player_id] frame (main/e.V closes
-        # the battle UI and runs cleanup). It must NOT carry any victory-settle
+    def test_escape_response_is_single_1041_without_victory_frames(self):
+        # The server immediately hands departure and closure to the APK with
+        # one 1041 [10, player_id] frame. It must NOT carry any victory-settle
         # frame: no 1040/action=4, no 1010/action=18 monster removal, and no
         # reward/EXP frame (1049/1129 settle overlay).
         escape = battle_escape_frame(10003)
@@ -826,7 +929,9 @@ class ProtocolTests(unittest.TestCase):
         # whereas victory sets monster_defeated=True.
         escaped = LocalBattleState()
         escaped.begin(10001, 1900001)
-        escaped.finish()
+        escaped.map_id = 58
+        escaped.player_tile = (9, 28)
+        self.assertTrue(escaped.escape())
         self.assertFalse(escaped.active)
         self.assertEqual(escaped.phase, 'idle')
         self.assertFalse(escaped.monster_defeated)
@@ -938,55 +1043,142 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual((manual_role['level'], manual_role['experience']), (1, 100))
 
     def test_portal_actor_and_target_map_use_bundled_ref(self):
-        settings = Settings(
-            portal_enabled=True,
-            portals=[{'id': 580001, 'name': '跨地图传送点', 'x': 55, 'y': 55}],
-        )
+        settings = Settings()
+        changan = server_module.settings_for_map(settings, 58)
         self.assertEqual(settings.portal_target_map_o_file, 'maps/50000.map.o')
-        portal_id, portal_fields = decode_frame(map_portal_frames(settings)[0])
+        portal_id, portal_fields = decode_frame(map_portal_frames(changan)[0])
         self.assertEqual(portal_id, 1126)
         self.assertEqual(field_values(portal_fields)[0:5], [0, 1, 580001, 55, 55])
-        target = __import__('server').settings_for_map(settings, settings.portal_target_map_id)
-        self.assertEqual((target.monster_x, target.monster_y), (12, 8))
-        self.assertTrue(target.spawn_return_portal)
+        target = server_module.settings_for_map(settings, 50000)
+        self.assertEqual((target.monster.x, target.monster.y), (12, 8))
+        self.assertEqual([portal.id for portal in target.portals], [580002])
         entered = map_enter_frames(target)
         self.assertEqual(field_values(decode_frame(entered[0])[1])[4:], [0, 13])
-        self.assertEqual(field_values(decode_frame(entered[-1])[1])[2], settings.return_portal_id)
+        self.assertEqual(field_values(decode_frame(entered[-1])[1])[2], 580002)
 
     def test_forward_portals_spawn_all_entries_on_origin_map(self):
-        settings = Settings(
-            portal_enabled=True,
-            portals=[
-                {'id': 580001, 'name': '跨地图传送点', 'x': 55, 'y': 55},
-                {'id': 580003, 'name': '跨地图传送点', 'x': 34, 'y': 7},
-            ],
-        )
-        frames = map_portal_frames(settings)
-        self.assertEqual(len(frames), 2)
+        settings = Settings()
+        changan = server_module.settings_for_map(settings, 58)
+        frames = map_portal_frames(changan)
+        self.assertEqual(len(frames), 3)
         ids = [field_values(decode_frame(f)[1])[2] for f in frames]
-        self.assertEqual(ids, [580001, 580003])
+        self.assertEqual(ids, [580001, 580003, 580005])
         self.assertEqual(field_values(decode_frame(frames[1])[1])[3:5], [34, 7])
-        entered = map_enter_frames(settings)
+        self.assertEqual(field_values(decode_frame(frames[2])[1])[3:5], [62, 67])
+        entered = map_enter_frames(changan)
         self.assertEqual(field_values(decode_frame(entered[4])[1])[2], 580001)
         self.assertEqual(field_values(decode_frame(entered[5])[1])[2], 580003)
+        self.assertEqual(field_values(decode_frame(entered[6])[1])[2], 580005)
 
     def test_npc_actor_spawns_only_on_map_58(self):
-        npcs = [
-            {'id': 1_900_002, 'name': '孙思邈', 'label': '药王', 'x': 50, 'y': 64},
-            {'id': 1_900_003, 'name': '接引真人', 'label': '接引', 'x': 34, 'y': 50},
-            {'id': 1_900_004, 'name': '赵公明', 'label': '赵公明', 'x': 11, 'y': 21},
-        ]
-        settings = Settings(npc_enabled=True, map_id=58, npcs=npcs)
-        frames = map_npc_frames(settings)
+        settings = Settings()
+        changan = server_module.settings_for_map(settings, 58)
+        frames = map_npc_frames(changan)
         self.assertEqual(len(frames), 3)
         ids = [field_values(decode_frame(f)[1]) for f in frames]
-        self.assertEqual(ids[0][2:], [1_900_002, 50, 64, settings.monster_model, '孙思邈'])
-        self.assertEqual(ids[1][2:], [1_900_003, 34, 50, settings.monster_model, '接引真人'])
-        self.assertEqual(ids[2][2:], [1_900_004, 11, 21, settings.monster_model, '赵公明'])
-        on_58 = map_enter_frames(settings)
+        self.assertEqual(ids[0][0:3], [1_900_002, 50, 64])
+        self.assertEqual(ids[0][6], '孙思邈')
+        self.assertEqual(ids[1][0:3], [1_900_003, 34, 50])
+        self.assertEqual(ids[2][0:3], [1_900_004, 11, 21])
+        on_58 = map_enter_frames(changan)
         self.assertTrue(all(f in on_58 for f in frames))
-        off_map = map_enter_frames(Settings(npc_enabled=True, map_id=50000, npcs=npcs))
+        off_map = map_enter_frames(server_module.settings_for_map(settings, 50000))
         self.assertFalse(any(f in off_map for f in frames))
+
+    def test_sect_skill_screen_frame_places_screen_and_mode_in_apk_read_indices(self):
+        build_frame = getattr(server_module, 'sect_skill_screen_frame', None)
+        self.assertIsNotNone(build_frame, 'sect mentor screen frame is missing')
+
+        message_id, fields = decode_frame(build_frame())
+
+        self.assertEqual(message_id, 1010)
+        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4, 4, 3])
+        self.assertEqual(field_values(fields), [0, 0, 0, 1, 179, 69])
+
+    def test_kunlun_mentor_dialogue_exposes_learning_only_to_kunlun_role(self):
+        settings = Settings(map_registry=server_module.default_map_registry())
+        kunlun = server_module.settings_for_map(settings, 60001)
+        mentor = kunlun.npcs[0]
+        kunlun_role = default_role(settings)
+        kunlun_role['sect_id'] = 1
+
+        enter_action = field_values(decode_frame(map_enter_frames(kunlun)[0])[1])
+        self.assertEqual(enter_action[4:], [0, 13])
+
+        message_id, fields = decode_frame(server_module.map_npc_dialogue_frames(mentor, kunlun_role)[0])
+        values = field_values(fields)
+
+        self.assertEqual(message_id, 2032)
+        self.assertEqual(values[:2], [1900101, 4])
+        self.assertEqual(values[14:17], [1, 2, '学习门派技能'])
+        self.assertEqual(values[22:25], [0, 2, '结束对话'])
+        self.assertEqual(values[31], 100)
+
+        outsider = default_role(settings)
+        outsider['sect_id'] = 2
+        _, outsider_fields = decode_frame(server_module.map_npc_dialogue_frames(mentor, outsider)[0])
+        outsider_values = field_values(outsider_fields)
+        self.assertEqual(outsider_values[:2], [1900101, 3])
+        self.assertEqual(outsider_values[8], '仅限昆仑弟子学习。')
+        self.assertNotIn('学习门派技能', outsider_values)
+
+        ordinary = server_module.settings_for_map(settings, 58).npcs[0]
+        _, ordinary_fields = decode_frame(server_module.map_npc_dialogue_frames(ordinary, kunlun_role)[0])
+        ordinary_values = field_values(ordinary_fields)
+        self.assertEqual(ordinary_values[:2], [1900002, 3])
+        self.assertNotIn('学习门派技能', ordinary_values)
+
+    def test_active_kunlun_mentor_option_opens_learning_once(self):
+        state_type = getattr(server_module, 'LocalNpcDialogueState', None)
+        route_option = getattr(server_module, 'npc_dialogue_option_frames', None)
+        self.assertIsNotNone(state_type, 'NPC dialogue state is missing')
+        self.assertIsNotNone(route_option, 'NPC dialogue option router is missing')
+        settings = Settings(map_registry=server_module.default_map_registry())
+        role = default_role(settings)
+        role.update({'sect_id': 1, 'map_id': 60001, 'map_name': '昆仑', 'map_x': 8, 'map_y': 6})
+        state = state_type()
+        state.select(60001, 1900101)
+
+        frames = route_option(settings, role, state, 1)
+
+        self.assertEqual([decode_frame(frame)[0] for frame in frames], [1010, 1010])
+        self.assertEqual(field_values(decode_frame(frames[0])[1])[-1], 7)
+        self.assertEqual(field_values(decode_frame(frames[1])[1]), [0, 0, 0, 1, 179, 69])
+        self.assertIsNone(state.map_id)
+        self.assertIsNone(state.npc_id)
+
+        replay = route_option(settings, role, state, 1)
+        self.assertEqual(len(replay), 1)
+        self.assertEqual(field_values(decode_frame(replay[0])[1])[-1], 7)
+
+    def test_invalid_or_stale_mentor_option_only_clears_wait_state(self):
+        settings = Settings(map_registry=server_module.default_map_registry())
+        base_role = default_role(settings)
+        base_role.update({'sect_id': 1, 'map_id': 60001, 'map_name': '昆仑', 'map_x': 8, 'map_y': 6})
+        cases = [
+            ({'sect_id': 2}, 60001, 1900101, 1),
+            ({}, 58, 1900101, 1),
+            ({}, 60001, 1900101, 0),
+            ({}, 60001, 1900002, 1),
+        ]
+        for role_updates, map_id, npc_id, option_id in cases:
+            with self.subTest(role_updates=role_updates, map_id=map_id, npc_id=npc_id, option_id=option_id):
+                role = dict(base_role)
+                role.update(role_updates)
+                state = server_module.LocalNpcDialogueState()
+                state.select(map_id, npc_id)
+
+                frames = server_module.npc_dialogue_option_frames(
+                    settings,
+                    role,
+                    state,
+                    option_id,
+                )
+
+                self.assertEqual(len(frames), 1)
+                self.assertEqual(field_values(decode_frame(frames[0])[1])[-1], 7)
+                self.assertIsNone(state.map_id)
+                self.assertIsNone(state.npc_id)
 
     def test_field_debug_helpers_are_read_only(self):
         fields = [integer(60), short(34), string('月华'), binary(b'abc')]
@@ -1019,7 +1211,6 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(message_id, 1006)
         self.assertEqual(snapshot['model'], values[7])
         self.assertEqual(snapshot['properties'][6], values[7])
-        self.assertEqual(snapshot['properties'][2], values[3])
         self.assertEqual(snapshot['properties'][7], values[8])
         for property_index in (14, 15, 16, 17, 18, 19, 20):
             self.assertEqual(snapshot['properties'][property_index], values[property_index + 1])
@@ -1143,196 +1334,21 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(field_values(negative_fields)[21], 0)
         self.assertEqual(field_values(positive_fields)[21], 0)
 
-    def test_player_1048_field21_is_role_model_face_preset(self):
-        # kind=1 h.r() reads Vector[21] as y()/M() selector, matching map
-        # property 6.  Field 8 remains the battle station.  Field 2 carries the
-        # weapon code (character_appearance property 7); default_role has no
-        # weapon so it is 0, not model*10.  Field 13 is the hair selector
-        # (property 2) and is 0 without a hair preset.  Appearance layers 14-20
-        # stay on character_appearance.
-        for model in (19, 6, 7):
-            role = default_role(Settings())
-            role['model'] = model
-            appearance = character_appearance(role)
-            frames = battle_actor_frames(role, Settings())
-            player_id, player_fields = decode_frame(frames[0])
-            monster_id, monster_fields = decode_frame(frames[1])
-            self.assertEqual(player_id, 1048)
-            self.assertEqual(monster_id, 1048)
-            player_values = field_values(player_fields)
-            self.assertEqual(player_fields[21].type_id, TYPE_SHORT)
-            self.assertEqual(player_values[21], model)
-            self.assertEqual(player_values[2], int(appearance.get(7, 0)))
-            self.assertEqual(player_values[13], int(appearance.get(2, 0)))
-            self.assertEqual(player_values[7], 1)
-            self.assertEqual(player_values[8], 1)
-            self.assertEqual(
-                player_values[14:21],
-                [
-                    int(appearance.get(14, 0)),
-                    int(appearance.get(15, 0)),
-                    int(appearance.get(16, 0)),
-                    int(appearance.get(17, 0)),
-                    int(appearance.get(18, 0)),
-                    int(appearance.get(19, 0)),
-                    int(appearance.get(20, 0)),
-                ],
-            )
-            self.assertEqual(field_values(monster_fields)[21], 0)
-            self.assertEqual(monster_fields[21].type_id, TYPE_SHORT)
-
-    @staticmethod
-    def _role_with_equipped_weapon(model: int, appearance_value: int):
-        role = default_role(Settings())
-        role['model'] = model
-        role['items'] = [
-            {
-                'id': 9001,
-                'template_id': 100001001,
-                'name': '青锋剑',
-                'location': 'equipped',
-                'quantity': 1,
-                'max_quantity': 1,
-                'appearance_properties': {'7': appearance_value},
-            }
-        ]
-        return role
-
-    def test_player_1048_weapon_hair_yuehua_qingfeng(self):
-        # 月华 (model=19) equipping 青锋剑: map property[7]=270001 must flow into
-        # battle field[2]; hair field[13] uses property[2] (none -> 0); field[21]
-        # stays the face/body model 19 (locked, unchanged); layers 14-20 unchanged.
-        role = self._role_with_equipped_weapon(19, 270001)
-        appearance = character_appearance(role)
-        self.assertEqual(appearance[7], 270001)
-        self.assertEqual(appearance[2], 0)
-        frames = battle_actor_frames(role, Settings())
-        player_id, player_fields = decode_frame(frames[0])
-        values = field_values(player_fields)
-        self.assertEqual(player_id, 1048)
-        self.assertEqual(len(player_fields), 22)
-        self.assertEqual(values[2], 270001)
-        self.assertEqual(values[13], 0)
-        self.assertEqual(values[21], 19)
-        self.assertEqual(values[7], 1)
-        self.assertEqual(
-            values[14:21],
-            [
-                int(appearance.get(14, 0)),
-                int(appearance.get(15, 0)),
-                int(appearance.get(16, 0)),
-                int(appearance.get(17, 0)),
-                int(appearance.get(18, 0)),
-                int(appearance.get(19, 0)),
-                int(appearance.get(20, 0)),
-            ],
-        )
-        # h.f(27000) -> 140000 is served directly; no new alias required.
-        path = battle_resource_path(140000)
-        self.assertIsNotNone(path)
-        self.assertEqual(path.name, '140000.dat')
-
-    def test_player_1048_no_weapon_field2_zero(self):
-        # An unarmed player carries no weapon layer, so field[2]=0 like map
-        # property[7]=0.  field[13] hair is also 0 without a preset.
-        role = self._role_with_equipped_weapon(19, 0)
-        _, player_fields = decode_frame(battle_actor_frames(role, Settings())[0])
-        values = field_values(player_fields)
-        self.assertEqual(values[2], 0)
-        self.assertEqual(values[13], 0)
-        self.assertEqual(values[21], 19)
-
-    def test_player_1048_hair_field13_uses_property2_selector(self):
-        # A role with an explicit hair preset (property[2]) feeds battle field[13].
-        # Without any hair storage field[13] stays 0, same as the map, instead of
-        # the old hard-coded max-MP 100.  Monsters are untouched (still 100).
-        role = default_role(Settings())
-        role['model'] = 19
-        role['items'] = [
-            {
-                'id': 9001,
-                'template_id': 100001001,
-                'name': '青锋剑',
-                'location': 'equipped',
-                'quantity': 1,
-                'max_quantity': 1,
-                'appearance_properties': {'7': 270001, '2': 0},
-            }
-        ]
-        self.assertEqual(character_appearance(role)[2], 0)
-        frames = battle_actor_frames(role, Settings())
-        player_values = field_values(decode_frame(frames[0])[1])
-        monster_values = field_values(decode_frame(frames[1])[1])
-        self.assertEqual(player_values[13], 0)
-        self.assertEqual(monster_values[13], 100)
-
-
 class BattleEscapeSettlementTest(unittest.TestCase):
-    """Escape plays the original fighter-exit queue before closing battle."""
+    """Escape immediately hands departure and closure to the native client."""
 
-    def test_escape_request_enters_ack_phase_before_sending_animation(self):
-        # The network handler must not merely build the animation frames: it
-        # must arm the acknowledgement phase before they are sent, otherwise
-        # the returning 1040/action=2 is treated as an ordinary round ACK and
-        # the final 1041 close is never emitted.
-        begin_request = getattr(server_module, 'battle_escape_request_frames', None)
-        self.assertIsNotNone(begin_request, 'escape request transition is missing')
-
-        state = LocalBattleState()
-        state.begin(10001, 1900001)
-        frames = begin_request(state, 1)
-
-        self.assertEqual(state.phase, 'escape_ack')
-        self.assertTrue(state.active)
-        self.assertEqual([decode_frame(frame)[0] for frame in frames], [1042, 1040])
-
-    def test_escape_animation_batch_uses_original_exit_effect_and_show_barrier(self):
-        # Regression caught: replying with 1041/10 or 1040/4 here closes the
-        # page before the original main/b fighter-exit state machine can run.
-        build_frames = getattr(server_module, 'battle_escape_animation_frames', None)
-        self.assertIsNotNone(build_frames, 'escape animation frame builder is missing')
-
-        state = LocalBattleState()
-        state.begin(10001, 1900001)
-        frames = build_frames(state, 1)
-        self.assertEqual(len(frames), 2)
-
-        action_id, action_fields = decode_frame(frames[0])
-        self.assertEqual(action_id, 1042)
-        self.assertEqual(
-            [field.type_id for field in action_fields],
-            [4, 4, 4, 2, 2, 2, 4, 4, 6, 4, 4, 4, 4, 4, 6],
-        )
-        self.assertEqual(
-            field_values(action_fields),
-            [1, 10001, 10001, 6, 1, 0, 0, 0, '逃跑', 1, 10001, 1, 58, 0, ''],
-        )
-
-        show_id, show_fields = decode_frame(frames[1])
-        self.assertEqual(show_id, 1040)
-        self.assertEqual(field_values(show_fields)[:2], [2, 1])
-        self.assertNotIn(1041, [decode_frame(frame)[0] for frame in frames])
-
-    def test_escape_state_finishes_only_after_animation_ack(self):
-        # Regression caught: finishing immediately after command 6 allows the
-        # final close to overtake the animation and fails to guard re-triggers.
+    def test_escape_request_finishes_immediately_with_single_native_close(self):
         state = LocalBattleState()
         state.begin(10001, 1900001)
         state.map_id = 58
         state.player_tile = (9, 28)
 
-        begin_escape = getattr(state, 'begin_escape', None)
-        complete_escape = getattr(state, 'complete_escape', None)
-        self.assertIsNotNone(begin_escape, 'escape acknowledgement state is missing')
-        self.assertIsNotNone(complete_escape, 'escape completion transition is missing')
+        frames = server_module.battle_escape_request_frames(state, 1)
 
-        begin_escape()
-        self.assertTrue(state.active)
-        self.assertEqual(state.phase, 'escape_ack')
-        self.assertIsNone(state.escape_guard)
-        self.assertEqual((state.player_hp, state.monster_hp), (100, 100))
-
-        complete_escape()
+        self.assertEqual(len(frames), 1)
+        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(message_id, 1041)
+        self.assertEqual(field_values(fields), [10, 10001])
         self.assertFalse(state.active)
         self.assertEqual(state.phase, 'idle')
         self.assertFalse(state.monster_defeated)
@@ -1342,30 +1358,15 @@ class BattleEscapeSettlementTest(unittest.TestCase):
             {'map_id': 58, 'monster_id': 1900001, 'player_id': 10001, 'origin': (9, 28)},
         )
 
-    def test_matching_animation_ack_emits_only_final_escape_close(self):
-        # Regression caught: victory settlement/removal/reward frames must not
-        # leak into escape, and a mismatched acknowledgement must not close it.
-        complete_after_ack = getattr(server_module, 'battle_escape_completion_frames', None)
-        self.assertIsNotNone(complete_after_ack, 'escape acknowledgement handler is missing')
-
+    def test_escape_request_without_active_battle_is_ignored(self):
         state = LocalBattleState()
-        state.begin(10001, 1900001)
-        state.map_id = 58
-        state.player_tile = (9, 28)
-        state.begin_escape()
 
-        self.assertEqual(complete_after_ack(state, 2, 99), [])
-        self.assertTrue(state.active)
-        self.assertEqual(state.phase, 'escape_ack')
+        frames = server_module.battle_escape_request_frames(state, 1)
 
-        frames = complete_after_ack(state, 2, 1)
-        self.assertEqual(len(frames), 1)
-        close_id, close_fields = decode_frame(frames[0])
-        self.assertEqual(close_id, 1041)
-        self.assertEqual(field_values(close_fields), [10, 10001])
+        self.assertEqual(frames, [])
         self.assertFalse(state.active)
         self.assertEqual(state.phase, 'idle')
-        self.assertIsNotNone(state.escape_guard)
+        self.assertIsNone(state.escape_guard)
 
     def test_guarded_1010_interaction_ack_clears_wait_without_map_action(self):
         # b/ab.aj() sets main/t's wait flags before sending C->S 1010/7.  The
