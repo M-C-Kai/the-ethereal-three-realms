@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 
 import server
-from server import Settings, map_npc_frames, map_enter_frames
+from server import Settings, map_npc_frames, map_enter_frames, settings_for_map
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG = REPO_ROOT / "config.json"
@@ -33,19 +33,18 @@ class NpcSpawnTests(unittest.TestCase):
         self.assertEqual(len(models), 3)
 
     def test_map_npc_frames_only_on_map_58(self):
-        self.settings.map_id = 58
-        self.assertEqual(len(map_npc_frames(self.settings)), 3)
-        self.settings.map_id = 57
-        self.assertEqual(map_npc_frames(self.settings), [])
-        self.settings.map_id = 58
-        self.settings.npc_enabled = False
-        self.assertEqual(map_npc_frames(self.settings), [])
+        self.assertEqual(len(map_npc_frames(settings_for_map(self.settings, 58))), 3)
+        self.assertEqual(map_npc_frames(settings_for_map(self.settings, 50000)), [])
+        kunlun = settings_for_map(self.settings, 60001)
+        self.assertEqual([npc.id for npc in kunlun.npcs], [1900101])
+        self.assertEqual(len(map_npc_frames(kunlun)), 1)
+        self.assertIsNone(kunlun.monster)
 
     def test_map_enter_frames_includes_npc_frames_on_map_58(self):
-        self.settings.map_id = 58
-        frames = map_enter_frames(self.settings)
+        changan = settings_for_map(self.settings, 58)
+        frames = map_enter_frames(changan)
         self.assertGreaterEqual(len(frames), 3 + 1)  # 3 npc + monster (at least)
-        self.assertEqual(len(map_npc_frames(self.settings)), 3)
+        self.assertEqual(len(map_npc_frames(changan)), 3)
 
 
 if __name__ == "__main__":

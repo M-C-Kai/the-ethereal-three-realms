@@ -8,39 +8,128 @@
   "role_id": 10001,
   "role_name": "本地侠客",
   "role_model": 2000,
-  "map_id": 58,
-  "map_name": "仙石村",
-  "map_width": 96,
-  "map_height": 96,
-  "spawn_x": 60,
-  "spawn_y": 67,
-  "monster_id": 1900001,
-  "monster_name": "试炼妖兽",
-  "monster_model": -2004250,
-  "monster_x": 9,
-  "monster_y": 28,
-  "portal_enabled": true,
-  "portals": [
-    {"id": 580001, "name": "跨地图传送点", "x": 55, "y": 55},
-    {"id": 580003, "name": "跨地图传送点", "x": 34, "y": 7}
-  ],
-  "portal_target_map_id": 50000,
-  "portal_target_map_name": "传送测试区",
-  "portal_target_spawn_x": 8,
-  "portal_target_spawn_y": 6,
-  "portal_target_map_o_file": "maps/50000.map.o",
-  "portal_target_map_ref_available": true,
-  "return_portal_id": 580002,
-  "return_portal_name": "返回仙石村",
-  "return_portal_x": 9,
-  "return_portal_y": 6,
-  "npc_enabled": true,
-  "npcs": [
-    {"id": 1900002, "name": "孙思邈", "label": "药王", "x": 50, "y": 64},
-    {"id": 1900003, "name": "接引真人", "label": "接引", "x": 34, "y": 50},
-    {"id": 1900004, "name": "赵公明", "label": "赵公明", "x": 11, "y": 21}
-  ],
+  "default_map_id": 58,
+  "maps": {
+    "58": {
+      "name": "长安",
+      "map_o_file": "maps/58.map.o",
+      "map_ref_available": true,
+      "fallback_width": 96,
+      "fallback_height": 96,
+      "spawn": {"x": 60, "y": 67},
+      "monster": {
+        "id": 1900001,
+        "name": "试炼妖兽",
+        "model": -2004250,
+        "x": 9,
+        "y": 28,
+        "direction": 0
+      },
+      "npcs": [
+        {"id": 1900002, "name": "孙思邈", "label": "药王", "x": 50, "y": 64},
+        {"id": 1900003, "name": "接引真人", "label": "接引", "x": 34, "y": 50},
+        {"id": 1900004, "name": "赵公明", "label": "赵公明", "x": 11, "y": 21}
+      ],
+      "portals": [
+        {
+          "id": 580001,
+          "name": "跨地图传送点",
+          "model": -2004250,
+          "x": 55,
+          "y": 55,
+          "direction": 0,
+          "target_map_id": 50000,
+          "target_x": 8,
+          "target_y": 6
+        },
+        {
+          "id": 580003,
+          "name": "跨地图传送点",
+          "model": -2004250,
+          "x": 34,
+          "y": 7,
+          "direction": 0,
+          "target_map_id": 50000,
+          "target_x": 8,
+          "target_y": 6
+        },
+        {
+          "id": 580005,
+          "name": "昆仑传送阵",
+          "model": -2004250,
+          "x": 62,
+          "y": 67,
+          "direction": 0,
+          "target_map_id": 60001,
+          "target_x": 8,
+          "target_y": 6
+        }
+      ]
+    },
+    "50000": {
+      "name": "传送测试区",
+      "map_o_file": "maps/50000.map.o",
+      "map_ref_available": true,
+      "fallback_width": 90,
+      "fallback_height": 90,
+      "spawn": {"x": 8, "y": 6},
+      "monster": {
+        "id": 1900001,
+        "name": "试炼妖兽",
+        "model": -2004250,
+        "x": 12,
+        "y": 8,
+        "direction": 0
+      },
+      "npcs": [],
+      "portals": [
+        {
+          "id": 580002,
+          "name": "返回长安",
+          "model": -2004250,
+          "x": 9,
+          "y": 6,
+          "direction": 0,
+          "target_map_id": 58,
+          "target_x": 60,
+          "target_y": 67
+        }
+      ]
+    },
+    "60001": {
+      "name": "昆仑",
+      "map_o_file": "maps/60001.map.o",
+      "map_ref_available": true,
+      "fallback_width": 32,
+      "fallback_height": 32,
+      "spawn": {"x": 8, "y": 6},
+      "npcs": [
+        {
+          "id": 1900101,
+          "name": "昆仑导师",
+          "label": "昆仑导师",
+          "introduction": "昆仑道法，贵在潜心修行。",
+          "x": 12,
+          "y": 8,
+          "service": "sect_skill_mentor",
+          "sect_id": 1
+        }
+      ],
+      "portals": [
+        {
+          "id": 6000101,
+          "name": "返回长安",
+          "model": -2004250,
+          "x": 9,
+          "y": 6,
+          "direction": 0,
+          "target_map_id": 58,
+          "target_x": 60,
+          "target_y": 67
+        }
+      ]
+    }
+  },
   "heartbeat_interval_seconds": 25,
-  "map_o_file": "maps/58.map.o",
   "role_data_file": "data/roles.json"
 }

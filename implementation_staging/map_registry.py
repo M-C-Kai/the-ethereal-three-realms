@@ -28,6 +28,8 @@ class MapActorDefinition:
     label: str = ''
     dat_id: int = 0
     introduction: str = ''
+    service: str = ''
+    sect_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class MapRegistry:
 
 
 def _actor(payload: dict[str, Any]) -> MapActorDefinition:
+    raw_sect_id = payload.get('sect_id')
     return MapActorDefinition(
         id=int(payload['id']),
         name=str(payload['name']),
@@ -75,6 +78,8 @@ def _actor(payload: dict[str, Any]) -> MapActorDefinition:
         label=str(payload.get('label', '')),
         dat_id=int(payload.get('dat_id', 0)),
         introduction=str(payload.get('introduction', '')),
+        service=str(payload.get('service', '')),
+        sect_id=None if raw_sect_id is None else int(raw_sect_id),
     )
 
 
@@ -258,6 +263,13 @@ def _validate_registry(registry: MapRegistry, map_keys: dict[int, int]) -> None:
             object_ids.add(actor.id)
             if not _coordinate_in_bounds(actor.x, actor.y, definition):
                 raise ValueError(f'actor {actor.id} coordinate is out of bounds on map {definition.id}')
+            if actor.service not in ('', 'sect_skill_mentor'):
+                raise ValueError(f'unknown NPC service {actor.service!r} on actor {actor.id}')
+            if actor.service == 'sect_skill_mentor':
+                if actor.sect_id is None:
+                    raise ValueError(f'sect skill mentor {actor.id} requires sect_id')
+                if not 1 <= actor.sect_id <= 13:
+                    raise ValueError(f'sect skill mentor {actor.id} sect_id must be within 1..13')
 
         for portal in definition.portals:
             if portal.id in seen_portals:
@@ -327,8 +339,8 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'id': 1_900_003,
                     'name': '接引真人',
                     'label': '接引',
-                    'model': -2_010_001,
-                    'dat_id': 90_001,
+                    'model': -2_009_990,
+                    'dat_id': 90_010,
                     'x': 34,
                     'y': 50,
                 },
@@ -336,8 +348,8 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'id': 1_900_004,
                     'name': '赵公明',
                     'label': '赵公明',
-                    'model': -2_010_002,
-                    'dat_id': 90_002,
+                    'model': -2_009_980,
+                    'dat_id': 90_020,
                     'x': 11,
                     'y': 21,
                 },
@@ -362,6 +374,17 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'y': 7,
                     'direction': 0,
                     'target_map_id': 50000,
+                    'target_x': 8,
+                    'target_y': 6,
+                },
+                {
+                    'id': 580005,
+                    'name': '昆仑传送阵',
+                    'model': -2_004_250,
+                    'x': 62,
+                    'y': 67,
+                    'direction': 0,
+                    'target_map_id': 60001,
                     'target_x': 8,
                     'target_y': 6,
                 },
@@ -395,6 +418,41 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'target_x': 60,
                     'target_y': 67,
                 }
+            ],
+        },
+        '60001': {
+            'name': '昆仑',
+            'map_o_file': 'maps/60001.map.o',
+            'map_ref_available': True,
+            'fallback_width': 32,
+            'fallback_height': 32,
+            'spawn': {'x': 8, 'y': 6},
+            'npcs': [
+                {
+                    'id': 1_900_101,
+                    'name': '昆仑导师',
+                    'label': '昆仑导师',
+                    'introduction': '昆仑道法，贵在潜心修行。',
+                    'model': -2_009_990,
+                    'dat_id': 90_010,
+                    'x': 12,
+                    'y': 8,
+                    'service': 'sect_skill_mentor',
+                    'sect_id': 1,
+                },
+            ],
+            'portals': [
+                {
+                    'id': 6_000_101,
+                    'name': '返回长安',
+                    'model': -2_004_250,
+                    'x': 9,
+                    'y': 6,
+                    'direction': 0,
+                    'target_map_id': 58,
+                    'target_x': 60,
+                    'target_y': 67,
+                },
             ],
         },
     },
