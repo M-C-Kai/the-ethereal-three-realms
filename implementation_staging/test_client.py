@@ -124,6 +124,16 @@ def assert_full_refresh(
     return properties
 
 
+def team_create_request(role_id: int) -> bytes:
+    """Build the native APK's 1023 create-team request."""
+    return encode_frame(1023, [short(0), integer(role_id)])
+
+
+def team_disband_request() -> bytes:
+    """Build the native APK's 1023 leader-disband request."""
+    return encode_frame(1023, [short(11)])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Test the complete local login/role/map protocol')
     parser.add_argument('--host', default='127.0.0.1')
@@ -131,6 +141,16 @@ def main() -> None:
     parser.add_argument('--username', default='localtest')
     parser.add_argument('--password', default='test123')
     parser.add_argument('--exercise-role-crud', action='store_true')
+    parser.add_argument(
+        '--exercise-mail-only',
+        action='store_true',
+        help='Exercise the persisted 1500 inbox/detail/read flow and exit',
+    )
+    parser.add_argument(
+        '--exercise-team-only',
+        action='store_true',
+        help='Exercise the APK-confirmed 1023/1026 create-and-disband team flow and exit',
+    )
     parser.add_argument('--exercise-portal', action='store_true')
     parser.add_argument('--exercise-monster', action='store_true')
     parser.add_argument('--exercise-monster-kill', action='store_true')
@@ -194,6 +214,10 @@ def main() -> None:
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1080, [short(0), integer(role_id)])))
         player = expect(game_sock, 1006, cipher)
         assert player[0] == 85 and player[2] == role_id, player
+        player_properties = {
+            property_index: player[1 + property_index]
+            for property_index in range(int(player[0]))
+        }
         appearance = name_appearance_from_1006(player)
         extension = expect(game_sock, 1089, cipher)
         assert extension == [0, 0], extension
@@ -210,7 +234,50 @@ def main() -> None:
             assert skills[2:4] == ['基础技能', 0], skills
         item_records = [expect(game_sock, 1008, cipher) for _ in range(16)]
         items = {str(values[8]): values for values in item_records}
-        assert len(items) == 16 and {'青锋剑', '青纹项链', '青纹长靴', '小还丹', '坐骑验证令'} <= set(items), items
+        assert len(items) == 16 and {'青锋剑', '青纹项链', '青纹长靴', '小还丹', '辟邪'} <= set(items), items
+
+        if args.exercise_team_only:
+            game_sock.sendall(cipher.encrypt_frame(team_create_request(role_id)))
+            created_team = expect(game_sock, 1026, cipher)
+            assert created_team == [
+                0,
+                1,
+                player_properties[3],
+                role_id,
+                player_properties[40],
+                player_properties[41],
+                player_properties[39],
+                player_properties[11],
+                player_properties[42],
+                player_properties[43],
+                0,
+            ], created_team
+
+            game_sock.sendall(cipher.encrypt_frame(team_disband_request()))
+            assert expect(game_sock, 1023, cipher) == [11], 'team disband acknowledgement'
+            print(f'OK: 角色 {player_properties[3]} 创建单人队伍 -> 解散队伍')
+            return
+
+        game_sock.sendall(cipher.encrypt_frame(encode_frame(1500, [byte(12), byte(0), byte(0)])))
+        inbox = expect(game_sock, 1500, cipher)
+        assert inbox[:3] == [11, 1, 1], inbox
+        mail_id = int(inbox[3])
+        assert inbox[6:8] == ['系统', '欢迎来到本地服'], inbox
+        game_sock.sendall(cipher.encrypt_frame(encode_frame(1500, [byte(13), integer(mail_id)])))
+        mail_detail = expect(game_sock, 1500, cipher)
+        assert mail_detail[:4] == [14, mail_id, 0, 0], mail_detail
+        assert mail_detail[7] == '欢迎来到本地服' and '本地服' in str(mail_detail[8]), mail_detail
+        assert '_' in str(mail_detail[9]), mail_detail
+
+        if args.exercise_mail_only:
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1500, [byte(12), byte(0), byte(0)])))
+            read_inbox = expect(game_sock, 1500, cipher)
+            assert read_inbox[3] == mail_id and int(read_inbox[8]) & 1 == 1, read_inbox
+            print(
+                f'OK: {servers[3]}(良好) -> 1052 游戏服 -> 角色 {roles[7]} '
+                f'-> 邮件 {mail_id} 列表/详情/已读持久化已应答'
+            )
+            return
 
         if args.exercise_kunlun_only:
             assert current_skill_level is not None, 'selected role must belong to Kunlun'
@@ -279,7 +346,7 @@ def main() -> None:
 
         weapon_id = int(items['青锋剑'][1])
         potion_id = int(items['小还丹'][1])
-        mount_token_id = int(items['坐骑验证令'][1])
+        mount_token_id = int(items['辟邪'][1])
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1009, [short(82), integer(weapon_id)])))
         description = expect(game_sock, 1009, cipher)
         assert description[0:2] == [82, weapon_id], description
@@ -377,7 +444,7 @@ def main() -> None:
         mount_ack = expect(game_sock, 1009, cipher)
         mounted = expect(game_sock, 1017, cipher)
         assert mounted_item[0:2] == [3, mount_token_id] and mounted_item[4] == 17, mounted_item
-        assert mount_ack == [5] and mounted == [0, role_id, 1, 22, 41004], (mount_ack, mounted)
+        assert mount_ack == [5] and mounted == [0, role_id, 1, 22, 105000], (mount_ack, mounted)
 
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1009, [short(6), integer(mount_token_id)])))
         dismounted_item = expect(game_sock, 1008, cipher)
@@ -433,55 +500,80 @@ def main() -> None:
             monster_actor = expect(game_sock, 1048, cipher)
             assert player_actor[7:10] == [1, 1, role_id], player_actor
             assert monster_actor[7:10] == [2, 1, int(monster[2])], monster_actor
+            level = int(player_properties[11])
+            player_max_hp = int(player_properties[40])
+            player_attack = 10 + int(player_properties[44]) + ((level - 1) * 2)
+            player_defence = int(player_properties[45]) + (level - 1)
+            monster_damage = max(1, 10 - (player_defence // 2))
+            defended_damage = max(1, monster_damage // 2)
+            assert player_actor[3] == player_max_hp, player_actor
+            assert player_actor[10:12] == [player_max_hp, player_max_hp], player_actor
             monster_start = expect(game_sock, 1040, cipher)
             assert monster_start[0:2] == [1, 1], monster_start
+
+            # Defence command 2 consumes the player's action, leaves monster HP
+            # untouched and halves the already-armour-reduced counterattack.
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1041, [
-                integer(1), byte(1), integer(role_id), integer(1), integer(monster[2]), integer(2), integer(0), integer(0)
+                integer(2), byte(1), integer(role_id), integer(1), integer(0), integer(0), integer(0), integer(0)
+            ])))
+            defend_action = expect(game_sock, 1042, cipher)
+            assert defend_action[0:6] == [1, role_id, role_id, 2, 1, 0], defend_action
+            assert defend_action[9] == 0, defend_action
+            defended_counter = expect(game_sock, 1042, cipher)
+            assert defended_counter[9:] == [1, role_id, 0, 22, -defended_damage, ''], defended_counter
+            defend_round = expect(game_sock, 1040, cipher)
+            assert defend_round[0:2] == [2, 1], defend_round
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(1)])))
+
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1041, [
+                integer(1), byte(2), integer(role_id), integer(1), integer(monster[2]), integer(2), integer(0), integer(0)
             ])))
             player_action = expect(game_sock, 1042, cipher)
-            assert player_action[0:6] == [1, role_id, int(monster[2]), 1, 1, 0], player_action
-            assert player_action[9:] == [1, int(monster[2]), 0, 22, -10, ''], player_action
-            counter_action = expect(game_sock, 1042, cipher)
-            assert counter_action[0:6] == [1, int(monster[2]), role_id, 1, 1, 0], counter_action
-            assert counter_action[9:] == [1, role_id, 0, 22, -10, ''], counter_action
+            assert player_action[0:6] == [2, role_id, int(monster[2]), 1, 1, 0], player_action
+            assert player_action[9:] == [1, int(monster[2]), 0, 22, -player_attack, ''], player_action
+            monster_hp = max(0, 100 - player_attack)
+            if monster_hp > 0:
+                counter_action = expect(game_sock, 1042, cipher)
+                assert counter_action[0:6] == [2, int(monster[2]), role_id, 1, 1, 0], counter_action
+                assert counter_action[9:] == [1, role_id, 0, 22, -monster_damage, ''], counter_action
             monster_round = expect(game_sock, 1040, cipher)
-            assert monster_round[0:2] == [2, 1], monster_round
+            assert monster_round[0:2] == [2, 2], monster_round
             # Full action=2 starts playback; the real APK returns the short
             # form only after both native action records have completed.
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(1)])))
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(2)])))
             if args.exercise_monster_kill:
-                # Finish the deterministic 10-hit encounter and verify that
-                # a killing blow closes the scene after the queue-drained ack.
+                # Continue until the panel-derived attack value kills the
+                # monster, then verify settlement after the queue-drained ack.
                 current_round = 2
-                for _ in range(9):
+                while monster_hp > 0:
+                    current_round += 1
                     game_sock.sendall(cipher.encrypt_frame(encode_frame(1041, [
                         integer(1), byte(current_round), integer(role_id), integer(1), integer(monster[2]), integer(2), integer(0), integer(0)
                     ])))
-                    expect(game_sock, 1042, cipher)  # player ACTION_ATTACK + damage
-                    if _ < 8:
-                        expect(game_sock, 1042, cipher)  # monster ACTION_ATTACK + damage
-                        next_round = expect(game_sock, 1040, cipher)
-                        assert next_round[0:2] == [2, current_round], next_round
-                        game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(current_round)])))
-                        current_round += 1
-                    else:
-                        playback = expect(game_sock, 1040, cipher)
-                        assert playback[0:2] == [2, current_round], playback
-                        game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(current_round)])))
-                        assert expect(game_sock, 1040, cipher) == [4], 'battle end was not delivered'
-                        removed = expect(game_sock, 1010, cipher)
-                        assert removed[0] == int(monster[2]) and removed[5] == 18, 'monster removal was not delivered'
-                        progress = expect(game_sock, 1017, cipher)  # incremental level/EXP refresh
-                        expect(game_sock, 1008, cipher)  # dropped item
-                        expect(game_sock, 1123, cipher)  # reward notice
-                        top_protocol, result_prompt = receive_frame(game_sock, cipher)
-                        progress_properties = dict(zip(progress[3::2], progress[4::2]))
-                        if top_protocol == 1049:
-                            assert result_prompt == [3, 50, 0, 0, 0, 'x'], result_prompt
-                        else:
-                            assert top_protocol == 1129, (top_protocol, result_prompt)
-                            assert result_prompt[0] == role_id, result_prompt
-                            assert result_prompt[1] == progress_properties[11], result_prompt
+                    repeated_attack = expect(game_sock, 1042, cipher)
+                    assert repeated_attack[9:] == [1, int(monster[2]), 0, 22, -player_attack, ''], repeated_attack
+                    monster_hp = max(0, monster_hp - player_attack)
+                    if monster_hp > 0:
+                        repeated_counter = expect(game_sock, 1042, cipher)
+                        assert repeated_counter[9:] == [1, role_id, 0, 22, -monster_damage, ''], repeated_counter
+                    playback = expect(game_sock, 1040, cipher)
+                    assert playback[0:2] == [2, current_round], playback
+                    game_sock.sendall(cipher.encrypt_frame(encode_frame(1040, [byte(2), integer(current_round)])))
+
+                assert expect(game_sock, 1040, cipher) == [4], 'battle end was not delivered'
+                removed = expect(game_sock, 1010, cipher)
+                assert removed[0] == int(monster[2]) and removed[5] == 18, 'monster removal was not delivered'
+                progress = expect(game_sock, 1017, cipher)  # incremental level/EXP refresh
+                expect(game_sock, 1008, cipher)  # dropped item
+                expect(game_sock, 1123, cipher)  # reward notice
+                top_protocol, result_prompt = receive_frame(game_sock, cipher)
+                progress_properties = dict(zip(progress[3::2], progress[4::2]))
+                if top_protocol == 1049:
+                    assert result_prompt == [3, 50, 0, 0, 0, 'x'], result_prompt
+                else:
+                    assert top_protocol == 1129, (top_protocol, result_prompt)
+                    assert result_prompt[0] == role_id, result_prompt
+                    assert result_prompt[1] == progress_properties[11], result_prompt
 
         if args.exercise_monster_escape:
             monster = entered[3][1]

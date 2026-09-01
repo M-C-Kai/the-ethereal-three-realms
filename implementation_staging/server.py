@@ -63,6 +63,71 @@ def menu_prefetch_empty_ack(message_id: int) -> bytes:
     return encode_frame(message_id, [byte(subtype)])
 
 
+def mail_request_frames(
+    role: dict[str, object],
+    values: list[object],
+) -> tuple[list[bytes], bool]:
+    """Handle the APK's minimal protocol-1500 inbox flow."""
+    action = int(values[0]) if values else -1
+    mailbox = role.get('mailbox', [])
+    messages = [message for message in mailbox if isinstance(message, dict)] if isinstance(mailbox, list) else []
+    if action == 13 and len(values) > 1:
+        mail_id = int(values[1])
+        message = next(
+            (candidate for candidate in messages if int(candidate.get('id', 0)) == mail_id),
+            None,
+        )
+        if message is None:
+            return [], False
+        changed = not bool(message.get('read', False))
+        message['read'] = True
+        detail = [
+            byte(14),
+            integer(mail_id),
+            integer(0),
+            byte(0),
+            integer(0),
+            short(0),
+            short(0),
+            string(str(message.get('subject', ''))),
+            string(str(message.get('body', ''))),
+            string(
+                f"{message.get('sent_at', '')}_{message.get('expires_at', '长期有效')}"
+            ),
+            byte(0),
+        ]
+        return [encode_frame(1500, detail)], changed
+    if action == 16 and len(values) > 1:
+        mail_id = int(values[1])
+        remaining = [
+            message for message in messages
+            if int(message.get('id', 0)) != mail_id
+        ]
+        if len(remaining) == len(messages):
+            return [], False
+        role['mailbox'] = remaining
+        page_count = 1 if remaining else 0
+        return [
+            encode_frame(1500, [byte(16), short(page_count), integer(mail_id)])
+        ], True
+    if action != 12:
+        return [], False
+
+    records: list[Field] = []
+    for message in messages:
+        flags = 1 if bool(message.get('read', False)) else 0
+        records.extend([
+            integer(int(message.get('id', 0))),
+            integer(0),
+            integer(0),
+            string(str(message.get('sender', '系统'))),
+            string(str(message.get('subject', ''))),
+            byte(flags),
+            string(str(message.get('expires_at', '长期有效'))),
+        ])
+    return [encode_frame(1500, [byte(11), short(1), byte(len(messages)), *records])], False
+
+
 @dataclass
 class Settings:
     host: str = '0.0.0.0'
@@ -203,6 +268,74 @@ class LocalNpcDialogueState:
         self.npc_id = None
 
 
+@dataclass(frozen=True)
+class CombatStats:
+    max_hp: int
+    physical_attack: int
+    physical_defence: int
+
+
+def combat_stats(role: dict[str, object]) -> CombatStats:
+    """Derive battle values from the same level/stats shown by the character UI."""
+    level = max(1, int(role.get('level', 1)))
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    return CombatStats(
+        max_hp=100 + ((level - 1) * 10) + base_stats[1],
+        physical_attack=10 + base_stats[0] + ((level - 1) * 2),
+        physical_defence=base_stats[1] + (level - 1),
+    )
+
+
+@dataclass
+class LocalTeamState:
+    """Connection-local ownership for the APK's minimal self-team flow."""
+
+    leader_id: int = 0
+
+    @property
+    def active(self) -> bool:
+        return self.leader_id > 0
+
+
+def team_request_frames(
+    role: dict[str, object],
+    values: list[object],
+    state: LocalTeamState,
+) -> list[bytes]:
+    """Handle the confirmed single-role create and disband team requests."""
+    action = int(values[0]) if values else -1
+    role_id = int(role.get('id', 0))
+    if action == 11:
+        # The APK may still display the leader page after reconnecting or
+        # losing connection-local state.  Always acknowledge its confirmed
+        # disband action so that the native UI can leave that stale page.
+        state.leader_id = 0
+        return [encode_frame(1023, [short(11)])]
+    if action != 0 or len(values) < 2 or int(values[1]) != role_id or state.active:
+        return []
+
+    level = max(1, int(role.get('level', 1)))
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    base_stats = (raw_stats + [10, 10, 10, 10, 10])[:5]
+    max_hp = combat_stats(role).max_hp
+    max_mp = 50 + ((level - 1) * 5) + max(0, base_stats[2])
+    state.leader_id = role_id
+    return [encode_frame(1026, [
+        byte(0),
+        byte(1),
+        string(str(role.get('name', ''))),
+        integer(role_id),
+        integer(max_hp),
+        integer(max_hp),
+        byte(int(role.get('race', 0))),
+        integer(level),
+        integer(max_mp),
+        integer(max_mp),
+        integer(0),
+    ])]
+
+
 @dataclass
 class LocalBattleState:
     """Connection-local state for the deliberately small APK battle probe.
@@ -217,7 +350,13 @@ class LocalBattleState:
     player_id: int = 0
     monster_id: int = 0
     player_hp: int = 100
+    player_max_hp: int = 100
     monster_hp: int = 100
+    monster_max_hp: int = 100
+    player_attack: int = 10
+    player_defence: int = 0
+    monster_attack: int = 10
+    monster_defence: int = 0
     # A defeated monster remains absent until the client reloads the map. This
     # covers automatic battle's short race with the removal frame.
     monster_defeated: bool = False
@@ -236,13 +375,25 @@ class LocalBattleState:
     escape_guard: dict[str, object] | None = None
     player_tile: tuple[int, int] | None = None
 
-    def begin(self, player_id: int, monster_id: int) -> None:
+    def begin(
+        self,
+        player_id: int,
+        monster_id: int,
+        player_stats: CombatStats | None = None,
+    ) -> None:
+        selected_stats = player_stats or CombatStats(100, 10, 0)
         self.active = True
         self.round = 1
         self.player_id = player_id
         self.monster_id = monster_id
-        self.player_hp = 100
-        self.monster_hp = 100
+        self.player_max_hp = max(1, selected_stats.max_hp)
+        self.player_hp = self.player_max_hp
+        self.monster_max_hp = 100
+        self.monster_hp = self.monster_max_hp
+        self.player_attack = max(1, selected_stats.physical_attack)
+        self.player_defence = max(0, selected_stats.physical_defence)
+        self.monster_attack = 10
+        self.monster_defence = 0
         self.phase = 'idle'
         self.encounter_seq += 1
         self.trace_id = f'BT-{player_id}-{monster_id}-{self.encounter_seq}'
@@ -293,6 +444,13 @@ class LocalBattleState:
             return True
         self.monster_hp = max(0, self.monster_hp - max(1, damage))
         return self.monster_hp == 0
+
+    def player_basic_attack_damage(self) -> int:
+        return max(1, self.player_attack - (self.monster_defence // 2))
+
+    def monster_basic_attack_damage(self, *, defending: bool = False) -> int:
+        damage = max(1, self.monster_attack - (self.player_defence // 2))
+        return max(1, damage // 2) if defending else damage
 
 
 # The APK does not contain the authoritative server-side reward table.  Keep
@@ -427,7 +585,7 @@ BASE_CHARACTER_APPEARANCE = {
     20: 0,
 }
 
-DEFAULT_MOUNT_MODEL = 41004
+DEFAULT_MOUNT_MODEL = 105000
 MOUNT_EQUIPMENT_SLOT = 17  # APK resource 0x4661: the dedicated "坐骑" slot.
 
 # Protocol 1502 multiplexes two different resource requests. Action 1 asks for
@@ -504,6 +662,8 @@ def default_role(settings: Settings) -> dict[str, object]:
         'bag_capacity': DEFAULT_BAG_CAPACITY,
     }
     role['items'] = starter_items(int(role['id']))
+    role['mailbox'] = starter_mail(int(role['id']))
+    role['mailbox_initialized'] = True
     return role
 
 
@@ -617,8 +777,8 @@ def starter_items(role_id: int) -> list[dict[str, object]]:
         # Category 17 is parsed as an equipment record by the original APK;
         # the independent location byte (17) selects its dedicated mount slot.
         'template_id': 170_410_004,
-        'name': '坐骑验证令',
-        'description': '坐骑装备。_装备后骑乘 41004，卸下后下坐骑。',
+        'name': '辟邪',
+        'description': '坐骑装备。_装备后骑乘 105000，卸下后下坐骑。',
         'quantity': 1,
         'max_quantity': 1,
         'location': 'bag',
@@ -632,6 +792,19 @@ def starter_items(role_id: int) -> list[dict[str, object]]:
         'mount_model': DEFAULT_MOUNT_MODEL,
     })
     return items
+
+
+def starter_mail(role_id: int) -> list[dict[str, object]]:
+    """Return the one persisted system mail delivered to a new or legacy role."""
+    return [{
+        'id': (role_id * 100) + 90,
+        'sender': '系统',
+        'subject': '欢迎来到本地服',
+        'body': '欢迎来到《飘渺三界2》本地服。_这封邮件会随角色存档保存。',
+        'sent_at': '2026-09-01',
+        'expires_at': '长期有效',
+        'read': False,
+    }]
 
 
 class RoleStore:
@@ -716,6 +889,19 @@ class RoleStore:
                 changed = True
         return changed
 
+    @staticmethod
+    def _ensure_mailbox(role: dict[str, object]) -> bool:
+        mailbox = role.get('mailbox')
+        if not bool(role.get('mailbox_initialized', False)):
+            if not isinstance(mailbox, list):
+                role['mailbox'] = starter_mail(int(role.get('id', 0)))
+            role['mailbox_initialized'] = True
+            return True
+        if not isinstance(mailbox, list):
+            role['mailbox'] = []
+            return True
+        return False
+
     def roles_for(self, username: str) -> list[dict[str, object]]:
         accounts = self.data['accounts']
         assert isinstance(accounts, dict)
@@ -762,6 +948,7 @@ class RoleStore:
                 role['map_y'] = current_map.spawn_y
                 changed = True
             changed = self._ensure_items(role) or changed
+            changed = self._ensure_mailbox(role) or changed
         if changed:
             self._save()
         return sorted(roles, key=lambda role: int(role.get('slot', 0)))
@@ -801,6 +988,8 @@ class RoleStore:
             'bag_capacity': DEFAULT_BAG_CAPACITY,
         }
         role['items'] = starter_items(role_id)
+        role['mailbox'] = starter_mail(role_id)
+        role['mailbox_initialized'] = True
         roles.append(role)
         accounts = self.data['accounts']
         assert isinstance(accounts, dict)
@@ -2153,6 +2342,7 @@ def battle_actor_frames(
     role: dict[str, object],
     settings: Settings | MapDefinition,
     trace_id: str = '',
+    state: LocalBattleState | None = None,
 ) -> list[bytes]:
     """Return one player and one monster record for the local battle probe."""
     if isinstance(settings, MapDefinition):
@@ -2184,6 +2374,8 @@ def battle_actor_frames(
             side_code=2,
             slot=1,
             appearance=character_appearance(role),
+            current_hp=state.player_hp if state is not None else 100,
+            max_hp=state.player_max_hp if state is not None else 100,
             trace_id=trace_id,
         ),
         battle_actor_frame(
@@ -2193,6 +2385,8 @@ def battle_actor_frames(
             kind=2,
             side_code=1,
             slot=1,
+            current_hp=state.monster_hp if state is not None else 100,
+            max_hp=state.monster_max_hp if state is not None else 100,
             trace_id=trace_id,
         ),
     ]
@@ -2220,7 +2414,7 @@ def battle_actor_update_frame(
             slot=1,
             appearance=character_appearance(role),
             current_hp=state.player_hp,
-            max_hp=100,
+            max_hp=state.player_max_hp,
             trace_id=state.trace_id,
         )
     return battle_actor_frame(
@@ -2231,7 +2425,7 @@ def battle_actor_update_frame(
         side_code=1,
         slot=1,
         current_hp=state.monster_hp,
-        max_hp=100,
+        max_hp=state.monster_max_hp,
         trace_id=state.trace_id,
     )
 
@@ -2639,6 +2833,56 @@ def battle_action_frame(
     ])
 
 
+def battle_defend_frame(
+    state: LocalBattleState,
+    round_number: int | None = None,
+) -> bytes:
+    """Queue the native defence action without applying an HP effect."""
+    return encode_frame(1042, [
+        integer(state.round if round_number is None else round_number),
+        integer(state.player_id),
+        integer(state.player_id),
+        byte(2),                 # ACTION_DEFEND
+        byte(1),
+        byte(0),
+        integer(0),
+        integer(0),
+        string('防御'),
+        integer(0),              # no BattleEffect
+    ])
+
+
+def battle_round_action_frames(
+    state: LocalBattleState,
+    command_code: int,
+    round_number: int | None = None,
+) -> tuple[list[bytes], bool]:
+    """Resolve one supported player command and keep wire HP effects in sync."""
+    action_round = state.round if round_number is None else round_number
+    if command_code == 1:
+        player_damage = state.player_basic_attack_damage()
+        monster_defeated = state.apply_basic_attack(player_damage)
+        frames = [battle_action_frame(state, action_round, damage=player_damage)]
+    elif command_code == 2:
+        monster_defeated = False
+        frames = [battle_defend_frame(state, action_round)]
+    else:
+        return [], False
+
+    if not monster_defeated:
+        monster_damage = state.monster_basic_attack_damage(defending=command_code == 2)
+        state.player_hp = max(0, state.player_hp - monster_damage)
+        frames.append(battle_action_frame(
+            state,
+            action_round,
+            actor_id=state.monster_id,
+            target_id=state.player_id,
+            damage=monster_damage,
+            label='妖兽攻击',
+        ))
+    return frames, monster_defeated
+
+
 def battle_move_frame(
     state: LocalBattleState,
     round_number: int | None = None,
@@ -2974,7 +3218,11 @@ class LocalGameServer:
                 )
                 return
             role = active_role if active_role is not None else default_role(self.settings)
-            battle_state.begin(int(role['id']), object_id)
+            battle_state.begin(
+                int(role['id']),
+                object_id,
+                player_stats=combat_stats(role),
+            )
             battle_state.map_id = current_settings.id
             battle_state.contact_tile = (
                 (int(object_x), int(object_y))
@@ -3012,7 +3260,12 @@ class LocalGameServer:
             await self._send(
                 writer,
                 battle_reset_frame(),
-                *battle_actor_frames(role, current_settings, trace_id=battle_state.trace_id),
+                *battle_actor_frames(
+                    role,
+                    current_settings,
+                    trace_id=battle_state.trace_id,
+                    state=battle_state,
+                ),
                 battle_start_frame(role, current_settings),
                 cipher=cipher,
                 lock=send_lock,
@@ -3034,6 +3287,7 @@ class LocalGameServer:
         active_role: dict[str, object] | None = None
         game_cipher: GameCipher | None = None
         battle_state = LocalBattleState()
+        team_state = LocalTeamState()
         npc_dialogue_state = LocalNpcDialogueState()
         streamed_npc_ids: set[int] = set()
         send_lock = asyncio.Lock()
@@ -3108,6 +3362,7 @@ class LocalGameServer:
                         if active_role is None:
                             LOG.warning('unknown role selected user=%r role_id=%d', username, role_id)
                         else:
+                            team_state.leader_id = 0
                             world_sent = False
                             streamed_npc_ids.clear()
                             LOG.info('role selected user=%r role_id=%d name=%r', username, role_id, active_role['name'])
@@ -3346,6 +3601,43 @@ class LocalGameServer:
                         cipher=game_cipher,
                         lock=send_lock,
                     )
+                elif message_id == 1500 and active_role is not None and values:
+                    response_frames, changed = mail_request_frames(active_role, values)
+                    if changed:
+                        self.roles.save()
+                    LOG.info(
+                        'mail action user=%r role_id=%d action=%d replies=%d changed=%s',
+                        username,
+                        int(active_role['id']),
+                        int(values[0]),
+                        len(response_frames),
+                        changed,
+                    )
+                    if response_frames:
+                        await self._send(
+                            writer,
+                            *response_frames,
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                elif message_id == 1023 and active_role is not None and values:
+                    action = int(values[0])
+                    response_frames = team_request_frames(active_role, values, team_state)
+                    LOG.info(
+                        'team action user=%r role_id=%d action=%d active=%s replies=%d',
+                        username,
+                        int(active_role['id']),
+                        action,
+                        team_state.active,
+                        len(response_frames),
+                    )
+                    if response_frames:
+                        await self._send(
+                            writer,
+                            *response_frames,
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
                 elif message_id == 1502 and len(values) >= 3:
                     # Fields are [action, count, id...]. Action 1 requests a
                     # role .dat (1503); actions 0/2 request a PNG payload
@@ -3541,26 +3833,24 @@ class LocalGameServer:
                         if battle_state.phase != 'idle':
                             LOG.info('ignored battle command while awaiting action acknowledgement')
                             continue
+                        if command_code not in (1, 2):
+                            LOG.info('ignored unsupported battle command=%d', command_code)
+                            continue
                         client_round = int(values[1]) if len(values) > 1 else battle_state.round
                         if client_round > 0:
                             battle_state.round = client_round
                         action_round = battle_state.round
-                        ended = battle_state.apply_basic_attack()
-                        action_frames = [battle_action_frame(battle_state, action_round)]
-                        if not ended:
-                            battle_state.player_hp = max(0, battle_state.player_hp - 10)
-                            action_frames.append(battle_action_frame(
-                                battle_state,
-                                action_round,
-                                actor_id=battle_state.monster_id,
-                                target_id=battle_state.player_id,
-                                label='妖兽攻击',
-                            ))
+                        action_frames, ended = battle_round_action_frames(
+                            battle_state,
+                            command_code,
+                            action_round,
+                        )
                         battle_state.phase = 'round_ack'
                         LOG.info(
-                            'battle send player-action battle_trace=%s user=%r round=%d monster_hp=%d player_hp=%d ended=%s',
+                            'battle send player-action battle_trace=%s user=%r command=%d round=%d monster_hp=%d player_hp=%d ended=%s',
                             battle_state.trace_id,
                             username,
+                            command_code,
                             action_round,
                             battle_state.monster_hp,
                             battle_state.player_hp,

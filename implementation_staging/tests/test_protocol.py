@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from map_o import decode_tile_rle
 from protocol import GameCipher, binary, byte, decode_frame, encode_frame, field_debug_entries, field_debug_value, field_type_name, field_values, integer, long_integer, short, string
 import server as server_module
+import test_client as test_client_module
 from server import (
     RoleStore,
     Settings,
@@ -104,6 +105,74 @@ class ProtocolTests(unittest.TestCase):
         plain_body = client_receiver.decrypt(server_encrypted[2:])
         self.assertEqual(plain_header + plain_body, original)
 
+    def test_create_team_builds_the_apk_1026_leader_record(self):
+        """Using 1056 or omitting the member record would leave the APK on its no-team page."""
+        self.assertTrue(hasattr(server_module, 'LocalTeamState'))
+        self.assertTrue(hasattr(server_module, 'team_request_frames'))
+        role = default_role(Settings())
+        state = server_module.LocalTeamState()
+
+        frames = server_module.team_request_frames(role, [0, 10001], state)
+
+        self.assertTrue(state.active)
+        self.assertEqual(state.leader_id, 10001)
+        self.assertEqual(len(frames), 1)
+        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(message_id, 1026)
+        self.assertEqual(
+            field_values(fields),
+            [0, 1, '本地侠客', 10001, 100, 100, 0, 1, 50, 50, 0],
+        )
+        self.assertEqual(
+            [field.type_id for field in fields],
+            [2, 2, 6, 4, 4, 4, 2, 4, 4, 4, 4],
+        )
+
+    def test_disband_team_clears_state_and_returns_apk_1023_action_11(self):
+        """Leaving the team active or returning a byte action would desynchronise the native team UI."""
+        role = default_role(Settings())
+        state = server_module.LocalTeamState()
+        server_module.team_request_frames(role, [0, 10001], state)
+
+        frames = server_module.team_request_frames(role, [11], state)
+
+        self.assertFalse(state.active)
+        self.assertEqual(state.leader_id, 0)
+        self.assertEqual(len(frames), 1)
+        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(message_id, 1023)
+        self.assertEqual(field_values(fields), [11])
+        self.assertEqual([field.type_id for field in fields], [3])
+
+    def test_disband_team_is_idempotent_for_a_stale_native_team_page(self):
+        """Ignoring a repeated disband would leave the APK waiting on stale client-side state."""
+        role = default_role(Settings())
+        state = server_module.LocalTeamState()
+
+        frames = server_module.team_request_frames(role, [11], state)
+
+        self.assertFalse(state.active)
+        self.assertEqual(len(frames), 1)
+        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(message_id, 1023)
+        self.assertEqual(field_values(fields), [11])
+        self.assertEqual([field.type_id for field in fields], [3])
+
+    def test_team_request_builders_preserve_apk_short_and_int_types(self):
+        """Changing the native request action or role ID types would break server compatibility."""
+        self.assertTrue(hasattr(test_client_module, 'team_create_request'))
+        self.assertTrue(hasattr(test_client_module, 'team_disband_request'))
+
+        create_id, create_fields = decode_frame(test_client_module.team_create_request(10001))
+        disband_id, disband_fields = decode_frame(test_client_module.team_disband_request())
+
+        self.assertEqual(create_id, 1023)
+        self.assertEqual(field_values(create_fields), [0, 10001])
+        self.assertEqual([field.type_id for field in create_fields], [3, 4])
+        self.assertEqual(disband_id, 1023)
+        self.assertEqual(field_values(disband_fields), [11])
+        self.assertEqual([field.type_id for field in disband_fields], [3])
+
     def test_login_server_list(self):
         frame = login_server_list(Settings(advertise_host='192.168.1.8'))
         message_id, fields = decode_frame(frame)
@@ -177,6 +246,124 @@ class ProtocolTests(unittest.TestCase):
             self.assertTrue(reloaded.delete('tester', int(created['id'])))
             self.assertEqual(len(RoleStore(settings).roles_for('tester')), 1)
 
+    def test_mailbox_list_response_matches_apk_1500_contract(self):
+        """Changing action 11 field order or types must break the native inbox parser."""
+        self.assertTrue(hasattr(server_module, 'mail_request_frames'))
+        role = default_role(Settings())
+        role['mailbox'] = [{
+            'id': 1_000_101,
+            'sender': '系统',
+            'subject': '欢迎来到本地服',
+            'body': '这是一封持久化测试邮件。',
+            'sent_at': '2026-09-01',
+            'expires_at': '长期有效',
+            'read': False,
+        }]
+
+        frames, changed = server_module.mail_request_frames(role, [12, 0, 0])
+
+        self.assertFalse(changed)
+        self.assertEqual(len(frames), 1)
+        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(message_id, 1500)
+        self.assertEqual(
+            field_values(fields),
+            [11, 1, 1, 1_000_101, 0, 0, '系统', '欢迎来到本地服', 0, '长期有效'],
+        )
+        self.assertEqual(
+            [field.type_id for field in fields],
+            [2, 3, 2, 4, 4, 4, 6, 6, 2, 6],
+        )
+
+    def test_opening_mail_returns_action_14_and_marks_it_read(self):
+        """Omitting the read transition would make reopened inboxes show stale unread state."""
+        self.assertTrue(hasattr(server_module, 'mail_request_frames'))
+        role = default_role(Settings())
+        message = {
+            'id': 1_000_101,
+            'sender': '系统',
+            'subject': '欢迎来到本地服',
+            'body': '这是一封持久化测试邮件。',
+            'sent_at': '2026-09-01',
+            'expires_at': '长期有效',
+            'read': False,
+        }
+        role['mailbox'] = [message]
+
+        frames, changed = server_module.mail_request_frames(role, [13, 1_000_101])
+
+        self.assertTrue(changed)
+        self.assertTrue(message['read'])
+        self.assertEqual(len(frames), 1)
+        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(message_id, 1500)
+        self.assertEqual(
+            field_values(fields),
+            [
+                14,
+                1_000_101,
+                0,
+                0,
+                0,
+                0,
+                0,
+                '欢迎来到本地服',
+                '这是一封持久化测试邮件。',
+                '2026-09-01_长期有效',
+                0,
+            ],
+        )
+        self.assertEqual(
+            [field.type_id for field in fields],
+            [2, 4, 4, 2, 4, 3, 3, 6, 6, 6, 2],
+        )
+
+    def test_role_store_migrates_and_persists_mail_read_and_delete_state(self):
+        """A deleted starter mail must not be recreated when the role file reloads."""
+        self.assertTrue(hasattr(server_module, 'mail_request_frames'))
+        with tempfile.TemporaryDirectory() as directory:
+            role_path = Path(directory) / 'roles.json'
+            settings = Settings(role_data_file=str(role_path))
+            legacy_role = default_role(settings)
+            legacy_role.pop('mailbox', None)
+            legacy_role.pop('mailbox_initialized', None)
+            role_path.write_text(json.dumps({
+                'next_role_id': int(legacy_role['id']) + 1,
+                'accounts': {'legacy-mail': [legacy_role]},
+            }, ensure_ascii=False), encoding='utf-8')
+
+            store = RoleStore(settings)
+            migrated = store.roles_for('legacy-mail')[0]
+            self.assertTrue(migrated.get('mailbox_initialized'))
+            self.assertEqual(len(migrated.get('mailbox', [])), 1)
+            message = migrated['mailbox'][0]
+            self.assertEqual(
+                (message['sender'], message['subject'], message['read']),
+                ('系统', '欢迎来到本地服', False),
+            )
+
+            _, read_changed = server_module.mail_request_frames(migrated, [13, int(message['id'])])
+            self.assertTrue(read_changed)
+            store.save()
+            reloaded = RoleStore(settings)
+            read_role = reloaded.roles_for('legacy-mail')[0]
+            self.assertTrue(read_role['mailbox'][0]['read'])
+
+            frames, delete_changed = server_module.mail_request_frames(
+                read_role,
+                [16, int(message['id'])],
+            )
+            self.assertTrue(delete_changed)
+            delete_id, delete_fields = decode_frame(frames[0])
+            self.assertEqual(delete_id, 1500)
+            self.assertEqual(field_values(delete_fields), [16, 0, int(message['id'])])
+            self.assertEqual([field.type_id for field in delete_fields], [2, 3, 4])
+            reloaded.save()
+
+            after_delete = RoleStore(settings).roles_for('legacy-mail')[0]
+            self.assertTrue(after_delete['mailbox_initialized'])
+            self.assertEqual(after_delete['mailbox'], [])
+
     def test_default_role_starts_without_sect(self):
         self.assertEqual(default_role(Settings()).get('sect_id'), 0)
 
@@ -248,7 +435,7 @@ class ProtocolTests(unittest.TestCase):
         weapon = next(item for item in items if item['name'] == '青锋剑')
         armour = next(item for item in items if item['name'] == '青纹铠甲')
         potion = next(item for item in items if item['name'] == '小还丹')
-        mount = next(item for item in items if item['name'] == '坐骑验证令')
+        mount = next(item for item in items if item['name'] == '辟邪')
 
         message_id, fields = decode_frame(item_frame(weapon))
         values = field_values(fields)
@@ -288,7 +475,7 @@ class ProtocolTests(unittest.TestCase):
         values = field_values(fields)
         self.assertEqual(message_id, 1008)
         self.assertEqual(values[:5], [1, mount['id'], 1, 1, 50])
-        self.assertEqual(values[7:9], [170_410_004, '坐骑验证令'])
+        self.assertEqual(values[7:9], [170_410_004, '辟邪'])
         self.assertEqual(values[14:16], [100, 17])
         self.assertEqual(len(values), 35)
         mount['location'] = 'equipped'
@@ -362,12 +549,12 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(len(values), 87)
 
         mounted_role = default_role(settings)
-        mounted_role['mount_model'] = 41004
+        mounted_role['mount_model'] = 105000
         mounted_values = field_values(decode_frame(player_info(settings, mounted_role))[1])
-        self.assertEqual(mounted_values[23], 41004)
+        self.assertEqual(mounted_values[23], 105000)
         mount_id, mount_fields = decode_frame(mount_update_frame(mounted_role))
         self.assertEqual(mount_id, 1017)
-        self.assertEqual(field_values(mount_fields), [0, settings.role_id, 1, 22, 41004])
+        self.assertEqual(field_values(mount_fields), [0, settings.role_id, 1, 22, 105000])
 
         role = default_role(settings)
         helmet = next(item for item in role_items(role) if item['name'] == '青纹盔')
@@ -861,6 +1048,81 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(state.active)
         state.finish()
         self.assertFalse(state.active)
+
+    def test_character_panel_stats_drive_battle_hp_attack_and_defence(self):
+        """Removing the role-derived formulas must change observable combat state."""
+        self.assertTrue(hasattr(server_module, 'combat_stats'))
+        role = default_role(Settings())
+        role['level'] = 3
+        role['stats'] = [4, 6, 0, 0, 0, 0, 0, 0]
+
+        stats = server_module.combat_stats(role)
+        self.assertEqual(
+            (stats.max_hp, stats.physical_attack, stats.physical_defence),
+            (126, 18, 8),
+        )
+
+        state = LocalBattleState()
+        state.begin(10001, 900001, player_stats=stats)
+        self.assertEqual((state.player_hp, state.player_max_hp), (126, 126))
+        self.assertEqual(state.player_basic_attack_damage(), 18)
+        self.assertEqual(state.monster_basic_attack_damage(), 6)
+        self.assertEqual(state.monster_basic_attack_damage(defending=True), 3)
+
+    def test_attack_round_uses_panel_damage_in_state_and_wire_effects(self):
+        """A fixed -10 effect would desynchronise the client from derived combat HP."""
+        self.assertTrue(hasattr(server_module, 'battle_round_action_frames'))
+        role = default_role(Settings())
+        role['level'] = 3
+        role['stats'] = [4, 6, 0, 0, 0, 0, 0, 0]
+        state = LocalBattleState()
+        state.begin(10001, 900001, player_stats=server_module.combat_stats(role))
+
+        frames, monster_defeated = server_module.battle_round_action_frames(state, 1, 1)
+
+        self.assertFalse(monster_defeated)
+        self.assertEqual((state.monster_hp, state.player_hp), (82, 120))
+        self.assertEqual(len(frames), 2)
+        player_effect = field_values(decode_frame(frames[0])[1])
+        monster_effect = field_values(decode_frame(frames[1])[1])
+        self.assertEqual(player_effect[3:5], [1, 1])
+        self.assertEqual(player_effect[12:14], [22, -18])
+        self.assertEqual(monster_effect[12:14], [22, -6])
+
+    def test_defence_round_skips_player_attack_and_halves_incoming_damage(self):
+        """Command 2 must not fall through to the ordinary-attack branch."""
+        self.assertTrue(hasattr(server_module, 'battle_round_action_frames'))
+        role = default_role(Settings())
+        role['level'] = 3
+        role['stats'] = [4, 6, 0, 0, 0, 0, 0, 0]
+        state = LocalBattleState()
+        state.begin(10001, 900001, player_stats=server_module.combat_stats(role))
+
+        frames, monster_defeated = server_module.battle_round_action_frames(state, 2, 1)
+
+        self.assertFalse(monster_defeated)
+        self.assertEqual((state.monster_hp, state.player_hp), (100, 123))
+        self.assertEqual(len(frames), 2)
+        defend_values = field_values(decode_frame(frames[0])[1])
+        counter_values = field_values(decode_frame(frames[1])[1])
+        self.assertEqual(defend_values[1:5], [10001, 10001, 2, 1])
+        self.assertEqual(defend_values[9], 0)
+        self.assertEqual(counter_values[12:14], [22, -3])
+
+    def test_initial_battle_actor_uses_character_panel_max_hp(self):
+        """The first 1048 actor packet must not reset a derived player HP to 100."""
+        self.assertTrue(hasattr(server_module, 'combat_stats'))
+        role = default_role(Settings())
+        role['level'] = 3
+        role['stats'] = [4, 6, 0, 0, 0, 0, 0, 0]
+        state = LocalBattleState()
+        state.begin(10001, Settings().monster_id, player_stats=server_module.combat_stats(role))
+
+        player_frame = battle_actor_frames(role, Settings(), state=state)[0]
+        values = field_values(decode_frame(player_frame)[1])
+
+        self.assertEqual(values[3], 126)
+        self.assertEqual(values[10:12], [126, 126])
 
     def test_battle_escape_frame_layout(self):
         message_id, fields = decode_frame(battle_escape_frame(10003))
