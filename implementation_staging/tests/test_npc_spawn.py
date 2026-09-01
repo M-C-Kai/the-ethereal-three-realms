@@ -22,9 +22,9 @@ class NpcSpawnTests(unittest.TestCase):
     def test_npc_catalog_supplements_models_without_touching_config(self):
         by_id = {n["id"]: n for n in self.settings.npcs}
         expected = {
-            1900002: (90000, -2010000),
-            1900003: (90010, -2009990),
-            1900004: (90020, -2009980),
+            1900002: (95750, -2004250),
+            1900003: (96010, -2003990),
+            1900004: (95520, -2004480),
         }
         for npc_id, (dat_id, model) in expected.items():
             self.assertEqual(by_id[npc_id]["dat_id"], dat_id)
