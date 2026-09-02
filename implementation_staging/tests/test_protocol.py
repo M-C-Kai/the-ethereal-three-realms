@@ -74,6 +74,8 @@ from server import (
     player_info,
     role_items,
     role_list,
+    settings_for_role,
+    update_role_position,
 )
 
 
@@ -1659,6 +1661,57 @@ class BattleEscapeSettlementTest(unittest.TestCase):
         self.assertEqual(message_id, 1010)
         self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4, 4, 3])
         self.assertEqual(field_values(fields), [1900001, 0, 0, 0, 0, 7])
+
+
+class PositionPersistenceTests(unittest.TestCase):
+    def test_update_role_position_changes_role_tile(self):
+        role = default_role(Settings())
+
+        changed = update_role_position(role, 23, 41)
+
+        self.assertTrue(changed)
+        self.assertEqual(role['map_x'], 23)
+        self.assertEqual(role['map_y'], 41)
+
+    def test_update_role_position_ignores_same_tile(self):
+        role = default_role(Settings())
+        role['map_x'] = 23
+        role['map_y'] = 41
+
+        changed = update_role_position(role, 23, 41)
+
+        self.assertFalse(changed)
+        self.assertEqual(role['map_x'], 23)
+        self.assertEqual(role['map_y'], 41)
+
+    def test_role_position_persists_across_store_reload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            role_file = str(Path(directory) / 'roles.json')
+            settings = Settings(role_data_file=role_file)
+
+            store = RoleStore(settings)
+            role = store.roles_for('position-user')[0]
+
+            self.assertTrue(update_role_position(role, 31, 52))
+            store.save()
+
+            reloaded = RoleStore(settings)
+            reloaded_role = reloaded.roles_for('position-user')[0]
+
+            self.assertEqual(reloaded_role['map_x'], 31)
+            self.assertEqual(reloaded_role['map_y'], 52)
+
+    def test_settings_for_role_uses_persisted_position_as_spawn(self):
+        settings = Settings()
+        role = default_role(settings)
+
+        role['map_x'] = 37
+        role['map_y'] = 44
+
+        current_map = settings_for_role(settings, role)
+
+        self.assertEqual(current_map.spawn_x, 37)
+        self.assertEqual(current_map.spawn_y, 44)
 
 
 if __name__ == '__main__':

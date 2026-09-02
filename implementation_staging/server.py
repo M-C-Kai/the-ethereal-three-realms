@@ -69,6 +69,8 @@ MENU_PREFETCH_EMPTY_SUBTYPES = {
     1061: 3,
 }
 
+POSITION_CHECKPOINT_SECONDS = 5.0
+
 
 def menu_prefetch_empty_ack(message_id: int) -> bytes:
     try:
@@ -2298,6 +2300,31 @@ def map_movement_final_tile(values: list[object]) -> tuple[int, int]:
     return x, y
 
 
+def update_role_position(
+    role: dict[str, object],
+    x: int,
+    y: int,
+) -> bool:
+    """Update the role's in-memory map tile.
+
+    Returns True only when the saved tile actually changed.
+    Persistence is intentionally handled by the connection lifecycle so
+    normal movement does not write roles.json for every 1005 packet.
+    """
+    new_x = int(x)
+    new_y = int(y)
+
+    old_x = int(role.get('map_x', new_x))
+    old_y = int(role.get('map_y', new_y))
+
+    if old_x == new_x and old_y == new_y:
+        return False
+
+    role['map_x'] = new_x
+    role['map_y'] = new_y
+    return True
+
+
 def map_actor_direction_frame(object_id: int, direction: int) -> bytes:
     """Return a 1126 subtype=1 frame setting one actor's facing in place.
 
@@ -3765,6 +3792,8 @@ class LocalGameServer:
         streamed_npc_ids: set[int] = set()
         send_lock = asyncio.Lock()
         heartbeat_task: asyncio.Task[None] | None = None
+        position_dirty = False
+        last_position_checkpoint_at = time.monotonic()
         try:
             while True:
                 header = await reader.readexactly(2)
@@ -3831,6 +3860,10 @@ class LocalGameServer:
                     action = int(values[0])
                     if action == 0:
                         role_id = int(values[1]) if len(values) > 1 else 0
+                        if position_dirty:
+                            self.roles.save()
+                            position_dirty = False
+                        last_position_checkpoint_at = time.monotonic()
                         active_role = self.roles.find(username, role_id)
                         if active_role is None:
                             LOG.warning('unknown role selected user=%r role_id=%d', username, role_id)
@@ -3926,6 +3959,22 @@ class LocalGameServer:
                             username,
                             battle_state.player_tile,
                         )
+                    if active_role is not None:
+                        if update_role_position(active_role, movement_x, movement_y):
+                            position_dirty = True
+                            now = time.monotonic()
+                            if now - last_position_checkpoint_at >= POSITION_CHECKPOINT_SECONDS:
+                                self.roles.save()
+                                position_dirty = False
+                                last_position_checkpoint_at = now
+                                LOG.info(
+                                    'ROLE_POSITION_CHECKPOINT user=%r role_id=%d map=%d tile=%d,%d',
+                                    username,
+                                    int(active_role.get('id', 0)),
+                                    int(active_role.get('map_id', self.settings.default_map_id)),
+                                    movement_x,
+                                    movement_y,
+                                )
                     current_settings = settings_for_role(self.settings, active_role)
                     nearby_npcs = map_npcs_near(current_settings, movement_x, movement_y)
                     nearby_ids = {npc.id for npc in nearby_npcs}
@@ -4626,6 +4675,27 @@ class LocalGameServer:
         except (ProtocolError, UnicodeDecodeError, ValueError) as exc:
             LOG.warning('protocol error from %s: %s', peer, exc)
         finally:
+            if position_dirty:
+                try:
+                    self.roles.save()
+                    if active_role is not None:
+                        LOG.info(
+                            'ROLE_POSITION_DISCONNECT_SAVE '
+                            'user=%r role_id=%d map=%d tile=%d,%d',
+                            username,
+                            int(active_role.get('id', 0)),
+                            int(active_role.get('map_id', self.settings.default_map_id)),
+                            int(active_role.get('map_x', 0)),
+                            int(active_role.get('map_y', 0)),
+                        )
+                    position_dirty = False
+                except OSError as exc:
+                    LOG.error(
+                        'ROLE_POSITION_SAVE_FAILED user=%r peer=%s error=%s',
+                        username,
+                        peer,
+                        exc,
+                    )
             if heartbeat_task is not None:
                 heartbeat_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
