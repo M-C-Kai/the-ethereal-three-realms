@@ -238,6 +238,8 @@ def main() -> None:
 
         if args.exercise_team_only:
             game_sock.sendall(cipher.encrypt_frame(team_create_request(role_id)))
+            leader_status = expect(game_sock, 1017, cipher)
+            assert leader_status == [0, role_id, 1, 0, 0x40], leader_status
             created_team = expect(game_sock, 1026, cipher)
             assert created_team == [
                 0,
@@ -246,7 +248,7 @@ def main() -> None:
                 role_id,
                 player_properties[40],
                 player_properties[41],
-                player_properties[39],
+                player_properties[12],
                 player_properties[11],
                 player_properties[42],
                 player_properties[43],
@@ -254,7 +256,16 @@ def main() -> None:
             ], created_team
 
             game_sock.sendall(cipher.encrypt_frame(team_disband_request()))
+            cleared_status = expect(game_sock, 1017, cipher)
+            assert cleared_status == [0, role_id, 1, 0, 0], cleared_status
             assert expect(game_sock, 1023, cipher) == [11], 'team disband acknowledgement'
+
+            # A stale native leader page may repeat the same action after the
+            # connection-local state has already been cleared.
+            game_sock.sendall(cipher.encrypt_frame(team_disband_request()))
+            repeated_clear = expect(game_sock, 1017, cipher)
+            assert repeated_clear == [0, role_id, 1, 0, 0], repeated_clear
+            assert expect(game_sock, 1023, cipher) == [11], 'repeated team disband acknowledgement'
             print(f'OK: 角色 {player_properties[3]} 创建单人队伍 -> 解散队伍')
             return
 

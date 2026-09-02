@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import contextlib
 import json
 import logging
+import random
 import struct
 import time
 from dataclasses import dataclass, field, fields
@@ -33,6 +35,19 @@ from protocol import (
     long_integer,
     short,
     string,
+)
+from strengthening import (
+    INITIAL_STRENGTHEN_STONE_TEMPLATE_ID,
+    MIDDLE_STRENGTHEN_STONE_TEMPLATE_ID,
+    STRENGTHENING_ATTACK_BONUSES,
+    is_strengthening_stone,
+    normalized_strengthen_level,
+    rate_for,
+    recalculate_equipment_attributes,
+    stone_definition_for,
+    strengthening_failure_level,
+    strengthening_success,
+    total_strengthening_rate,
 )
 
 
@@ -275,6 +290,26 @@ class CombatStats:
     physical_defence: int
 
 
+def equipped_weapon_attack(role: dict[str, object]) -> int:
+    """Return the effective first attribute of the equipped slot-10 weapon."""
+    weapon = next(
+        (
+            item
+            for item in role_items(role)
+            if item.get('location') == 'equipped'
+            and is_equipment(item)
+            and item_slot(item) == 10
+        ),
+        None,
+    )
+    if weapon is None:
+        return 0
+    attributes = list(weapon.get('equipment_attributes', [0, 0, 0, 0]))
+    if not attributes or type(attributes[0]) is not int:
+        return 0
+    return max(0, attributes[0])
+
+
 def combat_stats(role: dict[str, object]) -> CombatStats:
     """Derive battle values from the same level/stats shown by the character UI."""
     level = max(1, int(role.get('level', 1)))
@@ -282,7 +317,12 @@ def combat_stats(role: dict[str, object]) -> CombatStats:
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
     return CombatStats(
         max_hp=100 + ((level - 1) * 10) + base_stats[1],
-        physical_attack=10 + base_stats[0] + ((level - 1) * 2),
+        physical_attack=(
+            10
+            + base_stats[0]
+            + ((level - 1) * 2)
+            + equipped_weapon_attack(role)
+        ),
         physical_defence=base_stats[1] + (level - 1),
     )
 
@@ -298,6 +338,9 @@ class LocalTeamState:
         return self.leader_id > 0
 
 
+TEAM_LEADER_FLAG = 0x40
+
+
 def team_request_frames(
     role: dict[str, object],
     values: list[object],
@@ -311,7 +354,10 @@ def team_request_frames(
         # losing connection-local state.  Always acknowledge its confirmed
         # disband action so that the native UI can leave that stale page.
         state.leader_id = 0
-        return [encode_frame(1023, [short(11)])]
+        return [
+            character_appearance_frame(role_id, {0: 0}),
+            encode_frame(1023, [short(11)]),
+        ]
     if action != 0 or len(values) < 2 or int(values[1]) != role_id or state.active:
         return []
 
@@ -321,19 +367,25 @@ def team_request_frames(
     max_hp = combat_stats(role).max_hp
     max_mp = 50 + ((level - 1) * 5) + max(0, base_stats[2])
     state.leader_id = role_id
-    return [encode_frame(1026, [
-        byte(0),
-        byte(1),
-        string(str(role.get('name', ''))),
-        integer(role_id),
-        integer(max_hp),
-        integer(max_hp),
-        byte(int(role.get('race', 0))),
-        integer(level),
-        integer(max_mp),
-        integer(max_mp),
-        integer(0),
-    ])]
+    return [
+        # The native team page and map HUD test property 0's 0x40 bit to
+        # decide whether the local player is the leader.  Send it before the
+        # member record so the 1026-triggered page refresh builds leader text.
+        character_appearance_frame(role_id, {0: TEAM_LEADER_FLAG}),
+        encode_frame(1026, [
+            byte(0),
+            byte(1),
+            string(str(role.get('name', ''))),
+            integer(role_id),
+            integer(max_hp),
+            integer(max_hp),
+            byte(normalized_sect_id(role)),
+            integer(level),
+            integer(max_mp),
+            integer(max_mp),
+            integer(0),
+        ]),
+    ]
 
 
 @dataclass
@@ -462,6 +514,28 @@ BATTLE_DROP_NAME = '小还丹'
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
 DEFAULT_BAG_CAPACITY = 40
+DEFAULT_CURRENCY_BALANCE = 10_000_000
+MAX_CURRENCY_BALANCE = 2_147_483_647
+CURRENCY_PROPERTIES = {
+    'immortal_stones': 49,
+    'silver': 50,
+    'immortal_crystals': 52,
+}
+
+
+def initial_currency_balances() -> dict[str, int]:
+    return {
+        name: DEFAULT_CURRENCY_BALANCE
+        for name in CURRENCY_PROPERTIES
+    }
+
+
+def normalized_currency_balance(value: object) -> int:
+    if type(value) is int and 0 <= value <= MAX_CURRENCY_BALANCE:
+        return value
+    return DEFAULT_CURRENCY_BALANCE
+
+
 # 1042 only appends records to the APK's battle queue. The following full
 # 1040/action=2 calls the battle screen's i() method and starts playback. The
 # client then returns the short [action=2, round] acknowledgement after the
@@ -624,6 +698,7 @@ EQUIPMENT_APPEARANCE_PROPERTIES = {
 
 POTION_TEMPLATE_ID = 260_000_001
 POTION_ICON_CODE = 6109
+STACKABLE_ITEM_FLAG = 0x40
 
 
 def role_race_and_gender(model: int) -> tuple[int, int]:
@@ -660,8 +735,10 @@ def default_role(settings: Settings) -> dict[str, object]:
         'map_y': initial_map.spawn_y,
         'mount_model': 0,
         'bag_capacity': DEFAULT_BAG_CAPACITY,
+        'currencies': initial_currency_balances(),
     }
     role['items'] = starter_items(int(role['id']))
+    role['strengthening_stones_initialized'] = True
     role['mailbox'] = starter_mail(int(role['id']))
     role['mailbox_initialized'] = True
     return role
@@ -750,6 +827,9 @@ def starter_items(role_id: int) -> list[dict[str, object]]:
             'sort_order': order,
             'equipment_attributes': [3 if slot == 10 else 0, 2 if slot in {1, 2, 3, 4, 5, 7, 8, 9, 12} else 0, 0, 0],
         }
+        if slot == 10:
+            item['strengthen_level'] = 0
+            item['base_equipment_attributes'] = list(item['equipment_attributes'])
         appearance = EQUIPMENT_APPEARANCE_PROPERTIES.get(slot)
         if appearance is not None:
             item['appearance_properties'] = dict(appearance)
@@ -791,6 +871,29 @@ def starter_items(role_id: int) -> list[dict[str, object]]:
         'equipment_attributes': [0, 0, 0, 0],
         'mount_model': DEFAULT_MOUNT_MODEL,
     })
+    for sort_order, (template_id, name) in enumerate((
+        (INITIAL_STRENGTHEN_STONE_TEMPLATE_ID, '初级强化石'),
+        (MIDDLE_STRENGTHEN_STONE_TEMPLATE_ID, '中级强化石'),
+    ), start=2):
+        items.append({
+            'id': item_base + 16 + sort_order,
+            'template_id': template_id,
+            'name': name,
+            'description': f'{name}。_用于本地服武器强化，可一次投入 1 至 5 颗。',
+            'quantity': 1000,
+            'max_quantity': 9999,
+            'location': 'bag',
+            'price': 0,
+            'level_required': 1,
+            'icon_code': POTION_ICON_CODE,
+            'quality': 0,
+            'sort_group': 150,
+            'sort_order': sort_order,
+            # bw.r() only reads the 1008 quantity when j.n() sees bit 0x40;
+            # without it the strengthening screen treats the whole stack as 1.
+            'item_flags': STACKABLE_ITEM_FLAG,
+            'action_flags': 0,
+        })
     return items
 
 
@@ -835,34 +938,140 @@ class RoleStore:
         items = role.get('items')
         if not isinstance(items, list):
             role['items'] = starter_items(int(role.get('id', 0)))
+            role['strengthening_stones_initialized'] = True
             return True
         changed = False
+        stones_initialized = bool(role.get('strengthening_stones_initialized', False))
         defaults = starter_items(int(role.get('id', 0)))
         by_id = {
             int(item.get('id', 0)): item
             for item in items
             if isinstance(item, dict)
         }
+        stones_by_template = {
+            int(item.get('template_id', 0)): item
+            for item in items
+            if isinstance(item, dict) and is_strengthening_stone(item)
+        }
         # Upgrade the two legacy test items in place and append the missing
         # equipment slots.  Location and quantities are player state, so they
         # survive this catalogue migration.
         for default in defaults:
             item_id = int(default['id'])
-            current = by_id.get(item_id)
+            if is_strengthening_stone(default):
+                template_id = int(default['template_id'])
+                current = stones_by_template.get(template_id)
+                if current is None and stones_initialized:
+                    continue
+                if current is None:
+                    conflicting = by_id.get(item_id)
+                    if conflicting is not None:
+                        used_ids = set(by_id)
+                        replacement_id = (int(role.get('id', 0)) * 100) + 20
+                        while replacement_id in used_ids:
+                            replacement_id += 1
+                        conflicting['id'] = replacement_id
+                        del by_id[item_id]
+                        by_id[replacement_id] = conflicting
+                        changed = True
+                        LOG.warning(
+                            'reassigned legacy item id collision role_id=%s old_id=%d new_id=%d',
+                            role.get('id', 0),
+                            item_id,
+                            replacement_id,
+                        )
+            else:
+                current = by_id.get(item_id)
             if current is None:
                 items.append(default)
                 by_id[item_id] = default
+                if is_strengthening_stone(default):
+                    stones_by_template[int(default['template_id'])] = default
                 changed = True
                 continue
             preserved = {
                 key: current[key]
-                for key in ('location', 'quantity', 'last_heal')
+                for key in (
+                    'id',
+                    'location',
+                    'quantity',
+                    'last_heal',
+                    'strengthen_level',
+                    'base_equipment_attributes',
+                    'equipment_attributes',
+                )
                 if key in current
             }
+            if is_strengthening_stone(default):
+                preserved['item_flags'] = (
+                    int(current.get('item_flags', 0)) | STACKABLE_ITEM_FLAG
+                )
+            if (
+                int(default.get('equipment_slot', 0)) == 10
+                and 'base_equipment_attributes' not in current
+                and 'equipment_attributes' in current
+            ):
+                # Before strengthening existed, the effective weapon values
+                # were also its base values. Seed the new stable base from the
+                # persisted weapon instead of replacing custom legacy stats
+                # with the starter catalogue defaults.
+                current_attributes = list(
+                    current.get('equipment_attributes', [0, 0, 0, 0])
+                )
+                base_attributes = [
+                    (
+                        current_attributes[index]
+                        if index < len(current_attributes)
+                        and type(current_attributes[index]) is int
+                        and current_attributes[index] >= 0
+                        else 0
+                    )
+                    for index in range(4)
+                ]
+                raw_level = current.get('strengthen_level', 0)
+                level = normalized_strengthen_level(current)
+                if type(raw_level) is int and 0 < raw_level <= 9:
+                    base_attributes[0] = max(
+                        0,
+                        base_attributes[0] - STRENGTHENING_ATTACK_BONUSES[level],
+                    )
+                preserved['base_equipment_attributes'] = base_attributes
             merged = {**default, **preserved}
+            if int(merged.get('equipment_slot', 0)) == 10:
+                merged['strengthen_level'] = normalized_strengthen_level(merged)
+                recalculate_equipment_attributes(merged)
             if current != merged:
                 current.clear()
                 current.update(merged)
+                changed = True
+        if not stones_initialized:
+            role['strengthening_stones_initialized'] = True
+            changed = True
+        for item in items:
+            if not isinstance(item, dict) or not is_strengthenable_weapon(item):
+                continue
+            before_strengthening = copy.deepcopy(item)
+            raw_level = item.get('strengthen_level', 0)
+            level = normalized_strengthen_level(item)
+            if 'base_equipment_attributes' not in item:
+                current_attributes = list(
+                    item.get('equipment_attributes', [0, 0, 0, 0])
+                )
+                base_attributes = []
+                for index in range(4):
+                    value = current_attributes[index] if index < len(current_attributes) else 0
+                    base_attributes.append(
+                        value if type(value) is int and value >= 0 else 0
+                    )
+                if type(raw_level) is int and 0 < raw_level <= 9:
+                    base_attributes[0] = max(
+                        0,
+                        base_attributes[0] - STRENGTHENING_ATTACK_BONUSES[level],
+                    )
+                item['base_equipment_attributes'] = base_attributes
+            item['strengthen_level'] = level
+            recalculate_equipment_attributes(item)
+            if item != before_strengthening:
                 changed = True
         for order, item in enumerate(items, start=1):
             if not isinstance(item, dict):
@@ -924,6 +1133,17 @@ class RoleStore:
             if 'bag_capacity' not in role:
                 role['bag_capacity'] = DEFAULT_BAG_CAPACITY
                 changed = True
+            currencies = role.get('currencies')
+            if not isinstance(currencies, dict):
+                currencies = initial_currency_balances()
+                role['currencies'] = currencies
+                changed = True
+            for name in CURRENCY_PROPERTIES:
+                current_balance = currencies.get(name)
+                normalized_balance = normalized_currency_balance(current_balance)
+                if type(current_balance) is not int or current_balance != normalized_balance:
+                    currencies[name] = normalized_balance
+                    changed = True
             try:
                 current_map = self.settings.map_registry.require(
                     int(role.get('map_id', self.settings.default_map_id))
@@ -986,8 +1206,10 @@ class RoleStore:
             'map_x': initial_map.spawn_x,
             'map_y': initial_map.spawn_y,
             'bag_capacity': DEFAULT_BAG_CAPACITY,
+            'currencies': initial_currency_balances(),
         }
         role['items'] = starter_items(role_id)
+        role['strengthening_stones_initialized'] = True
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
         roles.append(role)
@@ -1108,7 +1330,13 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
         properties[index] = integer(max(0, value))
 
     properties[49] = integer(0)
-    properties[52] = integer(0)
+    currencies = role.get('currencies', {})
+    if not isinstance(currencies, dict):
+        currencies = {}
+    for name, property_index in CURRENCY_PROPERTIES.items():
+        properties[property_index] = integer(
+            normalized_currency_balance(currencies.get(name))
+        )
     properties[54] = string('无')
     properties[55] = integer(100)
     properties[56] = integer(100)
@@ -1574,6 +1802,233 @@ def is_equipment(item: dict[str, object]) -> bool:
     return 1 <= category <= 21
 
 
+def is_strengthenable_weapon(item: dict[str, object]) -> bool:
+    return is_equipment(item) and item_slot(item) == 10
+
+
+def item_display_name(item: dict[str, object]) -> str:
+    name = str(item.get('name', '未命名物品'))
+    level = normalized_strengthen_level(item) if is_strengthenable_weapon(item) else 0
+    return f'{name} +{level}' if level > 0 else name
+
+
+def item_display_description(item: dict[str, object]) -> str:
+    description = str(item.get('description', item.get('name', '物品')))
+    if not is_strengthenable_weapon(item):
+        return description
+    level = normalized_strengthen_level(item)
+    attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+    attack = int(attributes[0]) if attributes else 0
+    return f'{description}_强化：+{level}_当前攻击：{attack}'
+
+
+def strengthening_open_frame() -> bytes:
+    return encode_frame(1009, [
+        short(97),
+        string('请选择需要强化的装备和强化宝石。'),
+    ])
+
+
+def strengthening_equipment_frame(item: dict[str, object]) -> bytes:
+    attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+    attack = int(attributes[0]) if attributes else 0
+    level = normalized_strengthen_level(item)
+    summary = f'{item_display_name(item)}_强化 +{level}，当前攻击：{attack}'
+    return encode_frame(1009, [short(75), string(summary)])
+
+
+def strengthening_equipment_error_frame(message: str) -> bytes:
+    return encode_frame(1009, [short(75), string(message)])
+
+
+def strengthening_rate_frame(
+    item: dict[str, object],
+    stone: dict[str, object],
+) -> bytes:
+    definition = stone_definition_for(stone)
+    level = normalized_strengthen_level(item)
+    rate = 0
+    if definition is not None and level < 9:
+        rate = rate_for(definition, level)
+    text = f'单颗成功率：{rate / 100:.2f}%'
+    return encode_frame(1009, [short(74), short(rate), string(text)])
+
+
+def strengthening_rate_error_frame(message: str) -> bytes:
+    return encode_frame(1009, [short(74), short(0), string(message)])
+
+
+def strengthening_stone_selection_frame(valid: bool) -> bytes:
+    fields = [short(77), byte(1 if valid else 0)]
+    if valid:
+        fields.append(byte(1))
+    return encode_frame(1009, fields)
+
+
+def strengthening_reset_frame() -> bytes:
+    return encode_frame(1009, [short(78)])
+
+
+STRENGTHENING_ACTIONS = {74, 75, 77, 92, 97}
+
+
+@dataclass(frozen=True)
+class StrengtheningActionResult:
+    frames: tuple[bytes, ...]
+    changed: bool
+    message: str = ''
+
+
+def _invalid_strengthening_result(message: str) -> StrengtheningActionResult:
+    return StrengtheningActionResult(
+        (top_message_frame(message), strengthening_reset_frame()),
+        False,
+        message,
+    )
+
+
+def strengthening_action_result(
+    role: dict[str, object],
+    values: list[object],
+    rng=random,
+) -> StrengtheningActionResult:
+    """Apply one confirmed protocol-1009 strengthening action atomically."""
+    if not values:
+        return _invalid_strengthening_result('强化请求缺少操作类型')
+    try:
+        action = int(values[0])
+    except (TypeError, ValueError):
+        return _invalid_strengthening_result('强化请求格式错误')
+
+    if action == 97:
+        return StrengtheningActionResult((strengthening_open_frame(),), False)
+    if action not in STRENGTHENING_ACTIONS:
+        return StrengtheningActionResult((), False)
+
+    try:
+        weapon_id = int(values[1])
+    except (IndexError, TypeError, ValueError):
+        if action == 75:
+            return StrengtheningActionResult(
+                (strengthening_equipment_error_frame('请选择需要强化的武器'),),
+                False,
+                '请选择需要强化的武器',
+            )
+        if action == 74:
+            return StrengtheningActionResult(
+                (strengthening_rate_error_frame('请选择需要强化的武器'),),
+                False,
+                '请选择需要强化的武器',
+            )
+        return _invalid_strengthening_result('请选择需要强化的武器')
+    weapon = find_item(role, weapon_id)
+    valid_weapon = (
+        weapon is not None
+        and is_strengthenable_weapon(weapon)
+        and str(weapon.get('location', 'bag')) in {'bag', 'equipped'}
+    )
+    if not valid_weapon or weapon is None:
+        if action == 75:
+            return StrengtheningActionResult(
+                (strengthening_equipment_error_frame('只能强化背包或已装备的武器'),),
+                False,
+                '只能强化背包或已装备的武器',
+            )
+        if action == 74:
+            return StrengtheningActionResult(
+                (strengthening_rate_error_frame('只能强化背包或已装备的武器'),),
+                False,
+                '只能强化背包或已装备的武器',
+            )
+        return _invalid_strengthening_result('只能强化背包或已装备的武器')
+    if action == 75:
+        return StrengtheningActionResult((strengthening_equipment_frame(weapon),), False)
+
+    try:
+        stone_id = int(values[2])
+    except (IndexError, TypeError, ValueError):
+        if action == 77:
+            return StrengtheningActionResult(
+                (strengthening_stone_selection_frame(False),),
+                False,
+                '请选择强化石',
+            )
+        if action == 74:
+            return StrengtheningActionResult(
+                (strengthening_rate_error_frame('请选择强化石'),),
+                False,
+                '请选择强化石',
+            )
+        return _invalid_strengthening_result('请选择强化石')
+    stone = find_item(role, stone_id)
+    definition = stone_definition_for(stone) if stone is not None else None
+    valid_stone = (
+        stone is not None
+        and definition is not None
+        and is_strengthening_stone(stone)
+        and str(stone.get('location', 'bag')) == 'bag'
+        and type(stone.get('quantity')) is int
+        and int(stone.get('quantity', 0)) > 0
+    )
+    if action == 77:
+        if valid_stone:
+            # The APK sends action 77 immediately before action 74. Its S→C
+            # action-77/status=1 branch calls bw.n(), which clears both chosen
+            # item slots; a valid selection must therefore be acknowledged by
+            # the following action-74 rate frame only. Status 0 remains the
+            # native directive for rejecting and clearing an invalid stone.
+            return StrengtheningActionResult((), False)
+        return StrengtheningActionResult(
+            (strengthening_stone_selection_frame(False),),
+            False,
+            '强化石无效',
+        )
+    if not valid_stone or stone is None or definition is None:
+        if action == 74:
+            return StrengtheningActionResult(
+                (strengthening_rate_error_frame('强化石无效或数量不足'),),
+                False,
+                '强化石无效或数量不足',
+            )
+        return _invalid_strengthening_result('强化石无效或数量不足')
+    if action == 74:
+        return StrengtheningActionResult(
+            (strengthening_rate_frame(weapon, stone),),
+            False,
+        )
+
+    try:
+        count = int(values[3])
+    except (IndexError, TypeError, ValueError):
+        return _invalid_strengthening_result('强化石数量无效')
+    level = normalized_strengthen_level(weapon)
+    quantity = int(stone['quantity'])
+    if type(values[3]) is bool or not 1 <= count <= 5 or count > quantity:
+        return _invalid_strengthening_result('每次需投入 1 至 5 颗强化石，且不能超过持有数量')
+    if level >= 9:
+        return _invalid_strengthening_result('武器已达到最高强化等级 +9')
+
+    succeeded = strengthening_success(definition, level, count, rng)
+    next_level = level + 1 if succeeded else strengthening_failure_level(level)
+    weapon['strengthen_level'] = next_level
+    recalculate_equipment_attributes(weapon)
+    remaining = quantity - count
+    stone['quantity'] = remaining
+
+    frames = [item_frame(weapon, operation=3), item_frame(stone, operation=3)]
+    if remaining == 0:
+        role_items(role).remove(stone)
+        frames.append(encode_frame(1009, [short(3), integer(stone_id)]))
+    if succeeded:
+        message = f'强化成功，{item_display_name(weapon)}'
+    elif next_level == level:
+        message = f'强化失败，等级保持 +{level}'
+    else:
+        message = f'强化失败，等级降至 +{next_level}'
+    frames.extend((top_message_frame(message), strengthening_reset_frame()))
+    return StrengtheningActionResult(tuple(frames), True, message)
+
+
 def item_frame(item: dict[str, object], operation: int = 1) -> bytes:
     """Encode the original client's complete 1008 item-instance record.
 
@@ -1593,7 +2048,7 @@ def item_frame(item: dict[str, object], operation: int = 1) -> bytes:
         integer(int(item.get('state_flags', 0))),
         integer(int(item.get('price', 0))),
         integer(int(item['template_id'])),
-        string(str(item.get('name', '未命名物品'))),
+        string(item_display_name(item)),
         short(int(item.get('item_flags', 0))),
         short(int(item.get('action_flags', 0))),
         byte(int(item.get('level_required', 1))),
@@ -1618,7 +2073,7 @@ def item_description_frame(item: dict[str, object]) -> bytes:
     return encode_frame(1009, [
         short(82),
         integer(int(item['id'])),
-        string(str(item.get('description', item.get('name', '物品')))),
+        string(item_display_description(item)),
     ])
 
 
@@ -1627,7 +2082,7 @@ def item_detail_frame(item: dict[str, object]) -> bytes:
         byte(1),
         integer(int(item.get('template_id', 0))),
         short(int(item.get('icon_code', item.get('quality', 0)))),
-        string(str(item.get('description', item.get('name', '物品')))),
+        string(item_display_description(item)),
     ])
 
 
@@ -3054,6 +3509,24 @@ class LocalGameServer:
             self.roles.save()
         return response_frames
 
+    def handle_strengthening_request(
+        self,
+        role: dict[str, object],
+        values: list[object],
+        rng=random,
+    ) -> tuple[bytes, ...]:
+        """Apply one 1009 strengthening transition and persist mutations only."""
+        snapshot = copy.deepcopy(role)
+        try:
+            result = strengthening_action_result(role, values, rng)
+            if result.changed:
+                self.roles.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        return result.frames
+
     async def _send(
         self,
         writer: asyncio.StreamWriter,
@@ -3988,6 +4461,21 @@ class LocalGameServer:
                         LOG.info('item detail requested for unknown item_id=%d', item_id)
                 elif message_id == 1009 and active_role is not None and values:
                     action = int(values[0])
+                    if action in STRENGTHENING_ACTIONS:
+                        response_frames = self.handle_strengthening_request(active_role, values)
+                        LOG.info(
+                            'weapon strengthening request action=%d values=%r response_count=%d',
+                            action,
+                            values,
+                            len(response_frames),
+                        )
+                        await self._send(
+                            writer,
+                            *response_frames,
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                        continue
                     item_id = int(values[1]) if len(values) > 1 else 0
                     item = find_item(active_role, item_id)
                     if action == 82 and item is not None:

@@ -110,18 +110,26 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(hasattr(server_module, 'LocalTeamState'))
         self.assertTrue(hasattr(server_module, 'team_request_frames'))
         role = default_role(Settings())
+        role['sect_id'] = 1
+        role['race'] = 2
         state = server_module.LocalTeamState()
 
         frames = server_module.team_request_frames(role, [0, 10001], state)
 
         self.assertTrue(state.active)
         self.assertEqual(state.leader_id, 10001)
-        self.assertEqual(len(frames), 1)
-        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(len(frames), 2)
+
+        status_id, status_fields = decode_frame(frames[0])
+        self.assertEqual(status_id, 1017)
+        self.assertEqual(field_values(status_fields), [0, 10001, 1, 0, 0x40])
+        self.assertEqual([field.type_id for field in status_fields], [2, 4, 4, 2, 4])
+
+        message_id, fields = decode_frame(frames[1])
         self.assertEqual(message_id, 1026)
         self.assertEqual(
             field_values(fields),
-            [0, 1, '本地侠客', 10001, 100, 100, 0, 1, 50, 50, 0],
+            [0, 1, '本地侠客', 10001, 100, 100, 1, 1, 50, 50, 0],
         )
         self.assertEqual(
             [field.type_id for field in fields],
@@ -138,8 +146,13 @@ class ProtocolTests(unittest.TestCase):
 
         self.assertFalse(state.active)
         self.assertEqual(state.leader_id, 0)
-        self.assertEqual(len(frames), 1)
-        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(len(frames), 2)
+        status_id, status_fields = decode_frame(frames[0])
+        self.assertEqual(status_id, 1017)
+        self.assertEqual(field_values(status_fields), [0, 10001, 1, 0, 0])
+        self.assertEqual([field.type_id for field in status_fields], [2, 4, 4, 2, 4])
+
+        message_id, fields = decode_frame(frames[1])
         self.assertEqual(message_id, 1023)
         self.assertEqual(field_values(fields), [11])
         self.assertEqual([field.type_id for field in fields], [3])
@@ -152,8 +165,12 @@ class ProtocolTests(unittest.TestCase):
         frames = server_module.team_request_frames(role, [11], state)
 
         self.assertFalse(state.active)
-        self.assertEqual(len(frames), 1)
-        message_id, fields = decode_frame(frames[0])
+        self.assertEqual(len(frames), 2)
+        status_id, status_fields = decode_frame(frames[0])
+        self.assertEqual(status_id, 1017)
+        self.assertEqual(field_values(status_fields), [0, 10001, 1, 0, 0])
+
+        message_id, fields = decode_frame(frames[1])
         self.assertEqual(message_id, 1023)
         self.assertEqual(field_values(fields), [11])
         self.assertEqual([field.type_id for field in fields], [3])
@@ -235,7 +252,7 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(created['gender'], 0)
             self.assertEqual(created.get('sect_id'), 0)
             self.assertEqual(created['map_name'], '长安')
-            self.assertEqual(len(role_items(created)), 16)
+            self.assertEqual(len(role_items(created)), 18)
             self.assertEqual(
                 {int(item.get('equipment_slot', 0)) for item in role_items(created) if int(item.get('equipment_slot', 0)) > 0},
                 set(range(1, 15)) | {17},
@@ -512,7 +529,7 @@ class ProtocolTests(unittest.TestCase):
         }
         self.assertTrue(RoleStore._ensure_items(role))
         migrated = role_items(role)
-        self.assertEqual(len(migrated), 16)
+        self.assertEqual(len(migrated), 18)
         weapon = next(item for item in migrated if item['name'] == '青锋剑')
         potion = next(item for item in migrated if item['name'] == '小还丹')
         self.assertEqual((weapon['location'], weapon['equipment_slot'], weapon['icon_code']), ('equipped', 10, 2701))
