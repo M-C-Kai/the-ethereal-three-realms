@@ -25,7 +25,6 @@ from server import (
     item_frame,
     item_slot,
     role_items,
-    STACKABLE_ITEM_FLAG,
 )
 from protocol import decode_frame, field_values
 
@@ -240,14 +239,18 @@ class EnsureItemsPreservesInstanceStateTests(unittest.TestCase):
         migrated = next(i for i in role['items'] if i.get('template_id') == STONE_TEMPLATE_ID)
         self.assertEqual(migrated['location'], 'warehouse')
 
-    def test_stone_item_flags_preserved(self):
+    def test_stone_item_flags_resolved_from_template(self):
         settings = Settings()
         role = default_role(settings)
         stone = next(i for i in role['items'] if i.get('template_id') == STONE_TEMPLATE_ID)
         stone['item_flags'] = 0x02
         RoleStore(settings)._ensure_items(role)
         migrated = next(i for i in role['items'] if i.get('template_id') == STONE_TEMPLATE_ID)
-        self.assertEqual(migrated['item_flags'], 0x02 | STACKABLE_ITEM_FLAG)
+        # item_flags is a template field — it is stripped from the instance
+        # and resolved from the catalogue at read time.
+        self.assertNotIn('item_flags', migrated)
+        resolved = settings.item_registry.resolve(migrated)
+        self.assertEqual(resolved['item_flags'], 0x40)
 
 
 class BattleRewardsMinimalInstanceTests(unittest.TestCase):
@@ -355,6 +358,72 @@ class CharacterAppearanceFromRegistryTests(unittest.TestCase):
         helmet['location'] = 'equipped'
         appearance = character_appearance(role, settings.item_registry)
         self.assertEqual(appearance.get(20), 3)
+
+
+class RegressionTests(unittest.TestCase):
+    def test_fresh_weapon_base_attack_is_three(self):
+        settings = Settings()
+        role = default_role(settings)
+        RoleStore(settings)._ensure_items(role)
+        weapon = next(i for i in role['items'] if i.get('template_id') == WEAPON_TEMPLATE_ID)
+        self.assertEqual(weapon['base_equipment_attributes'], [3, 0, 0, 0])
+        self.assertEqual(weapon['equipment_attributes'], [3, 0, 0, 0])
+
+    def test_fresh_weapon_attack_from_catalog_not_hardcoded(self):
+        settings = Settings()
+        role = default_role(settings)
+        RoleStore(settings)._ensure_items(role)
+        weapon = next(i for i in role['items'] if i.get('template_id') == WEAPON_TEMPLATE_ID)
+        definition = settings.item_registry.require(WEAPON_TEMPLATE_ID)
+        self.assertEqual(
+            weapon['base_equipment_attributes'][0],
+            definition.equipment_attributes[0],
+        )
+
+    def test_battle_reward_notice_name_follows_catalog(self):
+        from server import battle_reward_notice
+        settings = Settings()
+        role = default_role(settings)
+        role['items'] = [i for i in role['items'] if i.get('template_id') != POTION_TEMPLATE_ID]
+        item, _ = apply_battle_rewards(role, registry=settings.item_registry)
+        frame = battle_reward_notice(50, item)
+        _, fields = decode_frame(frame)
+        values = field_values(fields)
+        text = values[2]
+        self.assertIn('小还丹', text)
+
+    def test_item_flags_is_template_field_not_instance(self):
+        settings = Settings()
+        role = default_role(settings)
+        RoleStore(settings)._ensure_items(role)
+        for item in role['items']:
+            self.assertNotIn('item_flags', item,
+                f'item_flags must not be stored on instance (template_id={item.get("template_id")})')
+
+    def test_item_flags_resolved_from_template_for_stones(self):
+        settings = Settings()
+        role = default_role(settings)
+        RoleStore(settings)._ensure_items(role)
+        stone = next(i for i in role['items'] if i.get('template_id') == STONE_TEMPLATE_ID)
+        resolved = settings.item_registry.resolve(stone)
+        self.assertEqual(resolved['item_flags'], 0x40)
+
+    def test_item_flags_resolved_from_template_for_equipment(self):
+        settings = Settings()
+        role = default_role(settings)
+        RoleStore(settings)._ensure_items(role)
+        weapon = next(i for i in role['items'] if i.get('template_id') == WEAPON_TEMPLATE_ID)
+        resolved = settings.item_registry.resolve(weapon)
+        self.assertEqual(resolved['item_flags'], 0)
+
+    def test_no_template_fields_leak_to_role_items(self):
+        settings = Settings()
+        role = default_role(settings)
+        RoleStore(settings)._ensure_items(role)
+        for item in role['items']:
+            for field in TEMPLATE_FIELDS:
+                self.assertNotIn(field, item,
+                    f'template field {field!r} leaked to instance (template_id={item.get("template_id")})')
 
 
 if __name__ == '__main__':

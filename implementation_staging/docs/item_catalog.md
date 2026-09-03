@@ -21,10 +21,10 @@ server.py                        ← reads templates at runtime, never writes th
 ## Instance vs Template Fields
 
 **Instance fields** (persisted to roles.json):
-`id`, `template_id`, `quantity`, `location`, `last_heal`, `strengthen_level`, `base_equipment_attributes`, `equipment_attributes`, `state_flags`, `item_flags`
+`id`, `template_id`, `quantity`, `location`, `last_heal`, `strengthen_level`, `base_equipment_attributes`, `equipment_attributes`, `state_flags`
 
 **Template fields** (resolved at read time, never persisted):
-`name`, `description`, `max_quantity`, `price`, `level_required`, `icon_code`, `quality`, `sort_group`, `sort_order`, `equipment_slot`, `appearance_properties`, `action_flags`, `heal`, `mount_model`
+`kind`, `name`, `description`, `max_quantity`, `price`, `level_required`, `icon_code`, `quality`, `sort_group`, `sort_order`, `equipment_slot`, `appearance_properties`, `item_flags`, `action_flags`, `heal`, `mount_model`
 
 ## Key APIs
 
@@ -43,10 +43,9 @@ Seeds `base_equipment_attributes` and `strengthen_level` for weapons that lack t
 
 `_ensure_items()` runs on every role load:
 1. Strips template fields from all items (legacy cleanup)
-2. Preserves `item_flags` for strengthening stones (instance state)
-3. Merges starter defaults with existing items, stripping template fields from the merged result
-4. Seeds `base_equipment_attributes` for weapons missing it
-5. Runs `recalculate_equipment_attributes` on all weapons
+2. Merges starter defaults with existing items, stripping template fields from the merged result
+3. Seeds `base_equipment_attributes` from the catalogue template for weapons missing it
+4. Runs `recalculate_equipment_attributes` on all weapons
 
 ## Catalog Files
 
@@ -90,7 +89,7 @@ Seeds `base_equipment_attributes` and `strengthen_level` for weapons that lack t
 
 ## Tests
 
-`tests/test_item_registry.py` contains 39 tests covering:
+`tests/test_item_registry.py` contains 46 tests covering:
 - Registry load/validate
 - resolve() merge behavior
 - starter_instances() minimal output
@@ -100,3 +99,6 @@ Seeds `base_equipment_attributes` and `strengthen_level` for weapons that lack t
 - Weapon attack from instance state
 - Item frame resolves from registry
 - Character appearance from registry
+- Regression: fresh weapon base attack = 3 from catalog
+- Regression: battle reward notice name follows catalog
+- Regression: item_flags is template field, never stored on instance

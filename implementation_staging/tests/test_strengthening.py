@@ -191,7 +191,7 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
             self.assertEqual(values[2], 1000)
             self.assertEqual(values[9] & 0x40, 0x40)
 
-    def test_legacy_stones_gain_stackable_flag_without_losing_other_flags(self):
+    def test_legacy_stones_item_flags_resolved_from_template(self):
         settings = Settings()
         role = default_role(settings)
         stones = self._stones_by_template(role)
@@ -200,8 +200,11 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
 
         self.assertTrue(RoleStore(settings)._ensure_items(role))
 
+        registry = settings.item_registry
         for stone in stones.values():
-            self.assertEqual(stone["item_flags"], 0x42)
+            self.assertNotIn("item_flags", stone)
+            resolved = registry.resolve(stone)
+            self.assertEqual(resolved["item_flags"], 0x40)
 
     def test_legacy_role_gets_only_missing_stone_and_is_marked_initialized(self):
         settings = Settings()

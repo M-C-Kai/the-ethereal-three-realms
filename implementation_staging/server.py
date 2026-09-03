@@ -517,7 +517,6 @@ class LocalBattleState:
 # same role/inventory records used by the rest of the service.
 BATTLE_EXP_REWARD = 50
 BATTLE_DROP_TEMPLATE_ID = 260_000_001
-BATTLE_DROP_NAME = '小还丹'
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
 DEFAULT_BAG_CAPACITY = 40
@@ -844,27 +843,20 @@ class RoleStore:
         }
         # Strip template fields from legacy items that still carry them.
         template_owned_fields = {
-            'name', 'description', 'max_quantity', 'price', 'level_required',
-            'icon_code', 'quality', 'sort_group', 'sort_order',
-            'equipment_slot', 'innate_attributes',
+            'kind', 'name', 'description', 'max_quantity', 'price',
+            'level_required', 'icon_code', 'quality', 'sort_group',
+            'sort_order', 'equipment_slot', 'innate_attributes',
             'acquired_attributes', 'extra_attributes', 'appearance_properties',
             'item_flags', 'action_flags', 'heal', 'mount_model',
         }
         for item in items:
             if not isinstance(item, dict):
                 continue
-            # Preserve item_flags for strengthening stones before stripping
-            # template fields, since item_flags is instance state for stones.
-            saved_item_flags = None
-            if is_strengthening_stone(item):
-                saved_item_flags = item.get('item_flags')
             before_keys = set(item.keys())
             for field_name in template_owned_fields:
                 item.pop(field_name, None)
             if set(item.keys()) != before_keys:
                 changed = True
-            if saved_item_flags is not None and 'item_flags' not in item:
-                item['item_flags'] = saved_item_flags
         # Upgrade the two legacy test items in place and append the missing
         # equipment slots.  Location and quantities are player state, so they
         # survive this catalogue migration.
@@ -919,10 +911,6 @@ class RoleStore:
             if 'base_equipment_attributes' in current or 'strengthen_level' in current:
                 if 'equipment_attributes' in current:
                     preserved['equipment_attributes'] = list(current['equipment_attributes'])
-            if is_strengthening_stone(default):
-                preserved['item_flags'] = (
-                    int(current.get('item_flags', 0)) | STACKABLE_ITEM_FLAG
-                )
             resolved_default = registry.resolve(default)
             if (
                 int(resolved_default.get('equipment_slot', 0)) == 10
@@ -983,9 +971,13 @@ class RoleStore:
             if (
                 int(resolved.get('equipment_slot', 0)) == 10
                 and 'base_equipment_attributes' not in item
-                and 'equipment_attributes' in item
             ):
-                current_attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+                if 'equipment_attributes' in item:
+                    current_attributes = list(item['equipment_attributes'])
+                else:
+                    current_attributes = list(
+                        resolved.get('equipment_attributes', [0, 0, 0, 0])
+                    )
                 base_attributes = [
                     (
                         current_attributes[index]
@@ -1015,9 +1007,16 @@ class RoleStore:
             raw_level = item.get('strengthen_level', 0)
             level = normalized_strengthen_level(item)
             if 'base_equipment_attributes' not in item:
-                current_attributes = list(
-                    item.get('equipment_attributes', [0, 0, 0, 0])
-                )
+                # For new weapons, initialise base from the catalogue
+                # template rather than from the (possibly absent) instance
+                # equipment_attributes.
+                if 'equipment_attributes' in item:
+                    current_attributes = list(item['equipment_attributes'])
+                else:
+                    resolved = registry.resolve(item)
+                    current_attributes = list(
+                        resolved.get('equipment_attributes', [0, 0, 0, 0])
+                    )
                 base_attributes = []
                 for index in range(4):
                     value = current_attributes[index] if index < len(current_attributes) else 0
@@ -2098,7 +2097,9 @@ def battle_reward_notice(experience: int, item: dict[str, object], level_up: boo
     and use :func:`battle_reward_popup` for the immediate on-screen result.
     """
     level_text = '，升级了' if level_up else ''
-    text = f'战斗胜利{level_text}！获得经验 {experience}，获得 {item.get("name", BATTLE_DROP_NAME)} x{item.get("quantity_gained", 1)}'
+    resolved = default_item_registry().resolve(item)
+    name = resolved.get('name', '未知物品')
+    text = f'战斗胜利{level_text}！获得经验 {experience}，获得 {name} x{item.get("quantity_gained", 1)}'
     # 1123/action 0 is the client's normal notice channel.  A timestamp-like
     # version makes each victory visible even when the previous notice was
     # already acknowledged locally.
