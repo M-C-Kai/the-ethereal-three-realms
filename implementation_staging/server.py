@@ -955,8 +955,15 @@ class RoleStore:
                     )
                 preserved['base_equipment_attributes'] = base_attributes
             resolved_default = registry.resolve(default)
+            # Determine if this is a weapon before stripping template fields.
+            is_weapon = int(resolved_default.get('equipment_slot', 0)) == 10
+            # Strip template-owned fields from the resolved default before
+            # merging.  Only preserved instance state should survive into the
+            # role item; template fields are resolved at read time.
+            for field_name in template_owned_fields:
+                resolved_default.pop(field_name, None)
             merged = {**resolved_default, **preserved}
-            if int(merged.get('equipment_slot', 0)) == 10:
+            if is_weapon:
                 weapon_level = normalized_strengthen_level(current) if 'strengthen_level' in current else normalized_strengthen_level(merged)
                 merged['strengthen_level'] = weapon_level
                 recalculate_equipment_attributes(merged)
@@ -1026,25 +1033,6 @@ class RoleStore:
             item['strengthen_level'] = level
             recalculate_equipment_attributes(item)
             if item != before_strengthening:
-                changed = True
-        registry = self.settings.item_registry
-        for order, item in enumerate(items, start=1):
-            if not isinstance(item, dict):
-                continue
-            resolved = registry.resolve(item)
-            category = (int(item.get('template_id', 0)) // 10_000_000) % 100
-            equipment = 1 <= category <= 21
-            current_group = int(resolved.get('sort_group', 0))
-            expected_group = 100 if equipment else 150
-            if (
-                current_group not in {100, 150, 160, 170}
-                or (equipment and current_group != 100)
-                or (not equipment and current_group == 100)
-            ):
-                item['sort_group'] = expected_group
-                changed = True
-            if int(resolved.get('sort_order', 0)) == 0:
-                item['sort_order'] = order
                 changed = True
         return changed
 
@@ -2191,6 +2179,7 @@ def apply_one_level(role: dict[str, object]) -> bool:
 def apply_battle_rewards(
     role: dict[str, object],
     experience: int = BATTLE_EXP_REWARD,
+    registry: ItemRegistry | None = None,
 ) -> tuple[dict[str, object] | None, bool]:
     """Persist one trial victory and return the changed item plus level-up flag."""
     old_level = max(1, int(role.get('level', 1)))
@@ -2199,6 +2188,8 @@ def apply_battle_rewards(
         while int(role.get('level', 1)) < MAX_ROLE_LEVEL and apply_one_level(role):
             pass
 
+    if registry is None:
+        registry = default_item_registry()
     item = next(
         (candidate for candidate in role_items(role)
          if int(candidate.get('template_id', 0)) == BATTLE_DROP_TEMPLATE_ID
@@ -2209,28 +2200,18 @@ def apply_battle_rewards(
     if item is None:
         if bag_item_count(role) >= bag_capacity(role):
             return None, level_up
+        definition = registry.require(BATTLE_DROP_TEMPLATE_ID)
         item = {
             'id': (int(role.get('id', 0)) * 100) + 17,
             'template_id': BATTLE_DROP_TEMPLATE_ID,
-            'name': BATTLE_DROP_NAME,
-            'description': '试炼妖兽掉落的恢复道具。',
             'quantity': 1,
-            'max_quantity': 99,
             'location': 'bag',
-            'price': 2,
-            'level_required': 1,
-            'icon_code': POTION_ICON_CODE,
-            'quality': 0,
-            'sort_group': 150,
-            'sort_order': 99,
-            'item_flags': 0x40,
-            'action_flags': 0x06,
-            'heal': 50,
         }
         role_items(role).append(item)
     else:
+        definition = registry.require(BATTLE_DROP_TEMPLATE_ID)
         item['quantity'] = min(
-            int(item.get('max_quantity', 99)),
+            definition.max_quantity,
             int(item.get('quantity', 0)) + 1,
         )
     return item, level_up
@@ -4262,7 +4243,7 @@ class LocalGameServer:
                                 reward_item = None
                                 level_up = False
                                 if active_role is not None:
-                                    reward_item, level_up = apply_battle_rewards(active_role)
+                                    reward_item, level_up = apply_battle_rewards(active_role, registry=self.settings.item_registry)
                                     self.roles.save()
                                 battle_state.finish()
                                 battle_state.monster_defeated = True
