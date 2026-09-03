@@ -12,6 +12,10 @@ import time
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from item_registry import (
+    ItemRegistry,
+    default_item_registry,
+)
 from map_registry import (
     MapActorDefinition,
     MapDefinition,
@@ -158,6 +162,7 @@ class Settings:
     role_model: int = 2000
     default_map_id: int = 58
     map_registry: MapRegistry = field(default_factory=default_map_registry)
+    item_registry: ItemRegistry = field(default_factory=default_item_registry)
     # Deprecated aliases retained for protocol helpers and older local tests.
     # Map entry, entities and routing use ``map_registry`` below.
     map_id: int = 58
@@ -227,7 +232,7 @@ class Settings:
                 LOG.warning('failed to load NPC catalog %s: %s', catalog, exc)
 
         registry = load_map_registry(payload, npc_catalog=npc_catalog)
-        allowed = {item.name for item in fields(cls)} - {'map_registry'}
+        allowed = {item.name for item in fields(cls)} - {'map_registry', 'item_registry'}
         values = {key: value for key, value in payload.items() if key in allowed}
         values['default_map_id'] = registry.default_map_id
         settings = cls(map_registry=registry, **values)
@@ -629,38 +634,6 @@ def update_escape_guard_for_movement(state: LocalBattleState, x: int, y: int) ->
 # ``pmsj.work.e.af`` names the original equipment locations 1..14 exactly as
 # listed below.  Groups 1..13 are matching armour/accessory icon atlases;
 # groups 21..33 contain the different weapon families.
-EQUIPMENT_SPECS = (
-    (1, '青纹盔', 109, '头盔'),
-    (2, '青纹肩甲', 201, '肩甲'),
-    (3, '青纹铠甲', 305, '铠甲'),
-    (4, '青纹腰带', 406, '腰带'),
-    (5, '青纹腿甲', 505, '腿甲'),
-    (6, '青纹项链', 609, '项链'),
-    (7, '青纹披风', 701, '披风'),
-    (8, '青纹护腕', 804, '护腕'),
-    (9, '青纹长靴', 907, '鞋子'),
-    (10, '青锋剑', 2701, '武器'),
-    (11, '青纹戒指', 1106, '戒指'),
-    (12, '青纹外套', 1201, '外套'),
-    (13, '青纹饰品', 1309, '饰品'),
-    (14, '青纹法宝', 1000, '法宝'),
-)
-
-# The player sprite is composed from independently replaceable image layers.
-# Property 7 selects the weapon family; properties 14..20 select trousers,
-# armour, shoulders, wrists, boots, cape and helmet respectively. Zero is the
-# unequipped state (property 14 resolves zero to the bundled base trousers).
-BASE_CHARACTER_APPEARANCE = {
-    7: 0,
-    14: 0,
-    15: 0,
-    16: 0,
-    17: 0,
-    18: 0,
-    19: 0,
-    20: 0,
-}
-
 DEFAULT_MOUNT_MODEL = 105000
 MOUNT_EQUIPMENT_SLOT = 17  # APK resource 0x4661: the dedicated "坐骑" slot.
 
@@ -684,22 +657,21 @@ BATTLE_EMPTY_RESOURCE_IDS = {0}
 PNG_QUERY_MAIN_CACHE = 0
 PNG_QUERY_ROLE_CACHE = 2
 
-# All visible equipment channels were isolated and rendered in four directions
-# against role/100000.dat. Slots without a client sprite channel remain icon
-# only instead of being forced onto an unrelated body part.
-EQUIPMENT_APPEARANCE_PROPERTIES = {
-    1: {'20': 3},       # 头盔 -> 21003
-    2: {'16': 23},      # 肩甲 -> 17023
-    3: {'15': 34},      # 铠甲 -> 16034
-    5: {'14': 25},      # 腿甲 -> 15025
-    7: {'19': 3},       # 披风 -> 20003
-    8: {'17': 8},       # 护腕 -> 18008
-    9: {'18': 22},      # 鞋子 -> 19022
-    10: {'7': 270001},  # 武器 -> 27000 + quality overlay 30601
+# The player sprite is composed from independently replaceable image layers.
+# Property 7 selects the weapon family; properties 14..20 select trousers,
+# armour, shoulders, wrists, boots, cape and helmet respectively. Zero is the
+# unequipped state (property 14 resolves zero to the bundled base trousers).
+BASE_CHARACTER_APPEARANCE = {
+    7: 0,
+    14: 0,
+    15: 0,
+    16: 0,
+    17: 0,
+    18: 0,
+    19: 0,
+    20: 0,
 }
 
-POTION_TEMPLATE_ID = 260_000_001
-POTION_ICON_CODE = 6109
 STACKABLE_ITEM_FLAG = 0x40
 
 
@@ -739,7 +711,7 @@ def default_role(settings: Settings) -> dict[str, object]:
         'bag_capacity': DEFAULT_BAG_CAPACITY,
         'currencies': initial_currency_balances(),
     }
-    role['items'] = starter_items(int(role['id']))
+    role['items'] = starter_items(int(role['id']), settings.item_registry)
     role['strengthening_stones_initialized'] = True
     role['mailbox'] = starter_mail(int(role['id']))
     role['mailbox_initialized'] = True
@@ -801,102 +773,14 @@ def apply_portal_transition(
     return target.with_spawn(portal.target_x, portal.target_y)
 
 
-def starter_items(role_id: int) -> list[dict[str, object]]:
+def starter_items(
+    role_id: int,
+    registry: ItemRegistry | None = None,
+) -> list[dict[str, object]]:
     """Return the starter inventory understood by the original client."""
-    item_base = role_id * 100
-    # Keep the historical ids for weapon, armour and potion so persisted test
-    # characters migrate without losing their equipped state or stack count.
-    id_offsets = {10: 1, 3: 2}
-    remaining_offsets = iter(range(4, 16))
-    items: list[dict[str, object]] = []
-    for order, (slot, name, icon_code, slot_name) in enumerate(EQUIPMENT_SPECS, start=1):
-        item_offset = id_offsets[slot] if slot in id_offsets else next(remaining_offsets)
-        quality = 1
-        item = {
-            'id': item_base + item_offset,
-            'template_id': slot * 10_000_000 + 1_001,
-            'name': name,
-            'description': f'APK 原始资源中的{slot_name}。_青纹套装，装备位置：{slot_name}。',
-            'quantity': 1,
-            'max_quantity': 1,
-            'location': 'bag',
-            'equipment_slot': slot,
-            'price': 10 + slot,
-            'level_required': 1,
-            'icon_code': icon_code,
-            'quality': quality,
-            'sort_group': 100,
-            'sort_order': order,
-            'equipment_attributes': [3 if slot == 10 else 0, 2 if slot in {1, 2, 3, 4, 5, 7, 8, 9, 12} else 0, 0, 0],
-        }
-        if slot == 10:
-            item['strengthen_level'] = 0
-            item['base_equipment_attributes'] = list(item['equipment_attributes'])
-        appearance = EQUIPMENT_APPEARANCE_PROPERTIES.get(slot)
-        if appearance is not None:
-            item['appearance_properties'] = dict(appearance)
-        items.append(item)
-    items.append({
-        'id': item_base + 3,
-        'template_id': POTION_TEMPLATE_ID,
-        'name': '小还丹',
-        'description': '本地服测试恢复道具。_使用后恢复生命，并消耗一个。',
-        'quantity': 10,
-        'max_quantity': 99,
-        'location': 'bag',
-        'price': 2,
-        'level_required': 1,
-        'icon_code': POTION_ICON_CODE,
-        'quality': 0,
-        'sort_group': 150,
-        'sort_order': 1,
-        'item_flags': 0x40,
-        'action_flags': 0x06,
-        'heal': 50,
-    })
-    items.append({
-        'id': item_base + 16,
-        # Category 17 is parsed as an equipment record by the original APK;
-        # the independent location byte (17) selects its dedicated mount slot.
-        'template_id': 170_410_004,
-        'name': '辟邪',
-        'description': '坐骑装备。_装备后骑乘 105000，卸下后下坐骑。',
-        'quantity': 1,
-        'max_quantity': 1,
-        'location': 'bag',
-        'equipment_slot': MOUNT_EQUIPMENT_SLOT,
-        'price': 0,
-        'level_required': 1,
-        'icon_code': POTION_ICON_CODE,
-        'sort_group': 100,
-        'sort_order': MOUNT_EQUIPMENT_SLOT,
-        'equipment_attributes': [0, 0, 0, 0],
-        'mount_model': DEFAULT_MOUNT_MODEL,
-    })
-    for sort_order, (template_id, name) in enumerate((
-        (INITIAL_STRENGTHEN_STONE_TEMPLATE_ID, '初级强化石'),
-        (MIDDLE_STRENGTHEN_STONE_TEMPLATE_ID, '中级强化石'),
-    ), start=2):
-        items.append({
-            'id': item_base + 16 + sort_order,
-            'template_id': template_id,
-            'name': name,
-            'description': f'{name}。_用于本地服武器强化，可一次投入 1 至 5 颗。',
-            'quantity': 1000,
-            'max_quantity': 9999,
-            'location': 'bag',
-            'price': 0,
-            'level_required': 1,
-            'icon_code': POTION_ICON_CODE,
-            'quality': 0,
-            'sort_group': 150,
-            'sort_order': sort_order,
-            # bw.r() only reads the 1008 quantity when j.n() sees bit 0x40;
-            # without it the strengthening screen treats the whole stack as 1.
-            'item_flags': STACKABLE_ITEM_FLAG,
-            'action_flags': 0,
-        })
-    return items
+    if registry is None:
+        registry = default_item_registry()
+    return registry.starter_instances(role_id)
 
 
 def starter_mail(role_id: int) -> list[dict[str, object]]:
@@ -935,16 +819,19 @@ class RoleStore:
     def save(self) -> None:
         self._save()
 
-    @staticmethod
-    def _ensure_items(role: dict[str, object]) -> bool:
+    def _ensure_items(
+        self,
+        role: dict[str, object],
+    ) -> bool:
+        registry = self.settings.item_registry
         items = role.get('items')
         if not isinstance(items, list):
-            role['items'] = starter_items(int(role.get('id', 0)))
+            role['items'] = starter_items(int(role.get('id', 0)), registry)
             role['strengthening_stones_initialized'] = True
             return True
         changed = False
         stones_initialized = bool(role.get('strengthening_stones_initialized', False))
-        defaults = starter_items(int(role.get('id', 0)))
+        defaults = starter_items(int(role.get('id', 0)), registry)
         by_id = {
             int(item.get('id', 0)): item
             for item in items
@@ -955,6 +842,29 @@ class RoleStore:
             for item in items
             if isinstance(item, dict) and is_strengthening_stone(item)
         }
+        # Strip template fields from legacy items that still carry them.
+        template_owned_fields = {
+            'name', 'description', 'max_quantity', 'price', 'level_required',
+            'icon_code', 'quality', 'sort_group', 'sort_order',
+            'equipment_slot', 'innate_attributes',
+            'acquired_attributes', 'extra_attributes', 'appearance_properties',
+            'item_flags', 'action_flags', 'heal', 'mount_model',
+        }
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            # Preserve item_flags for strengthening stones before stripping
+            # template fields, since item_flags is instance state for stones.
+            saved_item_flags = None
+            if is_strengthening_stone(item):
+                saved_item_flags = item.get('item_flags')
+            before_keys = set(item.keys())
+            for field_name in template_owned_fields:
+                item.pop(field_name, None)
+            if set(item.keys()) != before_keys:
+                changed = True
+            if saved_item_flags is not None and 'item_flags' not in item:
+                item['item_flags'] = saved_item_flags
         # Upgrade the two legacy test items in place and append the missing
         # equipment slots.  Location and quantities are player state, so they
         # survive this catalogue migration.
@@ -1000,16 +910,22 @@ class RoleStore:
                     'last_heal',
                     'strengthen_level',
                     'base_equipment_attributes',
-                    'equipment_attributes',
                 )
                 if key in current
             }
+            # Only preserve equipment_attributes if the item has been modified
+            # (strengthened or has base_equipment_attributes). Otherwise, let
+            # the template default from the registry take precedence.
+            if 'base_equipment_attributes' in current or 'strengthen_level' in current:
+                if 'equipment_attributes' in current:
+                    preserved['equipment_attributes'] = list(current['equipment_attributes'])
             if is_strengthening_stone(default):
                 preserved['item_flags'] = (
                     int(current.get('item_flags', 0)) | STACKABLE_ITEM_FLAG
                 )
+            resolved_default = registry.resolve(default)
             if (
-                int(default.get('equipment_slot', 0)) == 10
+                int(resolved_default.get('equipment_slot', 0)) == 10
                 and 'base_equipment_attributes' not in current
                 and 'equipment_attributes' in current
             ):
@@ -1038,13 +954,49 @@ class RoleStore:
                         base_attributes[0] - STRENGTHENING_ATTACK_BONUSES[level],
                     )
                 preserved['base_equipment_attributes'] = base_attributes
-            merged = {**default, **preserved}
+            resolved_default = registry.resolve(default)
+            merged = {**resolved_default, **preserved}
             if int(merged.get('equipment_slot', 0)) == 10:
-                merged['strengthen_level'] = normalized_strengthen_level(merged)
+                weapon_level = normalized_strengthen_level(current) if 'strengthen_level' in current else normalized_strengthen_level(merged)
+                merged['strengthen_level'] = weapon_level
                 recalculate_equipment_attributes(merged)
             if current != merged:
                 current.clear()
                 current.update(merged)
+                changed = True
+        # Handle extra items that don't match any starter default.
+        # These need template field stripping and weapon base seeding.
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_id = int(item.get('id', 0))
+            if item_id in {int(d['id']) for d in defaults}:
+                continue
+            resolved = registry.resolve(item)
+            if (
+                int(resolved.get('equipment_slot', 0)) == 10
+                and 'base_equipment_attributes' not in item
+                and 'equipment_attributes' in item
+            ):
+                current_attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+                base_attributes = [
+                    (
+                        current_attributes[index]
+                        if index < len(current_attributes)
+                        and type(current_attributes[index]) is int
+                        and current_attributes[index] >= 0
+                        else 0
+                    )
+                    for index in range(4)
+                ]
+                raw_level = item.get('strengthen_level', 0)
+                level = normalized_strengthen_level(item)
+                if type(raw_level) is int and 0 < raw_level <= 9:
+                    base_attributes[0] = max(
+                        0,
+                        base_attributes[0] - STRENGTHENING_ATTACK_BONUSES[level],
+                    )
+                item['base_equipment_attributes'] = base_attributes
                 changed = True
         if not stones_initialized:
             role['strengthening_stones_initialized'] = True
@@ -1075,18 +1027,14 @@ class RoleStore:
             recalculate_equipment_attributes(item)
             if item != before_strengthening:
                 changed = True
+        registry = self.settings.item_registry
         for order, item in enumerate(items, start=1):
             if not isinstance(item, dict):
                 continue
-            # The original bag UI only places records whose field 14 belongs
-            # to one of its four tab groups. A zero value is accepted by the
-            # protocol parser but never appears in the visible list.
+            resolved = registry.resolve(item)
             category = (int(item.get('template_id', 0)) // 10_000_000) % 100
             equipment = 1 <= category <= 21
-            current_group = int(item.get('sort_group', 0))
-            # Group 100 is equipment-only: the bag sorter casts every member
-            # of that vector to the equipment subclass. Generic items belong
-            # in group 150; placing one in 100 freezes the original UI thread.
+            current_group = int(resolved.get('sort_group', 0))
             expected_group = 100 if equipment else 150
             if (
                 current_group not in {100, 150, 160, 170}
@@ -1095,7 +1043,7 @@ class RoleStore:
             ):
                 item['sort_group'] = expected_group
                 changed = True
-            if int(item.get('sort_order', 0)) == 0:
+            if int(resolved.get('sort_order', 0)) == 0:
                 item['sort_order'] = order
                 changed = True
         return changed
@@ -1210,7 +1158,7 @@ class RoleStore:
             'bag_capacity': DEFAULT_BAG_CAPACITY,
             'currencies': initial_currency_balances(),
         }
-        role['items'] = starter_items(role_id)
+        role['items'] = starter_items(role_id, self.settings.item_registry)
         role['strengthening_stones_initialized'] = True
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
@@ -1306,7 +1254,7 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
     properties[12] = integer(normalized_sect_id(role))
     # Item icons/templates and character image layers are separate catalogues.
     # Only verified appearance pairs are applied here.
-    for property_index, value in character_appearance(role).items():
+    for property_index, value in character_appearance(role, settings.item_registry).items():
         properties[property_index] = integer(value)
     properties[23] = integer(1000)
     properties[22] = integer(int(role.get('mount_model', 0)))
@@ -1610,13 +1558,57 @@ def item_action_location_valid(action: int, item: dict[str, object]) -> bool:
     return True
 
 
-def character_appearance(role: dict[str, object]) -> dict[int, int]:
+def ensure_weapon_base_attributes(
+    item: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> None:
+    """Ensure a weapon item has base_equipment_attributes and strengthen_level.
+
+    This is used when tests or callers work with minimal item instances that
+    may not have gone through RoleStore._ensure_items() yet.
+    """
+    if not is_strengthenable_weapon(item):
+        return
+    if registry is None:
+        registry = default_item_registry()
+    resolved = registry.resolve(item)
+    if 'base_equipment_attributes' not in item:
+        # Use the template's equipment_attributes as the base.
+        current_attributes = list(resolved.get('equipment_attributes', [0, 0, 0, 0]))
+        base_attributes = [
+            (
+                current_attributes[index]
+                if index < len(current_attributes)
+                and type(current_attributes[index]) is int
+                and current_attributes[index] >= 0
+                else 0
+            )
+            for index in range(4)
+        ]
+        raw_level = item.get('strengthen_level', 0)
+        level = normalized_strengthen_level(item)
+        if type(raw_level) is int and 0 < raw_level <= 9:
+            base_attributes[0] = max(
+                0,
+                base_attributes[0] - STRENGTHENING_ATTACK_BONUSES[level],
+            )
+        item['base_equipment_attributes'] = base_attributes
+    if 'strengthen_level' not in item:
+        item['strengthen_level'] = 0
+    recalculate_equipment_attributes(item)
+
+
+def character_appearance(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> dict[int, int]:
     """Return the effective verified character-layer properties for a role."""
     properties = dict(BASE_CHARACTER_APPEARANCE)
     for item in role_items(role):
         if item.get('location') != 'equipped' or not is_equipment(item):
             continue
-        appearance = item.get('appearance_properties', {})
+        resolved = registry.resolve(item) if registry is not None else item
+        appearance = resolved.get('appearance_properties', {})
         if not isinstance(appearance, dict):
             continue
         for property_index, value in appearance.items():
@@ -1635,7 +1627,7 @@ def map_player_appearance_debug(
     This snapshot is read-only.  It does not encode a frame and must not be
     used to decide protocol field values.
     """
-    appearance = character_appearance(role)
+    appearance = character_appearance(role, settings.item_registry if settings is not None else None)
     model = int(role.get('model', settings.role_model if settings is not None else 0))
     return {
         'role_id': int(role.get('id', 0)),
@@ -1763,8 +1755,9 @@ def mount_update_frame(role: dict[str, object]) -> bytes:
 def character_appearance_change_frame(
     role: dict[str, object],
     previous: dict[int, int],
+    registry: ItemRegistry | None = None,
 ) -> bytes | None:
-    current = character_appearance(role)
+    current = character_appearance(role, registry)
     changed = {
         property_index: current[property_index]
         for property_index in current
@@ -1775,7 +1768,10 @@ def character_appearance_change_frame(
     return character_appearance_frame(int(role['id']), changed)
 
 
-def equipment_panel_refresh_frame(role: dict[str, object]) -> bytes:
+def equipment_panel_refresh_frame(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> bytes:
     """Ask the APK to redraw the open equipment tab without changing sprites.
 
     The original client refreshes the equipment-page widgets from its 1017
@@ -1785,16 +1781,20 @@ def equipment_panel_refresh_frame(role: dict[str, object]) -> bytes:
     Re-sending the effective appearance values is visually a no-op but enters
     that callback and redraws the equipment vector.
     """
-    return character_appearance_frame(int(role['id']), character_appearance(role))
+    return character_appearance_frame(int(role['id']), character_appearance(role, registry))
 
 
 def find_item(role: dict[str, object], item_id: int) -> dict[str, object] | None:
     return next((item for item in role_items(role) if int(item.get('id', 0)) == item_id), None)
 
 
-def item_slot(item: dict[str, object]) -> int:
+def item_slot(item: dict[str, object], registry: ItemRegistry | None = None) -> int:
     if 'equipment_slot' in item:
         return int(item['equipment_slot'])
+    if registry is not None:
+        resolved = registry.resolve(item)
+        if 'equipment_slot' in resolved:
+            return int(resolved['equipment_slot'])
     category = (int(item.get('template_id', 0)) // 10_000_000) % 100
     return category if 1 <= category <= 14 else 0
 
@@ -1832,10 +1832,12 @@ def strengthening_open_frame() -> bytes:
 
 
 def strengthening_equipment_frame(item: dict[str, object]) -> bytes:
-    attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+    registry = default_item_registry()
+    resolved = registry.resolve(item)
+    attributes = list(resolved.get('equipment_attributes', [0, 0, 0, 0]))
     attack = int(attributes[0]) if attributes else 0
     level = normalized_strengthen_level(item)
-    summary = f'{item_display_name(item)}_强化 +{level}，当前攻击：{attack}'
+    summary = f'{item_display_name(resolved)}_强化 +{level}，当前攻击：{attack}'
     return encode_frame(1009, [short(75), string(summary)])
 
 
@@ -2021,8 +2023,9 @@ def strengthening_action_result(
     if remaining == 0:
         role_items(role).remove(stone)
         frames.append(encode_frame(1009, [short(3), integer(stone_id)]))
+    resolved_weapon = default_item_registry().resolve(weapon)
     if succeeded:
-        message = f'强化成功，{item_display_name(weapon)}'
+        message = f'强化成功，{item_display_name(resolved_weapon)}'
     elif next_level == level:
         message = f'强化失败，等级保持 +{level}'
     else:
@@ -2031,7 +2034,11 @@ def strengthening_action_result(
     return StrengtheningActionResult(tuple(frames), True, message)
 
 
-def item_frame(item: dict[str, object], operation: int = 1) -> bytes:
+def item_frame(
+    item: dict[str, object],
+    registry: ItemRegistry | None = None,
+    operation: int = 1,
+) -> bytes:
     """Encode the original client's complete 1008 item-instance record.
 
     The local protocol uses operation ``3`` for an equipment state update.
@@ -2039,31 +2046,34 @@ def item_frame(item: dict[str, object], operation: int = 1) -> bytes:
     equip and unequip; changing it to another operation breaks the item's
     equip action menu.
     """
+    if registry is None:
+        registry = default_item_registry()
+    resolved = registry.resolve(item)
     location = str(item.get('location', 'bag'))
-    location_code = {'bag': 50, 'warehouse': 51}.get(location, item_slot(item))
+    location_code = {'bag': 50, 'warehouse': 51}.get(location, item_slot(item, registry))
     fields = [
         byte(operation),
         integer(int(item['id'])),
         short(int(item.get('quantity', 1))),
-        short(int(item.get('max_quantity', 1))),
+        short(int(resolved.get('max_quantity', 1))),
         byte(location_code),
         integer(int(item.get('state_flags', 0))),
-        integer(int(item.get('price', 0))),
+        integer(int(resolved.get('price', 0))),
         integer(int(item['template_id'])),
-        string(item_display_name(item)),
-        short(int(item.get('item_flags', 0))),
-        short(int(item.get('action_flags', 0))),
-        byte(int(item.get('level_required', 1))),
-        short(int(item.get('icon_code', item.get('quality', 0)))),
+        string(item_display_name(resolved)),
+        short(int(resolved.get('item_flags', 0))),
+        short(int(resolved.get('action_flags', 0))),
+        byte(int(resolved.get('level_required', 1))),
+        short(int(resolved.get('icon_code', resolved.get('quality', 0)))),
         integer(int(item.get('expires_at', -1))),
-        short(int(item.get('sort_group', 0))),
-        short(int(item.get('sort_order', 0))),
+        short(int(resolved.get('sort_group', 0))),
+        short(int(resolved.get('sort_order', 0))),
     ]
     if is_equipment(item):
-        base_attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
-        innate_attributes = list(item.get('innate_attributes', [0, 0, 0, 0, 0]))
-        acquired_attributes = list(item.get('acquired_attributes', [0, 0, 0, 0, 0]))
-        extra_attributes = list(item.get('extra_attributes', [0, 0, 0, 0, 0]))
+        base_attributes = list(resolved.get('equipment_attributes', [0, 0, 0, 0]))
+        innate_attributes = list(item.get('innate_attributes', resolved.get('innate_attributes', [0, 0, 0, 0, 0])))
+        acquired_attributes = list(item.get('acquired_attributes', resolved.get('acquired_attributes', [0, 0, 0, 0, 0])))
+        extra_attributes = list(item.get('extra_attributes', resolved.get('extra_attributes', [0, 0, 0, 0, 0])))
         fields.extend(short(int(value)) for value in (base_attributes + [0] * 4)[:4])
         fields.extend(byte(int(value)) for value in (innate_attributes + [0] * 5)[:5])
         fields.extend(byte(int(value)) for value in (acquired_attributes + [0] * 5)[:5])
@@ -2072,19 +2082,23 @@ def item_frame(item: dict[str, object], operation: int = 1) -> bytes:
 
 
 def item_description_frame(item: dict[str, object]) -> bytes:
+    registry = default_item_registry()
+    resolved = registry.resolve(item)
     return encode_frame(1009, [
         short(82),
         integer(int(item['id'])),
-        string(item_display_description(item)),
+        string(item_display_description(resolved)),
     ])
 
 
 def item_detail_frame(item: dict[str, object]) -> bytes:
+    registry = default_item_registry()
+    resolved = registry.resolve(item)
     return encode_frame(1032, [
         byte(1),
         integer(int(item.get('template_id', 0))),
-        short(int(item.get('icon_code', item.get('quality', 0)))),
-        string(item_display_description(item)),
+        short(int(resolved.get('icon_code', resolved.get('quality', 0)))),
+        string(item_display_description(resolved)),
     ])
 
 
@@ -2855,7 +2869,7 @@ def battle_actor_frames(
             # attack actions, so the player must use the ordinary side 2.
             side_code=2,
             slot=1,
-            appearance=character_appearance(role),
+            appearance=character_appearance(role, getattr(settings, 'item_registry', None)),
             current_hp=state.player_hp if state is not None else 100,
             max_hp=state.player_max_hp if state is not None else 100,
             trace_id=trace_id,
@@ -2894,7 +2908,7 @@ def battle_actor_update_frame(
             kind=1,
             side_code=2,
             slot=1,
-            appearance=character_appearance(role),
+            appearance=character_appearance(role, getattr(settings, 'item_registry', None)),
             current_hp=state.player_hp,
             max_hp=state.player_max_hp,
             trace_id=state.trace_id,
@@ -4535,18 +4549,19 @@ class LocalGameServer:
                             lock=send_lock,
                         )
                     elif action == 3 and item is not None and item_action_location_valid(action, item):
-                        previous_appearance = character_appearance(active_role)
+                        previous_appearance = character_appearance(active_role, self.settings.item_registry)
                         role_items(active_role).remove(item)
                         self.roles.save()
                         LOG.info('item discarded item_id=%d name=%r', item_id, item.get('name'))
                         replies = [encode_frame(1009, [short(3), integer(item_id)])]
-                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance)
+                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance, self.settings.item_registry)
                         if appearance_frame is not None:
                             replies.append(appearance_frame)
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     elif action == 4 and item is not None and item_action_location_valid(action, item):
-                        mount_model = item.get('mount_model')
-                        if mount_model is not None:
+                        resolved_item = self.settings.item_registry.resolve(item)
+                        mount_model = resolved_item.get('mount_model')
+                        if mount_model:
                             current_mount = int(active_role.get('mount_model', 0))
                             next_mount = 0 if item.get('location') == 'equipped' or current_mount else int(mount_model)
                             item['location'] = 'equipped' if next_mount else 'bag'
@@ -4567,13 +4582,13 @@ class LocalGameServer:
                             continue
                         quantity = max(0, int(item.get('quantity', 1)) - 1)
                         item['quantity'] = quantity
-                        item['last_heal'] = int(item.get('heal', 0))
+                        item['last_heal'] = int(resolved_item.get('heal', 0))
                         replies = [item_frame(item, operation=3), encode_frame(1009, [short(4)])]
                         if quantity == 0:
                             role_items(active_role).remove(item)
                             replies.insert(1, encode_frame(1009, [short(3), integer(item_id)]))
                         self.roles.save()
-                        LOG.info('item used item_id=%d name=%r remaining=%d', item_id, item.get('name'), quantity)
+                        LOG.info('item used item_id=%d name=%r remaining=%d', item_id, resolved_item.get('name'), quantity)
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     elif (
                         action == 5
@@ -4581,14 +4596,16 @@ class LocalGameServer:
                         and is_equipment(item)
                         and item_action_location_valid(action, item)
                     ):
-                        mount_model = item.get('mount_model')
-                        if mount_model is not None:
+                        resolved_item = self.settings.item_registry.resolve(item)
+                        mount_model = resolved_item.get('mount_model')
+                        if mount_model:
                             updates: list[bytes] = []
                             for equipped in role_items(active_role):
+                                resolved_equipped = self.settings.item_registry.resolve(equipped)
                                 if (
                                     equipped is not item
                                     and equipped.get('location') == 'equipped'
-                                    and equipped.get('mount_model') is not None
+                                    and resolved_equipped.get('mount_model')
                                 ):
                                     equipped['location'] = 'bag'
                                     updates.append(item_frame(equipped, operation=3))
@@ -4604,30 +4621,30 @@ class LocalGameServer:
                             await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
                             continue
                         updates: list[bytes] = []
-                        previous_appearance = character_appearance(active_role)
-                        slot = item_slot(item)
+                        previous_appearance = character_appearance(active_role, self.settings.item_registry)
+                        slot = item_slot(item, self.settings.item_registry)
                         for equipped in role_items(active_role):
                             if (
                                 equipped is not item
                                 and equipped.get('location') == 'equipped'
-                                and item_slot(equipped) == slot
+                                and item_slot(equipped, self.settings.item_registry) == slot
                             ):
                                 equipped['location'] = 'bag'
                                 updates.append(item_frame(equipped, operation=3))
                         item['location'] = 'equipped'
                         updates.append(item_frame(item, operation=3))
                         updates.append(encode_frame(1009, [short(5)]))
-                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance)
+                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance, self.settings.item_registry)
                         updates.append(
                             appearance_frame
                             if appearance_frame is not None
-                            else equipment_panel_refresh_frame(active_role)
+                            else equipment_panel_refresh_frame(active_role, self.settings.item_registry)
                         )
                         self.roles.save()
-                        LOG.info('item equipped item_id=%d name=%r slot=%d', item_id, item.get('name'), slot)
+                        LOG.info('item equipped item_id=%d name=%r slot=%d', item_id, resolved_item.get('name'), slot)
                         await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
                     elif action == 6 and item is not None and item_action_location_valid(action, item):
-                        previous_appearance = character_appearance(active_role)
+                        previous_appearance = character_appearance(active_role, self.settings.item_registry)
                         if not try_move_item_to_bag(active_role, item):
                             LOG.info(
                                 'item unequip rejected full_bag item_id=%d occupied=%d capacity=%d',
@@ -4642,8 +4659,9 @@ class LocalGameServer:
                                 lock=send_lock,
                             )
                             continue
-                        mount_model = item.get('mount_model')
-                        if mount_model is not None:
+                        resolved_item = self.settings.item_registry.resolve(item)
+                        mount_model = resolved_item.get('mount_model')
+                        if mount_model:
                             active_role['mount_model'] = 0
                             self.roles.save()
                             LOG.info('mount unequipped item_id=%d model=0 slot=%d', item_id, MOUNT_EQUIPMENT_SLOT)
@@ -4659,11 +4677,11 @@ class LocalGameServer:
                         self.roles.save()
                         LOG.info('item unequipped item_id=%d name=%r', item_id, item.get('name'))
                         replies = [item_frame(item, operation=3), encode_frame(1009, [short(6)])]
-                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance)
+                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance, self.settings.item_registry)
                         replies.append(
                             appearance_frame
                             if appearance_frame is not None
-                            else equipment_panel_refresh_frame(active_role)
+                            else equipment_panel_refresh_frame(active_role, self.settings.item_registry)
                         )
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     else:

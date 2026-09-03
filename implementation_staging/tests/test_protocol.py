@@ -256,7 +256,7 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(created['map_name'], '长安')
             self.assertEqual(len(role_items(created)), 18)
             self.assertEqual(
-                {int(item.get('equipment_slot', 0)) for item in role_items(created) if int(item.get('equipment_slot', 0)) > 0},
+                {int(settings.item_registry.resolve(item).get('equipment_slot', 0)) for item in role_items(created) if int(settings.item_registry.resolve(item).get('equipment_slot', 0)) > 0},
                 set(range(1, 15)) | {17},
             )
 
@@ -450,11 +450,13 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(role.get('sect_id'), 1)
 
     def test_item_records_match_original_client_layout(self):
-        items = role_items(default_role(Settings()))
-        weapon = next(item for item in items if item['name'] == '青锋剑')
-        armour = next(item for item in items if item['name'] == '青纹铠甲')
-        potion = next(item for item in items if item['name'] == '小还丹')
-        mount = next(item for item in items if item['name'] == '辟邪')
+        settings = Settings()
+        registry = settings.item_registry
+        items = role_items(default_role(settings))
+        weapon = next(item for item in items if registry.resolve(item).get('name') == '青锋剑')
+        armour = next(item for item in items if registry.resolve(item).get('name') == '青纹铠甲')
+        potion = next(item for item in items if registry.resolve(item).get('name') == '小还丹')
+        mount = next(item for item in items if registry.resolve(item).get('name') == '辟邪')
 
         message_id, fields = decode_frame(item_frame(weapon))
         values = field_values(fields)
@@ -476,9 +478,9 @@ class ProtocolTests(unittest.TestCase):
         }
         self.assertEqual(
             {
-                int(item['equipment_slot']): item['appearance_properties']
+                int(registry.resolve(item).get('equipment_slot')): registry.resolve(item).get('appearance_properties', {})
                 for item in items
-                if 'appearance_properties' in item
+                if registry.resolve(item).get('appearance_properties')
             },
             visible_appearance,
         )
@@ -529,15 +531,18 @@ class ProtocolTests(unittest.TestCase):
                 {'id': role_id * 100 + 3, 'template_id': 260_000_001, 'name': '小还丹', 'location': 'bag', 'quantity': 9},
             ],
         }
-        self.assertTrue(RoleStore._ensure_items(role))
+        settings = Settings()
+        registry = settings.item_registry
+        self.assertTrue(RoleStore(settings)._ensure_items(role))
         migrated = role_items(role)
         self.assertEqual(len(migrated), 18)
-        weapon = next(item for item in migrated if item['name'] == '青锋剑')
-        potion = next(item for item in migrated if item['name'] == '小还丹')
-        self.assertEqual((weapon['location'], weapon['equipment_slot'], weapon['icon_code']), ('equipped', 10, 2701))
+        weapon = next(item for item in migrated if registry.resolve(item).get('name') == '青锋剑')
+        potion = next(item for item in migrated if registry.resolve(item).get('name') == '小还丹')
+        resolved_weapon = registry.resolve(weapon)
+        self.assertEqual((weapon['location'], resolved_weapon['equipment_slot'], resolved_weapon['icon_code']), ('equipped', 10, 2701))
         self.assertEqual(potion['quantity'], 9)
         self.assertEqual(
-            {int(item.get('equipment_slot', 0)) for item in migrated if is_equipment(item)},
+            {int(registry.resolve(item).get('equipment_slot', 0)) for item in migrated if is_equipment(item)},
             set(range(1, 15)) | {17},
         )
 
@@ -576,7 +581,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(field_values(mount_fields), [0, settings.role_id, 1, 22, 105000])
 
         role = default_role(settings)
-        helmet = next(item for item in role_items(role) if item['name'] == '青纹盔')
+        helmet = next(item for item in role_items(role) if settings.item_registry.resolve(item).get('name') == '青纹盔')
         helmet['location'] = 'equipped'
         equipped_values = field_values(decode_frame(player_info(settings, role))[1])
         self.assertEqual(equipped_values[21], 3)
@@ -592,12 +597,12 @@ class ProtocolTests(unittest.TestCase):
             9: (18, 22),
             10: (7, 270001),
         }
-        before = character_appearance(role)
+        before = character_appearance(role, settings.item_registry)
         self.assertEqual(before, {7: 0, 14: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0})
         for item in role_items(role):
-            if int(item.get('equipment_slot', 0)) in visible_appearance:
+            if int(settings.item_registry.resolve(item).get('equipment_slot', 0)) in visible_appearance:
                 item['location'] = 'equipped'
-        appearance_frame = character_appearance_change_frame(role, before)
+        appearance_frame = character_appearance_change_frame(role, before, settings.item_registry)
         self.assertIsNotNone(appearance_frame)
         appearance_id, appearance_fields = decode_frame(appearance_frame)
         self.assertEqual(appearance_id, 1017)
@@ -610,13 +615,13 @@ class ProtocolTests(unittest.TestCase):
             [2, 4, 4, *(value for _ in range(8) for value in (2, 4))],
         )
         equipped_player = field_values(decode_frame(player_info(settings, role))[1])
-        for property_index, value in character_appearance(role).items():
+        for property_index, value in character_appearance(role, settings.item_registry).items():
             self.assertEqual(equipped_player[property_index + 1], value)
 
-        before = character_appearance(role)
+        before = character_appearance(role, settings.item_registry)
         for item in role_items(role):
             item['location'] = 'bag'
-        restored_frame = character_appearance_change_frame(role, before)
+        restored_frame = character_appearance_change_frame(role, before, settings.item_registry)
         self.assertIsNotNone(restored_frame)
         _, restored_fields = decode_frame(restored_frame)
         self.assertEqual(
@@ -1483,7 +1488,7 @@ class ProtocolTests(unittest.TestCase):
     def test_map_player_appearance_debug_matches_1006_without_changing_it(self):
         settings = Settings()
         role = default_role(settings)
-        helmet = next(item for item in role_items(role) if item['name'] == '青纹盔')
+        helmet = next(item for item in role_items(role) if settings.item_registry.resolve(item).get('name') == '青纹盔')
         helmet['location'] = 'equipped'
         payload = player_info(settings, role)
         message_id, fields = decode_frame(payload)
@@ -1503,8 +1508,9 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(field_values(decode_frame(player_info(settings, role))[1]), values)
 
     def test_battle_actor_debug_snapshot_does_not_change_1048(self):
-        role = default_role(Settings())
-        frames = battle_actor_frames(role, Settings(), trace_id='BT-10001-1900001-1')
+        settings = Settings()
+        role = default_role(settings)
+        frames = battle_actor_frames(role, settings, trace_id='BT-10001-1900001-1')
         _, player_fields = decode_frame(frames[0])
         _, monster_fields = decode_frame(frames[1])
         player_snapshot = battle_actor_debug_snapshot(
@@ -1513,7 +1519,7 @@ class ProtocolTests(unittest.TestCase):
             name=str(role['name']),
             kind=1,
             side_code=2,
-            appearance=character_appearance(role),
+            appearance=character_appearance(role, settings.item_registry),
             fields=player_fields,
             trace_id='BT-10001-1900001-1',
         )

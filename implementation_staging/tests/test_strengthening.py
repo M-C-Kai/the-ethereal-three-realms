@@ -26,6 +26,7 @@ from server import (  # noqa: E402
     Settings,
     combat_stats,
     default_role,
+    ensure_weapon_base_attributes,
     equipped_weapon_attack,
     item_description_frame,
     item_detail_frame,
@@ -164,7 +165,8 @@ class StrengtheningRuleTests(unittest.TestCase):
 
 class StrengtheningInventoryMigrationTests(unittest.TestCase):
     def test_new_role_receives_one_thousand_of_each_stone(self):
-        role = default_role(Settings())
+        settings = Settings()
+        role = default_role(settings)
 
         stones = self._stones_by_template(role)
 
@@ -177,8 +179,10 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
             [stones[template_id]["quantity"] for template_id in sorted(stones)],
             [1000, 1000],
         )
+        registry = settings.item_registry
         self.assertEqual(
-            [stones[template_id]["max_quantity"] for template_id in sorted(stones)],
+            [registry.require(template_id).max_quantity
+             for template_id in sorted(stones)],
             [9999, 9999],
         )
         for stone in stones.values():
@@ -188,18 +192,20 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
             self.assertEqual(values[9] & 0x40, 0x40)
 
     def test_legacy_stones_gain_stackable_flag_without_losing_other_flags(self):
-        role = default_role(Settings())
+        settings = Settings()
+        role = default_role(settings)
         stones = self._stones_by_template(role)
         for stone in stones.values():
             stone["item_flags"] = 0x02
 
-        self.assertTrue(RoleStore._ensure_items(role))
+        self.assertTrue(RoleStore(settings)._ensure_items(role))
 
         for stone in stones.values():
             self.assertEqual(stone["item_flags"], 0x42)
 
     def test_legacy_role_gets_only_missing_stone_and_is_marked_initialized(self):
-        role = default_role(Settings())
+        settings = Settings()
+        role = default_role(settings)
         role.pop("strengthening_stones_initialized")
         initial = self._stones_by_template(role)[INITIAL_STRENGTHEN_STONE_TEMPLATE_ID]
         initial["quantity"] = 7
@@ -210,7 +216,7 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
             if item.get("template_id") != MIDDLE_STRENGTHEN_STONE_TEMPLATE_ID
         ]
 
-        self.assertTrue(RoleStore._ensure_items(role))
+        self.assertTrue(RoleStore(settings)._ensure_items(role))
         stones = self._stones_by_template(role)
 
         self.assertTrue(role.get("strengthening_stones_initialized"))
@@ -219,14 +225,15 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
         self.assertEqual(stones[MIDDLE_STRENGTHEN_STONE_TEMPLATE_ID]["quantity"], 1000)
 
     def test_initialized_role_does_not_regain_a_deleted_stone(self):
-        role = default_role(Settings())
+        settings = Settings()
+        role = default_role(settings)
         role["items"] = [
             item
             for item in role["items"]
             if item.get("template_id") != INITIAL_STRENGTHEN_STONE_TEMPLATE_ID
         ]
 
-        RoleStore._ensure_items(role)
+        RoleStore(settings)._ensure_items(role)
 
         self.assertNotIn(
             INITIAL_STRENGTHEN_STONE_TEMPLATE_ID,
@@ -234,15 +241,17 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
         )
 
     def test_strengthening_state_survives_default_catalogue_merge(self):
-        role = default_role(Settings())
-        weapon = next(item for item in role["items"] if item.get("equipment_slot") == 10)
+        settings = Settings()
+        registry = settings.item_registry
+        role = default_role(settings)
+        weapon = next(item for item in role["items"] if item.get("template_id") == 10_000_1001)
         weapon["strengthen_level"] = 4
         weapon["base_equipment_attributes"] = [3, 0, 0, 0]
         weapon["equipment_attributes"] = [8, 0, 0, 0]
 
-        RoleStore._ensure_items(role)
+        RoleStore(settings)._ensure_items(role)
         migrated_weapon = next(
-            item for item in role["items"] if item.get("equipment_slot") == 10
+            item for item in role["items"] if item.get("template_id") == 10_000_1001
         )
 
         self.assertEqual(migrated_weapon["strengthen_level"], 4)
@@ -250,33 +259,37 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
         self.assertEqual(migrated_weapon["equipment_attributes"], [8, 0, 0, 0])
 
     def test_legacy_weapon_current_attributes_become_stable_strengthening_base(self):
-        role = default_role(Settings())
-        weapon = next(item for item in role["items"] if item.get("equipment_slot") == 10)
-        weapon.pop("strengthen_level")
-        weapon.pop("base_equipment_attributes")
+        settings = Settings()
+        role = default_role(settings)
+        weapon = next(item for item in role["items"] if item.get("template_id") == 10_000_1001)
+        weapon["equipment_attributes"] = [9, 2, 1, 0]
+        weapon.pop("strengthen_level", None)
+        weapon.pop("base_equipment_attributes", None)
         weapon["equipment_attributes"] = [9, 2, 1, 0]
 
-        RoleStore._ensure_items(role)
+        RoleStore(settings)._ensure_items(role)
 
         self.assertEqual(weapon["strengthen_level"], 0)
         self.assertEqual(weapon["base_equipment_attributes"], [9, 2, 1, 0])
         self.assertEqual(weapon["equipment_attributes"], [9, 2, 1, 0])
 
     def test_legacy_starter_weapon_derives_missing_base_from_effective_level(self):
-        role = default_role(Settings())
-        weapon = next(item for item in role["items"] if item.get("equipment_slot") == 10)
-        weapon.pop("base_equipment_attributes")
-        weapon["strengthen_level"] = 4
+        settings = Settings()
+        role = default_role(settings)
+        weapon = next(item for item in role["items"] if item.get("template_id") == 10_000_1001)
         weapon["equipment_attributes"] = [16, 2, 1, 0]
+        weapon["strengthen_level"] = 4
+        weapon.pop("base_equipment_attributes", None)
 
-        RoleStore._ensure_items(role)
+        RoleStore(settings)._ensure_items(role)
 
         self.assertEqual(weapon["strengthen_level"], 4)
         self.assertEqual(weapon["base_equipment_attributes"], [11, 2, 1, 0])
         self.assertEqual(weapon["equipment_attributes"], [16, 2, 1, 0])
 
     def test_custom_id_weapon_is_migrated_and_recalculated_without_drift(self):
-        role = default_role(Settings())
+        settings = Settings()
+        role = default_role(settings)
         custom_weapon = {
             "id": 987654321,
             "template_id": 100_001_001,
@@ -288,16 +301,17 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
         }
         role["items"].append(custom_weapon)
 
-        RoleStore._ensure_items(role)
+        RoleStore(settings)._ensure_items(role)
 
         self.assertEqual(custom_weapon["strengthen_level"], 4)
         self.assertEqual(custom_weapon["base_equipment_attributes"], [11, 2, 1, 0])
         self.assertEqual(custom_weapon["equipment_attributes"], [16, 2, 1, 0])
-        RoleStore._ensure_items(role)
+        RoleStore(settings)._ensure_items(role)
         self.assertEqual(custom_weapon["equipment_attributes"], [16, 2, 1, 0])
 
     def test_fixed_stone_id_collision_reassigns_old_item_and_keeps_ids_unique(self):
-        role = default_role(Settings())
+        settings = Settings()
+        role = default_role(settings)
         role.pop("strengthening_stones_initialized")
         role["items"] = [
             item for item in role["items"] if not is_strengthening_stone(item)
@@ -311,7 +325,7 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
         }
         role["items"].append(conflicting_item)
 
-        RoleStore._ensure_items(role)
+        RoleStore(settings)._ensure_items(role)
 
         item_ids = [int(item["id"]) for item in role["items"]]
         stones = self._stones_by_template(role)
@@ -334,10 +348,13 @@ class StrengtheningInventoryMigrationTests(unittest.TestCase):
 
 class StrengtheningFrameTests(unittest.TestCase):
     def setUp(self):
-        self.role = default_role(Settings())
+        settings = Settings()
+        self.registry = settings.item_registry
+        self.role = default_role(settings)
         self.weapon = next(
-            item for item in self.role["items"] if item.get("equipment_slot") == 10
+            item for item in self.role["items"] if item.get("template_id") == 10_000_1001
         )
+        ensure_weapon_base_attributes(self.weapon)
         self.initial_stone = next(
             item
             for item in self.role["items"]
@@ -436,12 +453,17 @@ class StrengtheningFrameTests(unittest.TestCase):
 
 class StrengtheningTransactionTests(unittest.TestCase):
     def setUp(self):
-        self.role = default_role(Settings())
+        settings = Settings()
+        self.registry = settings.item_registry
+        self.role = default_role(settings)
         self.weapon = next(
-            item for item in self.role["items"] if item.get("equipment_slot") == 10
+            item for item in self.role["items"]
+            if self.registry.resolve(item).get("equipment_slot") == 10
         )
+        ensure_weapon_base_attributes(self.weapon)
         self.armour = next(
-            item for item in self.role["items"] if item.get("equipment_slot") == 3
+            item for item in self.role["items"]
+            if self.registry.resolve(item).get("equipment_slot") == 3
         )
         self.stone = next(
             item
@@ -602,7 +624,7 @@ class StrengtheningTransactionTests(unittest.TestCase):
             settings = Settings(role_data_file=str(role_path))
             game_server = __import__("server").LocalGameServer(settings)
             role = game_server.roles.roles_for("strengthening-persistence")[0]
-            weapon = next(item for item in role["items"] if item.get("equipment_slot") == 10)
+            weapon = next(item for item in role["items"] if item.get("template_id") == 10_000_1001)
             stone = next(
                 item
                 for item in role["items"]
@@ -627,14 +649,15 @@ class StrengtheningTransactionTests(unittest.TestCase):
                 "strengthening-persistence", int(role["id"])
             )
             reloaded_weapon = next(
-                item for item in reloaded["items"] if item.get("equipment_slot") == 10
+                item for item in reloaded["items"] if item.get("template_id") == 10_000_1001
             )
             self.assertEqual(reloaded_weapon["strengthen_level"], 1)
 
     def test_server_boundary_rolls_back_memory_when_save_fails(self):
-        game_server = __import__("server").LocalGameServer(Settings())
-        role = default_role(Settings())
-        weapon = next(item for item in role["items"] if item.get("equipment_slot") == 10)
+        settings = Settings()
+        game_server = __import__("server").LocalGameServer(settings)
+        role = default_role(settings)
+        weapon = next(item for item in role["items"] if item.get("template_id") == 10_000_1001)
         stone = next(
             item
             for item in role["items"]
@@ -661,7 +684,8 @@ class StrengtheningTransactionTests(unittest.TestCase):
 class StrengtheningCombatTests(unittest.TestCase):
     def test_only_equipped_weapon_effective_attack_contributes_to_combat(self):
         role = default_role(Settings())
-        weapon = next(item for item in role["items"] if item.get("equipment_slot") == 10)
+        weapon = next(item for item in role["items"] if item.get("template_id") == 10_000_1001)
+        ensure_weapon_base_attributes(weapon)
         unarmed_attack = combat_stats(role).physical_attack
 
         self.assertEqual(equipped_weapon_attack(role), 0)
