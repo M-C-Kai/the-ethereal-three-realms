@@ -55,7 +55,9 @@ def expect_tolerant(sock: socket.socket, message_id: int, cipher: GameCipher | N
     return values
 
 
-LOCKED_APPEARANCE_PROPERTIES = (2, 7, 14, 15, 16, 17, 18, 19, 20)
+# The APK appearance layers are properties 7 and 14..20 (PROTOCOL_LOCK.md);
+# property 2 is the own-actor id, not an appearance layer.
+LOCKED_APPEARANCE_PROPERTIES = (7, 14, 15, 16, 17, 18, 19, 20)
 
 
 def parse_appearance(frame: list[object]) -> tuple[int, int, dict[int, int]]:
@@ -134,6 +136,65 @@ def team_disband_request() -> bytes:
     return encode_frame(1023, [short(11)])
 
 
+def logout_page_request() -> bytes:
+    """Build the native APK's 1054 open-logout-page request (BYTE 8)."""
+    return encode_frame(1054, [byte(8)])
+
+
+def logout_confirm_request() -> bytes:
+    """Build the native APK's 1003 logout-confirm request.
+
+    The field must be INT 0 (type_id 4), never byte 0: the original APK
+    encodes the clean-logout confirm as a signed 32-bit zero.
+    """
+    return encode_frame(1003, [integer(0)])
+
+
+def mall_tab_entry_request(tab_mode: int) -> bytes:
+    """Build the APK's 1067 [BYTE 0, INT 611, INT mode] mall tab entry."""
+    return encode_frame(1067, [byte(0), integer(611), integer(tab_mode)])
+
+
+def mall_tab_title_request(tab_mode: int) -> bytes:
+    """Build the APK's 1067 [BYTE 2, INT 611, INT mode] title refresh."""
+    return encode_frame(1067, [byte(2), integer(611), integer(tab_mode)])
+
+
+def mall_category_click_request(category_id: int) -> bytes:
+    """Build the APK's 1067 [BYTE 1, INT 612, INT category_id] click."""
+    return encode_frame(1067, [byte(1), integer(612), integer(category_id)])
+
+
+def shop_goods_list_request(shop_id: int) -> bytes:
+    """Build the APK dp.ap() goods-list request for one mall category."""
+    return encode_frame(1033, [integer(shop_id), byte(7), short(0), short(0), byte(0)])
+
+
+def shop_purchase_request(shop_id: int, item_id: int, quantity: int) -> bytes:
+    """Build the APK main/e.a(BIIS) purchase request [INT, BYTE, INT, SHORT]."""
+    return encode_frame(1033, [integer(shop_id), byte(1), integer(item_id), short(quantity)])
+
+
+def shop_goods_from_response(values: list[object]) -> dict[str, tuple[int, ...]]:
+    """Parse one mall category page from a 1033/action=7 response.
+
+    Records are [INT id, INT price, STRING name, INT, INT, INT, INT] plus
+    4 SHORTs when the client-side definition is equipment. Because this
+    parser lacks the client item database, equipment pages are rejected;
+    use consumable/category pages with plain 7-field records.
+    """
+    count = int(values[2])
+    records: dict[str, tuple[int, ...]] = {}
+    index = 7
+    for _ in range(count):
+        record = tuple(values[index:index + 7])
+        name = record[2]
+        assert isinstance(name, str), (values, index)
+        records[name] = record
+        index += 7
+    return records
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Test the complete local login/role/map protocol')
     parser.add_argument('--host', default='127.0.0.1')
@@ -150,6 +211,21 @@ def main() -> None:
         '--exercise-team-only',
         action='store_true',
         help='Exercise the APK-confirmed 1023/1026 create-and-disband team flow and exit',
+    )
+    parser.add_argument(
+        '--exercise-shop-only',
+        action='store_true',
+        help='Exercise the APK-confirmed 1067/1033 mall browse-and-purchase flow and exit',
+    )
+    parser.add_argument(
+        '--exercise-logout-only',
+        action='store_true',
+        help='Exercise the APK-confirmed 1054/1003 in-game logout flow and exit',
+    )
+    parser.add_argument(
+        '--exercise-life-skills-only',
+        action='store_true',
+        help='Exercise the APK-confirmed life skill learn/craft/gather flow and exit',
     )
     parser.add_argument('--exercise-portal', action='store_true')
     parser.add_argument('--exercise-monster', action='store_true')
@@ -222,19 +298,235 @@ def main() -> None:
         extension = expect(game_sock, 1089, cipher)
         assert extension == [0, 0], extension
         skills = expect(game_sock, 1132, cipher)
-        assert skills[0:2] == [0, 1] and len(skills) == 16, skills
+        assert skills[0] == 0, skills  # action=0
+        skill_count = int(skills[1])
+        assert skill_count >= 1, skills
+        assert len(skills) == 2 + skill_count * 14, skills  # 14 fields per record
         sect_skills = expect(game_sock, 1103, cipher)
         assert sect_skills[0] == 0 and sect_skills[1] in (0, 1), sect_skills
         current_skill_level = None
         if sect_skills[1] == 1:
             assert sect_skills[2:4] == ['协议测试技能', 10001], sect_skills
-            assert skills[2:4] == ['协议测试技能', 10001], skills
+            # Find the sect record in the merged skill list by skill_id
+            sect_record_found = False
+            for i in range(skill_count):
+                start = 2 + i * 14
+                if skills[start:start+2] == ['协议测试技能', 10001]:
+                    sect_record_found = True
+                    break
+            assert sect_record_found, skills
             current_skill_level = int(sect_skills[4])
         else:
-            assert skills[2:4] == ['基础技能', 0], skills
-        item_records = [expect(game_sock, 1008, cipher) for _ in range(16)]
+            # Find the placeholder record in the merged skill list
+            placeholder_found = False
+            for i in range(skill_count):
+                start = 2 + i * 14
+                if skills[start:start+2] == ['基础技能', 0]:
+                    placeholder_found = True
+                    break
+            assert placeholder_found, skills
+        # The starter inventory grew to 18 records with the strengthening
+        # stones, so read every initial 1008 item frame until the stream is
+        # quiet instead of assuming a fixed record count.  The login burst
+        # also contains 1141 (gather catalog) and 2027 (gather spawn) frames
+        # appended after the item records.
+        item_records = []
+        gather_catalog = None
+        gather_spawns = []
+        game_sock.settimeout(3.0)
+        try:
+            while True:
+                message_id, values = receive_frame(game_sock, cipher)
+                if message_id == 1008:
+                    item_records.append(values)
+                elif message_id == 1141:
+                    gather_catalog = values
+                elif message_id == 2027:
+                    gather_spawns.append(values)
+                else:
+                    assert False, (message_id, values)
+        except socket.timeout:
+            pass
+        finally:
+            game_sock.settimeout(5)
         items = {str(values[8]): values for values in item_records}
-        assert len(items) == 16 and {'青锋剑', '青纹项链', '青纹长靴', '小还丹', '辟邪'} <= set(items), items
+        assert {'青锋剑', '青纹项链', '青纹长靴', '小还丹', '辟邪'} <= set(items), items
+        if gather_catalog is not None:
+            assert gather_catalog[0] >= 1, gather_catalog
+            print(f'  gather catalog: {int(gather_catalog[0])} targets')
+        if gather_spawns:
+            print(f'  gather spawns: {len(gather_spawns)} entities')
+
+        if args.exercise_logout_only:
+            # APK logout step 1: the logout page. The reply must be exactly
+            # 1054 [8, 0, '是否确认退出游戏？'].
+            game_sock.sendall(cipher.encrypt_frame(logout_page_request()))
+            page = expect(game_sock, 1054, cipher)
+            assert page == [8, 0, '是否确认退出游戏？'], page
+
+            # APK logout step 2: clean logout confirm (INT 0). The server
+            # acks with 1003 [0] and must NOT close the socket: the original
+            # client waits ~1s, cleans up role/UI state, then disconnects.
+            game_sock.sendall(cipher.encrypt_frame(logout_confirm_request()))
+            assert expect(game_sock, 1003, cipher) == [0], 'logout ack'
+            game_sock.settimeout(1.5)
+            try:
+                extra_id, extra_values = receive_frame(game_sock, cipher)
+                raise AssertionError(
+                    ('unexpected frame after logout ack', extra_id, extra_values)
+                )
+            except socket.timeout:
+                pass
+            finally:
+                game_sock.settimeout(None)
+            print('OK: 1054 退出页面 -> 1003 注销确认 -> 服务端未主动断开')
+            return
+
+        if args.exercise_shop_only:
+            # ---- 仙晶商城 (screen 611 tab mode 2000 -> dp mode 1000) ----
+            game_sock.sendall(cipher.encrypt_frame(mall_tab_entry_request(2000)))
+            categories = expect(game_sock, 1067, cipher)
+            assert categories[0] == 0 and categories[1] == 611, categories
+            category_count = int(categories[3])
+            assert category_count >= 1, categories
+            equipment_category_id = int(categories[4])
+            assert categories[5] == '装备', categories
+
+            game_sock.sendall(cipher.encrypt_frame(mall_tab_title_request(2000)))
+            assert expect(game_sock, 1067, cipher) == [2, 611, '仙晶商城'], 'mall title'
+
+            # Equipment page: both records carry 4 extra SHORT attribute slots.
+            game_sock.sendall(cipher.encrypt_frame(mall_category_click_request(equipment_category_id)))
+            bridge = expect(game_sock, 1010, cipher)
+            assert bridge == [0, 0, 0, 1000, 7, 69], bridge
+            game_sock.sendall(cipher.encrypt_frame(shop_goods_list_request(1000)))
+            equipment_page = expect(game_sock, 1033, cipher)
+            assert equipment_page[0] == 7 and equipment_page[1] == 1000, equipment_page
+            assert equipment_page[2] == equipment_page[4] == 2, equipment_page
+            assert equipment_page[6] == 1, equipment_page  # currency type 1 = 仙晶
+            assert len(equipment_page) == 7 + 2 * 11 + 1, equipment_page
+            assert equipment_page[-1] == '仙晶商城', equipment_page
+
+            # Consumable page: clean 7-field records, then buy 2x 小还丹.
+            potion_category_id = equipment_category_id + 1
+            game_sock.sendall(cipher.encrypt_frame(mall_category_click_request(potion_category_id)))
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 1000, 7, 69], 'potion bridge'
+            game_sock.sendall(cipher.encrypt_frame(shop_goods_list_request(1000)))
+            potion_page = expect(game_sock, 1033, cipher)
+            assert potion_page[0] == 7 and len(potion_page) == 7 + 7 + 1, potion_page
+            goods = shop_goods_from_response(potion_page)
+            assert '小还丹' in goods, potion_page
+            potion_goods = goods['小还丹']
+            assert potion_goods[0] == 260000001 and potion_goods[1] == 50, potion_goods
+            xianjing_before = int(player_properties[52])
+            game_sock.sendall(cipher.encrypt_frame(
+                shop_purchase_request(1000, int(potion_goods[0]), 2)
+            ))
+            currency_update = expect(game_sock, 1017, cipher)
+            currency_properties = dict(zip(currency_update[3::2], currency_update[4::2]))
+            assert currency_properties.get(52) == xianjing_before - 100, currency_update
+            potion_stack = expect(game_sock, 1008, cipher)
+            assert potion_stack[0] == 3 and potion_stack[8] == '小还丹', potion_stack
+            assert int(potion_stack[2]) == int(items['小还丹'][2]) + 2, potion_stack
+            assert expect(game_sock, 1033, cipher) == [1], 'purchase ack'
+
+            # ---- 仙石商城 (tab mode 2100 -> dp mode 2100, shop 2000) ----
+            game_sock.sendall(cipher.encrypt_frame(mall_tab_entry_request(2100)))
+            stone_categories = expect(game_sock, 1067, cipher)
+            assert stone_categories[1] == 611 and stone_categories[3] == 1, stone_categories
+            stone_category_id = int(stone_categories[4])
+            assert stone_categories[5] == '强化', stone_categories
+            game_sock.sendall(cipher.encrypt_frame(mall_category_click_request(stone_category_id)))
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 2100, 7, 69], 'stone bridge'
+            game_sock.sendall(cipher.encrypt_frame(shop_goods_list_request(2000)))
+            stone_page = expect(game_sock, 1033, cipher)
+            assert stone_page[1] == 2000 and stone_page[6] == 2, stone_page
+            assert stone_page[-1] == '仙石商城', stone_page
+            stone_goods = shop_goods_from_response(stone_page)
+            assert '初级强化石' in stone_goods, stone_page
+            xianshi_before = int(player_properties[49])
+            game_sock.sendall(cipher.encrypt_frame(
+                shop_purchase_request(2000, int(stone_goods['初级强化石'][0]), 1)
+            ))
+            stone_currency = expect(game_sock, 1017, cipher)
+            stone_properties = dict(zip(stone_currency[3::2], stone_currency[4::2]))
+            assert stone_properties.get(49) == xianshi_before - 100, stone_currency
+            stone_stack = expect(game_sock, 1008, cipher)
+            assert stone_stack[8] == '初级强化石', stone_stack
+            assert int(stone_stack[2]) == int(items['初级强化石'][2]) + 1, stone_stack
+            assert expect(game_sock, 1033, cipher) == [1], 'stone purchase ack'
+            print('OK: 仙晶商城分类/列表/购买 -> 仙石商城列表/购买 -> 货币与背包同步')
+            return
+
+        if args.exercise_life_skills_only:
+            # ---- 1132: Life skill list (merged sect + life skills) ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1132, [byte(0)])))
+            skill_list = expect(game_sock, 1132, cipher)
+            assert skill_list[0] == 0, skill_list  # action=0
+            skill_count = int(skill_list[1])
+            assert skill_count >= 2, skill_list  # at least sect + alchemy
+            print(f'OK: 1132 action 0 life skill list count={skill_count}')
+
+            # ---- 1132: Recipe list for alchemy (skill 2003, tier 0) ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1132, [byte(2), integer(2003), byte(0)])))
+            recipe_list = expect(game_sock, 1132, cipher)
+            assert recipe_list[0] == 2, recipe_list  # action=2
+            assert recipe_list[1] == 2003, recipe_list
+            recipe_count = int(recipe_list[5])
+            assert recipe_count >= 1, recipe_list
+            print(f'OK: 1132 action 2 recipe list for skill 2003 count={recipe_count}')
+
+            # ---- 1143: Trainer page (trainer 7001) ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1143, [byte(1), integer(7001)])))
+            learnable = expect(game_sock, 1143, cipher)
+            assert learnable[0] == 1, learnable  # action=1
+            print(f'OK: 1143 action 1 trainer page')
+
+            # ---- 1143: Learn entry 5001 (alchemy) ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1143, [byte(3), integer(5001)])))
+            # Consume all learn response frames (1132 proficiency + 1017 appearance + 1143 result)
+            game_sock.settimeout(2.0)
+            learn_frame_ids = []
+            try:
+                while True:
+                    mid, _ = receive_frame(game_sock, cipher)
+                    learn_frame_ids.append(mid)
+            except socket.timeout:
+                pass
+            finally:
+                game_sock.settimeout(5)
+            assert 1143 in learn_frame_ids, f'expected 1143 in learn response, got {learn_frame_ids}'
+            print(f'OK: 1143 action 3 learn entry 5001 (frames: {learn_frame_ids})')
+
+            # ---- 2027: Gather start (target 6001 = herbs on map 58) ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2027, [byte(1), integer(6001)])))
+            gather_start = expect(game_sock, 2027, cipher)
+            assert gather_start[0] == 1, gather_start  # action=1 (start ack)
+            print(f'OK: 2027 action 1 gather start')
+
+            # Wait for gather completion (3s duration) and consume reward frames.
+            game_sock.settimeout(6.0)
+            gather_done = False
+            try:
+                while not gather_done:
+                    mid, vals = receive_frame(game_sock, cipher)
+                    if mid == 2027 and vals and vals[0] == 3:
+                        gather_done = True
+            except socket.timeout:
+                pass
+            finally:
+                game_sock.settimeout(5)
+            assert gather_done, 'gather completion frame 2027/3 not received'
+            print('OK: 2027 gather completed (reward delivered)')
+
+            # ---- 1145: Pathfind (map 58, x=12, y=8 — gather target 6001) ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1145, [byte(0), integer(58), byte(12), byte(8)])))
+            pathfind = expect(game_sock, 1145, cipher)
+            assert pathfind[0] == 0 and pathfind[2] == 58, pathfind
+            print(f'OK: 1145 pathfind map 58')
+
+            print('OK: life skill list -> recipe list -> trainer -> learn -> gather -> pathfind')
+            return
 
         if args.exercise_team_only:
             game_sock.sendall(cipher.encrypt_frame(team_create_request(role_id)))
@@ -478,7 +770,18 @@ def main() -> None:
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
         # Map 58 advertises the monster and three generic 1126 portals, then
         # three native 2030 NPCs and one direction frame per generic actor.
-        entered = [receive_frame(game_sock, cipher) for _ in range(14)]
+        # The server also appends 2027 gather-spawn frames for map 58's targets.
+        entered = []
+        game_sock.settimeout(3.0)
+        try:
+            while True:
+                mid, vals = receive_frame(game_sock, cipher)
+                entered.append((mid, vals))
+        except socket.timeout:
+            pass
+        finally:
+            game_sock.settimeout(5)
+        assert len(entered) >= 14, f'expected at least 14 map-enter frames, got {len(entered)}'
         assert [x[1][5] for x in entered[:3]] == [13, 14, 105], entered
         assert entered[3][0] == 1126 and entered[3][1][:2] == [0, 1], entered[3]
         assert entered[4][0] == 1126 and entered[4][1][2] == 580001, entered[4]
@@ -726,7 +1029,17 @@ def main() -> None:
                 returned_data = [receive_frame(game_sock, cipher) for _ in range(7)]
                 assert [x[0] for x in returned_data] == [1010, 1407, 1407, 1407, 1407, 1407, 1010], returned_data
                 game_sock.sendall(cipher.encrypt_frame(encode_frame(1010, [short(13), integer(4964)])))
-                returned_enter = [receive_frame(game_sock, cipher) for _ in range(14)]
+                returned_enter = []
+                game_sock.settimeout(3.0)
+                try:
+                    while len(returned_enter) < 14:
+                        mid, vals = receive_frame(game_sock, cipher)
+                        returned_enter.append((mid, vals))
+                except socket.timeout:
+                    pass
+                finally:
+                    game_sock.settimeout(5)
+                assert len(returned_enter) >= 14, f'expected at least 14 frames, got {len(returned_enter)}'
                 assert [x[1][5] for x in returned_enter[:3]] == [13, 14, 105], returned_enter
                 assert returned_enter[0][1][4] == 0, returned_enter[0]
                 assert returned_enter[4][0] == 1126 and returned_enter[4][1][2] == 580001, returned_enter[4]
@@ -745,6 +1058,16 @@ def main() -> None:
             (1153, [byte(1)], 0),
             (1061, [byte(0)], 3),
         )
+        # Drain any late-arriving frames (e.g. 2027 gather spawns from
+        # map-enter) that arrived after the main map-enter read loop.
+        game_sock.settimeout(0.5)
+        try:
+            while True:
+                receive_frame(game_sock, cipher)
+        except socket.timeout:
+            pass
+        finally:
+            game_sock.settimeout(5)
         for protocol_id, request_fields, empty_subtype in menu_prefetches:
             game_sock.sendall(cipher.encrypt_frame(encode_frame(protocol_id, request_fields)))
             response_id, response_values = receive_frame(game_sock, cipher)

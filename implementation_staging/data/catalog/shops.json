@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "shops": [
+    {
+      "shop_id": 1000,
+      "mode": 1000,
+      "name": "仙晶商城",
+      "currency_property": 52,
+      "currency_name": "immortal_crystals",
+      "categories": [
+        {
+          "id": 1,
+          "name": "装备",
+          "items": [
+            { "template_id": 100001001, "price": 800 },
+            { "template_id": 30001001, "price": 600 }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "药品",
+          "items": [
+            { "template_id": 260000001, "price": 50 }
+          ]
+        },
+        {
+          "id": 3,
+          "name": "坐骑",
+          "items": [
+            { "template_id": 170410004, "price": 5000 }
+          ]
+        }
+      ]
+    },
+    {
+      "shop_id": 2000,
+      "mode": 2100,
+      "name": "仙石商城",
+      "currency_property": 49,
+      "currency_name": "immortal_stones",
+      "categories": [
+        {
+          "id": 1,
+          "name": "强化",
+          "items": [
+            { "template_id": 322260000, "price": 100 },
+            { "template_id": 322261000, "price": 400 }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "defaults": {
+    "stamina_max": 100,
+    "vitality_max": 100
+  },
+  "skills": [
+    {
+      "skill_id": 2001,
+      "name": "采药术",
+      "icon": 0,
+      "max_level": 3,
+      "tier_count": 1,
+      "upgrade_proficiency_required": 100,
+      "upgrade_silver_base": 10000,
+      "upgrade_exp_base": 500,
+      "upgrade_required_role_level": 1
+    },
+    {
+      "skill_id": 2002,
+      "name": "采矿术",
+      "icon": 0,
+      "max_level": 3,
+      "tier_count": 1,
+      "upgrade_proficiency_required": 100,
+      "upgrade_silver_base": 10000,
+      "upgrade_exp_base": 500,
+      "upgrade_required_role_level": 1
+    },
+    {
+      "skill_id": 2003,
+      "name": "炼药术",
+      "icon": 0,
+      "max_level": 3,
+      "tier_count": 1,
+      "upgrade_proficiency_required": 100,
+      "upgrade_silver_base": 10000,
+      "upgrade_exp_base": 500,
+      "upgrade_required_role_level": 1
+    },
+    {
+      "skill_id": 2004,
+      "name": "炼器术",
+      "icon": 0,
+      "max_level": 3,
+      "tier_count": 1,
+      "upgrade_proficiency_required": 100,
+      "upgrade_silver_base": 10000,
+      "upgrade_exp_base": 500,
+      "upgrade_required_role_level": 1
+    }
+  ],
+  "recipes": [
+    {
+      "recipe_id": 4001,
+      "skill_id": 2003,
+      "tier": 0,
+      "name": "精炼丹药",
+      "output_template_id": 260000001,
+      "output_quantity": 1,
+      "materials": [[322260000, 3]],
+      "vitality_cost": 10,
+      "required_level": 1,
+      "proficiency_gain": 5,
+      "description": "将三颗初级强化石精炼为一枚小还丹。"
+    },
+    {
+      "recipe_id": 4002,
+      "skill_id": 2004,
+      "tier": 0,
+      "name": "强化石精炼",
+      "output_template_id": 322261000,
+      "output_quantity": 1,
+      "materials": [[322260000, 4]],
+      "vitality_cost": 20,
+      "required_level": 1,
+      "proficiency_gain": 8,
+      "description": "将四颗初级强化石精炼为一颗中级强化石。"
+    },
+    {
+      "recipe_id": 4003,
+      "skill_id": 2004,
+      "tier": 0,
+      "name": "锻造青锋剑",
+      "output_template_id": 100001001,
+      "output_quantity": 1,
+      "materials": [[322261000, 2]],
+      "vitality_cost": 30,
+      "required_level": 1,
+      "proficiency_gain": 12,
+      "description": "以两颗中级强化石锻造一柄青锋剑。"
+    }
+  ],
+  "gather_targets": [
+    {
+      "target_id": 6001,
+      "name": "草药",
+      "map_id": 58,
+      "x": 12,
+      "y": 8,
+      "category": 1,
+      "skill_id": 2001,
+      "required_level": 1,
+      "stamina_cost": 5,
+      "duration_seconds": 3,
+      "reward_template_id": 260000001,
+      "reward_quantity": 1,
+      "proficiency_gain": 4,
+      "model_id": 1
+    },
+    {
+      "target_id": 6002,
+      "name": "矿石",
+      "map_id": 58,
+      "x": 30,
+      "y": 40,
+      "category": 2,
+      "skill_id": 2002,
+      "required_level": 1,
+      "stamina_cost": 5,
+      "duration_seconds": 3,
+      "reward_template_id": 322260000,
+      "reward_quantity": 1,
+      "proficiency_gain": 4,
+      "model_id": 2
+    }
+  ],
+  "learnable": [
+    {
+      "entry_id": 5001,
+      "skill_id": 2001,
+      "level_requirement": 1,
+      "silver_cost": 1000,
+      "experience_cost": 0,
+      "display": "学习 采药术",
+      "detail": "可在地图上采集草药。"
+    },
+    {
+      "entry_id": 5002,
+      "skill_id": 2002,
+      "level_requirement": 1,
+      "silver_cost": 1000,
+      "experience_cost": 100,
+      "display": "学习 采矿术",
+      "detail": "可在地图上采集矿石。"
+    },
+    {
+      "entry_id": 5003,
+      "skill_id": 2003,
+      "level_requirement": 1,
+      "silver_cost": 2000,
+      "experience_cost": 200,
+      "display": "学习 炼药术",
+      "detail": "可将材料炼制为丹药。"
+    },
+    {
+      "entry_id": 5004,
+      "skill_id": 2004,
+      "level_requirement": 1,
+      "silver_cost": 2000,
+      "experience_cost": 200,
+      "display": "学习 炼器术",
+      "detail": "可将材料锻造成装备。"
+    }
+  ],
+  "trainers": [
+    {
+      "trainer_id": 7001,
+      "name": "生活技能导师",
+      "entry_ids": [5001, 5002, 5003, 5004]
+    }
+  ]
+}

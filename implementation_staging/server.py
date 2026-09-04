@@ -29,6 +29,9 @@ from protocol import (
     Field,
     GameCipher,
     ProtocolError,
+    TYPE_BYTE,
+    TYPE_INT,
+    TYPE_SHORT,
     binary,
     byte,
     decode_payload,
@@ -39,6 +42,37 @@ from protocol import (
     long_integer,
     short,
     string,
+)
+from shop_registry import (
+    MAX_SHOP_PURCHASE_QUANTITY,
+    ShopCatalogError,
+    ShopCategoryDefinition,
+    ShopDefinition,
+    ShopRegistry,
+    default_shop_registry,
+    shop_currency_type,
+)
+from life_skill_registry import (
+    LifeSkillCatalogError,
+    LifeSkillRegistry,
+    default_life_skill_registry,
+)
+from life_skill_service import (
+    LifeTransactionResult,
+    ensure_life_skills,
+    gather_start_check,
+    gathering_reward_result,
+    learn_result,
+    life_skill_record,
+    life_skill_state,
+    life_progress_record,
+    life_stamina,
+    life_stamina_max,
+    life_vitality,
+    life_vitality_max,
+    learn_result_frame,
+    craft_result,
+    upgrade_result,
 )
 from strengthening import (
     INITIAL_STRENGTHEN_STONE_TEMPLATE_ID,
@@ -74,6 +108,842 @@ MENU_PREFETCH_EMPTY_SUBTYPES = {
 }
 
 POSITION_CHECKPOINT_SECONDS = 5.0
+
+# APK-confirmed in-game logout flow (reverse-engineered; 1074 is NOT logout):
+#   C->S 1054 [BYTE 8] opens the logout page;
+#   S->C 1054 [BYTE 8, BYTE flag, STRING text] renders it;
+#   C->S 1003 [INT 0] confirms logout (INT, never byte);
+#   S->C 1003 [BYTE 0] acknowledges, then the client closes the connection
+#   itself after about one second. The server must not hard-close the socket.
+LOGOUT_PAGE_TEXT = '是否确认退出游戏？'
+
+
+def logout_page_frame(
+    text: str = LOGOUT_PAGE_TEXT,
+    flag: int = 0,
+) -> bytes:
+    """S->C 1054 logout page: BYTE 8, BYTE flag, STRING text."""
+    return encode_frame(1054, [
+        byte(8),
+        byte(flag),
+        string(text),
+    ])
+
+
+def logout_ack_frame() -> bytes:
+    """S->C 1003 clean-logout acknowledgement: a single BYTE 0."""
+    return encode_frame(1003, [byte(0)])
+
+
+def is_logout_page_request(fields: list[Field]) -> bool:
+    """True only for the APK's exact 1054 open-logout-page request: BYTE 8.
+
+    The TLV type must be BYTE (type_id 2): an INT 8 or STRING '8' is a
+    different request and must never open the logout page.
+    """
+    return bool(
+        len(fields) >= 1
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 8
+    )
+
+
+def is_logout_confirm_request(fields: list[Field]) -> bool:
+    """True only for the APK's exact 1003 logout-confirm request: INT 0.
+
+    The TLV type must be INT (type_id 4): a BYTE 0 is a different request
+    and must never trigger the clean-logout save/ack path.
+    """
+    return bool(
+        len(fields) >= 1
+        and fields[0].type_id == TYPE_INT
+        and fields[0].value == 0
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mall (仙晶商城 / 仙石商城) protocol. APK evidence:
+# - screen 611 class pmsj/work/e/bk; tabs R=[0x7d0(2000), 0x834(2100)]:
+#   仙晶商城 -> mode 2000, 仙石商城 -> mode 2100.
+# - First tab entry sends 1067 [BYTE 0, INT 611, INT mode] AND
+#   1067 [BYTE 2, INT 611, INT mode]; cached tab switches send only the [2].
+# - Category buttons start at widget id 612001 (bk 0x956a1); clicking one
+#   sends 1067 [BYTE 1, INT 612, INT category_id].
+# - The ONLY server reply that opens the screen-7 shop page (pmsj/work/e/dp)
+#   is the generic 1010/open-screen action (main/e stream handler): short
+#   field 5 = 0x45, integer field 4 = screen id (7), integer field 3 = mode
+#   (passed to dp.y(mode)); optional string field 6 overrides the title.
+#   1067 action-1 responses are dropped by both main/e.u and cd.a(w).
+# - dp.ap() requests the goods list: 1033 [INT shop_id, BYTE 7, SHORT page1,
+#   SHORT page2, BYTE mode%100] with shop_id = (mode/1000)*1000.
+# - S->C 1033 action 7 header is index-addressed (dp.a(w)): [0]=BYTE action,
+#   [1]=INT shop_id, [2]=INT batch count, [3]=INT page, [4]=INT total,
+#   [5]=unread placeholder, [6]=BYTE currency type (must equal dp.E(mode) or
+#   the page closes); goods records start at [7]; one trailing STRING title.
+# - Purchase (main/e.a(BIIS)): 1033 [INT shop_id, BYTE 1, INT item_id,
+#   SHORT quantity]. S->C 1033 actions 1/2 read no further fields (action 1
+#   refreshes the shop currency label; action 2 also rebuilds the sell page).
+# - Currency: property 50 = 银两, 52 = 仙晶 (type 1), 49 = 仙石 (type 2).
+# ---------------------------------------------------------------------------
+MALL_SCREEN_ID = 611
+MALL_CATEGORY_SCREEN_ID = 612
+SHOP_SCREEN_ID = 7
+SHOP_OPEN_SCREEN_ACTION = 0x45
+MALL_TAB_TO_DP_MODE = {2000: 1000, 2100: 2100}
+SHOP_GOODS_HEADER_FIELDS = 7
+
+
+def mall_category_list_frame(categories: tuple[ShopCategoryDefinition, ...]) -> bytes:
+    """S->C 1067 action 0 category list for the screen-611 mall page.
+
+    cd.a(w) reads byte field 3 as the count, derives the record length as
+    ``(fieldCount - 4) / count`` and reads each record's [0] as the numeric
+    id and [1] as the name; field 1 (INT 611) is the screen id the message
+    router uses to find the target page, and field 2 is never read.
+    """
+    fields: list[Field] = [
+        byte(0),
+        integer(MALL_SCREEN_ID),
+        byte(0),
+        byte(len(categories)),
+    ]
+    for category in categories:
+        fields.append(integer(category.category_id))
+        fields.append(string(category.name))
+    return encode_frame(1067, fields)
+
+
+def mall_title_frame(title: str) -> bytes:
+    """S->C 1067 action 2 title update: cd.a(w) reads only string field 2."""
+    return encode_frame(1067, [
+        byte(2),
+        integer(MALL_SCREEN_ID),
+        string(title),
+    ])
+
+
+def shop_screen_bridge_frame(dp_mode: int) -> bytes:
+    """Open the screen-7 shop page via the APK's 1010 open-screen action.
+
+    main/e reads short field 5 as the sub-command (0x45 = open screen),
+    integer field 4 as the screen id and integer field 3 as the mode passed
+    to dp.y(mode). Field 6 (title) is optional and omitted on purpose:
+    dp.y() derives its own 仙晶商店/仙石商店 title from the mode.
+    """
+    return encode_frame(1010, [
+        integer(0),
+        short(0),
+        short(0),
+        integer(dp_mode),
+        integer(SHOP_SCREEN_ID),
+        short(SHOP_OPEN_SCREEN_ACTION),
+    ])
+
+
+def shop_purchase_ack_frame() -> bytes:
+    """S->C 1033 action 1: dp.a(w) refreshes the shop currency label only."""
+    return encode_frame(1033, [byte(1)])
+
+
+def shop_goods_list_frame(
+    shop: ShopDefinition,
+    category: ShopCategoryDefinition,
+    item_registry: ItemRegistry,
+) -> bytes:
+    """Encode the S->C 1033 action 7 goods page for one mall category.
+
+    The whole category is served in a single batch (page 0): dp.a(w) skips
+    further pages once its local vector reaches the total count.
+    """
+    fields: list[Field] = [
+        byte(7),
+        integer(shop.shop_id),
+        integer(len(category.goods)),
+        integer(0),
+        integer(len(category.goods)),
+        byte(0),
+        byte(shop_currency_type(shop.mode)),
+    ]
+    for goods in category.goods:
+        definition = item_registry.require(goods.template_id)
+        fields.append(integer(goods.template_id))
+        fields.append(integer(goods.price))
+        fields.append(string(definition.name))
+        # Four INT metas the client narrows to j.n(byte)/j.h/j.l/j.q(short).
+        fields.extend(integer(0) for _ in range(4))
+        if int(definition.equipment_slot) > 0:
+            # Equipment goods (item.c() == true) read 4 SHORT attributes via
+            # b/g.a(BS); omitting them misaligns every following record.
+            for value in definition.equipment_attributes[:4]:
+                fields.append(short(int(value)))
+    fields.append(string(shop.name))
+    return encode_frame(1033, fields)
+
+
+def is_mall_category_request(fields: list[Field]) -> bool:
+    """True only for 1067 [BYTE 0, INT 611, INT mode] tab entry requests."""
+    return bool(
+        len(fields) >= 3
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 0
+        and fields[1].type_id == TYPE_INT
+        and fields[1].value == MALL_SCREEN_ID
+        and fields[2].type_id == TYPE_INT
+    )
+
+
+def is_mall_title_request(fields: list[Field]) -> bool:
+    """True only for 1067 [BYTE 2, INT 611, INT mode] title/mode requests."""
+    return bool(
+        len(fields) >= 3
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 2
+        and fields[1].type_id == TYPE_INT
+        and fields[1].value == MALL_SCREEN_ID
+        and fields[2].type_id == TYPE_INT
+    )
+
+
+def is_mall_open_category_request(fields: list[Field]) -> bool:
+    """True only for 1067 [BYTE 1, INT 612, INT category_id] click requests."""
+    return bool(
+        len(fields) >= 3
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 1
+        and fields[1].type_id == TYPE_INT
+        and fields[1].value == MALL_CATEGORY_SCREEN_ID
+        and fields[2].type_id == TYPE_INT
+    )
+
+
+def is_shop_list_request(fields: list[Field]) -> bool:
+    """True only for 1033 [INT, BYTE 7, SHORT, SHORT, BYTE] list requests."""
+    return bool(
+        len(fields) >= 5
+        and fields[0].type_id == TYPE_INT
+        and fields[1].type_id == TYPE_BYTE
+        and fields[1].value == 7
+        and fields[2].type_id == TYPE_SHORT
+        and fields[3].type_id == TYPE_SHORT
+        and fields[4].type_id == TYPE_BYTE
+    )
+
+
+def is_shop_purchase_request(fields: list[Field]) -> bool:
+    """True only for 1033 [INT, BYTE 1, INT, SHORT>0] purchase requests.
+
+    Mirrors main/e.a(BIIS): the TLV types [4, 2, 4, 3] and the action value
+    are both verified; a BYTE quantity or action != 1 is never a purchase.
+    """
+    return bool(
+        len(fields) == 4
+        and fields[0].type_id == TYPE_INT
+        and fields[1].type_id == TYPE_BYTE
+        and fields[1].value == 1
+        and fields[2].type_id == TYPE_INT
+        and fields[3].type_id == TYPE_SHORT
+        and type(fields[3].value) is int
+        and 0 < fields[3].value <= MAX_SHOP_PURCHASE_QUANTITY
+    )
+
+
+def allocate_item_instance_id(role: dict[str, object]) -> int:
+    """Allocate a free role-scoped item instance id (role_id * 100 + n)."""
+    used = {int(item.get('id', 0)) for item in role_items(role)}
+    candidate = int(role.get('id', 0)) * 100 + 50
+    while candidate in used:
+        candidate += 1
+    return candidate
+
+
+@dataclass(frozen=True)
+class ShopPurchaseResult:
+    frames: tuple[bytes, ...]
+    changed: bool
+    reason: str = ''
+
+
+def _rejected_purchase(reason: str) -> ShopPurchaseResult:
+    return ShopPurchaseResult((), False, reason)
+
+
+def shop_purchase_result(
+    role: dict[str, object],
+    shop: ShopDefinition,
+    category_id: int,
+    template_id: int,
+    quantity: int,
+    item_registry: ItemRegistry | None = None,
+) -> ShopPurchaseResult:
+    """Apply one mall purchase atomically against server-side data.
+
+    Server price, shop/category membership, quantity bounds, currency and
+    bag capacity are all re-verified here; the client's own pre-checks are
+    never trusted. On any failure the role is left untouched.
+    """
+    if item_registry is None:
+        item_registry = default_item_registry()
+    category = shop.category(int(category_id))
+    if category is None:
+        return _rejected_purchase('商城分类不存在')
+    goods = shop.find_goods(int(category_id), int(template_id))
+    if goods is None:
+        return _rejected_purchase('商品不存在')
+    if type(quantity) is not int or quantity <= 0:
+        return _rejected_purchase('购买数量非法')
+    if quantity > MAX_SHOP_PURCHASE_QUANTITY:
+        return _rejected_purchase('购买数量超出上限')
+    total = goods.price * quantity
+    if total > MAX_CURRENCY_BALANCE:
+        return _rejected_purchase('订单金额超出上限')
+    currencies = role.get('currencies')
+    if not isinstance(currencies, dict):
+        currencies = {}
+        role['currencies'] = currencies
+    balance = normalized_currency_balance(currencies.get(shop.currency_name))
+    if balance < total:
+        return _rejected_purchase('货币不足')
+    definition = item_registry.require(int(template_id))
+    max_quantity = int(definition.max_quantity)
+    stack = next(
+        (
+            item for item in role_items(role)
+            if int(item.get('template_id', 0)) == int(template_id)
+            and item.get('location', 'bag') == 'bag'
+        ),
+        None,
+    ) if max_quantity > 1 else None
+    if stack is not None:
+        if int(stack.get('quantity', 1)) + quantity > max_quantity:
+            return _rejected_purchase('超出物品堆叠上限')
+    elif bag_item_count(role) >= bag_capacity(role):
+        return _rejected_purchase('背包已满')
+
+    balance_after = balance - total
+    currencies[shop.currency_name] = balance_after
+    if stack is not None:
+        stack['quantity'] = int(stack.get('quantity', 1)) + quantity
+        purchased = stack
+    else:
+        purchased = {
+            'id': allocate_item_instance_id(role),
+            'template_id': int(template_id),
+            'quantity': quantity,
+            'location': 'bag',
+        }
+        role_items(role).append(purchased)
+    frames = (
+        character_appearance_frame(
+            int(role.get('id', 0)),
+            {shop.currency_property: balance_after},
+        ),
+        item_frame(purchased, operation=3),
+        shop_purchase_ack_frame(),
+    )
+    return ShopPurchaseResult(frames, True, '')
+
+
+# ---------------------------------------------------------------------------
+# Life skills (生活技能).  Protocol evidence in docs/protocol/life-skills.md:
+# 1132 is the shared skill container (sect + life), 1143 is trainer learn +
+# normal crafting, gathering runs over 1141 (catalog) / 2027 (flow) and 1145
+# is cross-map auto-pathfinding.  All numeric game data is local-compat.
+# ---------------------------------------------------------------------------
+GATHER_MENU_LABEL = '采集'  # [compat] entity field 9 tap-menu text
+LIFE_SKILL_PLACEHOLDER_NAME = '基础技能'
+# 14 fields per record: [name, skill_id, level, max_level, proficiency,
+# max_proficiency, flags, (7 reserved ints)]
+SKILL_RECORD_WIDTH = 14
+FORGE_LOG_PREFIX = 'FORGE'
+
+
+def life_skill_list_frame(role: dict[str, object], settings: Settings) -> bytes:
+    """S->C 1132 action 0: the merged sect + life skill container list.
+
+    All records share the 14-field width so the APK's `(size-2)/count`
+    slicing stays correct; the placeholder sect record keeps its historical
+    position first (the client merges records into b/f.n by skill id).
+    """
+    life_state = ensure_life_skills(role, settings.life_registry)
+    records: list[list[object]] = []
+    sect_id = normalized_sect_id(role)
+    if sect_id == TEST_SECT_ID:
+        sect_record = list(field_values(decode_frame(character_skill_list(role))[1]))[2:]
+        records.append(sect_record)
+    else:
+        records.append([
+            LIFE_SKILL_PLACEHOLDER_NAME, 0,
+            *(0 for _ in range(SKILL_RECORD_WIDTH - 2)),
+        ])
+    for skill in settings.life_registry.skills.values():
+        records.append(life_skill_record(
+            skill, life_skill_state(role, skill.skill_id),
+        ))
+    fields: list[Field] = [byte(0), byte(len(records))]
+    for record in records:
+        fields.append(string(str(record[0])))
+        fields.extend(integer(int(value)) for value in record[1:])
+    return encode_frame(1132, fields)
+
+
+def life_recipe_list_frame(
+    skill,
+    tier: int,
+    recipes: list,
+    life_registry: LifeSkillRegistry,
+) -> bytes:
+    """S->C 1132 action 2 recipe list (e/db). rec[1] is unread placeholder."""
+    fields: list[Field] = [
+        byte(2),
+        integer(int(skill.skill_id)),
+        string('配方列表'),
+        string('选择配方进行制造'),
+        byte(0),
+        byte(len(recipes)),
+    ]
+    for recipe in recipes:
+        fields.append(integer(int(recipe.recipe_id)))
+        fields.append(integer(0))
+        fields.append(string(recipe.name))
+        fields.append(string(f'消耗活力 {recipe.vitality_cost}'))
+    return encode_frame(1132, fields)
+
+
+def life_tier_frame(skill, life_registry: LifeSkillRegistry) -> bytes:
+    """S->C 1132 action 1 tier page (e/ay). Minimal equal-width records."""
+    tier_count = max(1, int(skill.tier_count))
+    fields: list[Field] = [byte(1), integer(int(skill.skill_id)), byte(tier_count)]
+    for tier in range(tier_count):
+        recipes = life_registry.recipes_for(skill.skill_id, tier)
+        fields.append(string(f'第{tier + 1}层 配方 {len(recipes)}个'))
+        fields.append(byte(len(recipes)))
+        fields.append(integer(0))
+        fields.append(integer(0))
+    return encode_frame(1132, fields)
+
+
+def life_skill_info_frame(skill_id: int, level: int, text: str) -> bytes:
+    """S->C 1132 action 3 info text (x.A on the 603 life skill page)."""
+    return encode_frame(1132, [
+        byte(3), integer(int(skill_id)), integer(int(level)), string(text),
+    ])
+
+
+def life_proficiency_frame(role: dict[str, object], settings: Settings) -> bytes:
+    """S->C 1132 action 4 proficiency sync for every learned life skill."""
+    skills = [
+        (skill, life_skill_state(role, skill.skill_id))
+        for skill in settings.life_registry.skills.values()
+        if life_skill_state(role, skill.skill_id) is not None
+    ]
+    fields: list[Field] = [byte(4), byte(len(skills))]
+    for skill, state in skills:
+        record = life_progress_record(skill, state)
+        fields.append(string(str(record[0])))
+        fields.extend(integer(int(value)) for value in record[1:])
+    return encode_frame(1132, fields)
+
+
+def life_skill_upgrade_frame(
+    skill,
+    role: dict[str, object],
+    settings: Settings,
+) -> bytes:
+    """S->C 1132 action 6 upgrade page push (e/az, screen 329)."""
+    state = life_skill_state(role, skill.skill_id) or {'level': 0, 'proficiency': 0}
+    level = int(state.get('level', 0))
+    next_level = level + 1
+    return encode_frame(1132, [
+        byte(6),
+        integer(int(skill.skill_id)),
+        string(skill.name),
+        byte(level),
+        byte(int(skill.max_level)),
+        byte(int(skill.upgrade_required_role_level)),
+        integer(skill.upgrade_silver_cost(next_level)),
+        integer(skill.upgrade_exp_cost(next_level)),
+        string(f'当前等级 {level} 级'),
+        string(f'下一级 {next_level} 级'),
+        integer(int(skill.icon)),
+    ])
+
+
+def life_trainer_page_frame(trainer) -> bytes:
+    """S->C 1143 action 0 trainer page push (e/de, screen 327)."""
+    return encode_frame(1143, [
+        byte(0),
+        integer(int(trainer.trainer_id)),
+        string(trainer.name),
+        byte(1),
+        string('选择要学习的生活技能'),
+        string('学习需要消耗银两和经验'),
+    ])
+
+
+def life_learnable_list_frame(
+    trainer,
+    role: dict[str, object],
+    settings: Settings,
+) -> bytes:
+    """S->C 1143 action 1 learnable list; exactly 7-field records (de.X=7)."""
+    entries = [
+        settings.life_registry.learnable[entry_id]
+        for entry_id in trainer.entry_ids
+        if entry_id in settings.life_registry.learnable
+    ]
+    fields: list[Field] = [byte(1), byte(0), byte(len(entries))]
+    for entry in entries:
+        fields.append(integer(int(entry.entry_id)))
+        fields.append(integer(0))
+        fields.append(integer(int(entry.level_requirement)))
+        fields.append(integer(int(entry.silver_cost)))
+        fields.append(integer(int(entry.experience_cost)))
+        fields.append(string(entry.display))
+        fields.append(string(entry.detail))
+    return encode_frame(1143, fields)
+
+
+def life_learnable_detail_frame(entry) -> bytes:
+    """S->C 1143 action 2 detail text (underscore-delimited pages)."""
+    return encode_frame(1143, [
+        byte(2),
+        string(f'{entry.display}_{entry.detail}_需要等级 {entry.level_requirement}'
+               f'_银两 {entry.silver_cost}_经验 {entry.experience_cost}'),
+    ])
+
+
+def life_learn_result_frame(page: int, entry, learned: bool, next_entry) -> bytes:
+    """S->C 1143 action 3: result 0 removes the row, otherwise rebuilds it."""
+    return learn_result_frame(page, entry, learned, next_entry)
+
+
+def life_craft_detail_frame(
+    recipe,
+    role: dict[str, object],
+    settings: Settings,
+) -> bytes:
+    """S->C 1143 action 4 craft detail (e/dc): 17 confirmed fields."""
+    slot_templates, _used, _free = recipe.material_slots()
+    fields: list[Field] = [
+        byte(4),
+        integer(int(recipe.output_template_id)),
+        string(recipe.name),
+        integer(int(settings.item_registry.require(recipe.output_template_id).icon_code)),
+        string(recipe.description),
+    ]
+    fields.extend(integer(int(template)) for template, _qty in slot_templates)
+    fields.extend(string(str(template)) for template, _qty in slot_templates)
+    fields.extend(byte(int(quantity)) for _template, quantity in slot_templates)
+    return encode_frame(1143, fields)
+
+
+def life_craft_ack_frame() -> bytes:
+    """S->C 1143 action 5: no fields; the client re-scans the bag."""
+    return encode_frame(1143, [byte(5)])
+
+
+def life_craft_text_frame(text: str) -> bytes:
+    """S->C 1143 action 6 dynamic craft-page text."""
+    return encode_frame(1143, [byte(6), string(text)])
+
+
+def is_life_skill_list_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 1
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 0
+    )
+
+
+def is_life_skill_open_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 1
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_life_recipe_list_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) >= 3
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 2
+        and fields[1].type_id == TYPE_INT
+        and all(field.type_id == TYPE_BYTE for field in fields[2:])
+    )
+
+
+def is_life_skill_info_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 3
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 3
+        and fields[1].type_id == TYPE_INT
+        and fields[2].type_id == TYPE_BYTE
+    )
+
+
+def is_life_skill_upgrade_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 6
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_life_trainer_list_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) >= 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 1
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_life_learnable_detail_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 2
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_life_learn_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 3
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_life_craft_detail_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 4
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_life_craft_request(fields: list[Field]) -> bool:
+    """Normal craft: [BYTE 5, INT recipe, INT slot1..4, BYTE qty 1..99]."""
+    return bool(
+        len(fields) == 7
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 5
+        and all(field.type_id == TYPE_INT for field in fields[1:6])
+        and fields[6].type_id == TYPE_BYTE
+        and type(fields[6].value) is int
+        and 1 <= fields[6].value <= 99
+    )
+
+
+def is_life_direct_use_request(fields: list[Field]) -> bool:
+    """Screen-326 direct use: [BYTE 5, INT recipe, INT 0, INT 0, INT 0, INT 0]."""
+    return bool(
+        len(fields) == 6
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 5
+        and all(field.type_id == TYPE_INT for field in fields[1:])
+    )
+
+
+def is_life_craft_text_request(fields: list[Field]) -> bool:
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 6
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_gather_start_request(fields: list[Field]) -> bool:
+    """C->S 2027 gather start: [BYTE 1, INT entity_id] (main/k tap menu)."""
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 1
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def is_map_pathfind_request(fields: list[Field]) -> bool:
+    """C->S 1145 pathfind: [BYTE 0, INT map_id, BYTE x, BYTE y]."""
+    return bool(
+        len(fields) == 4
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 0
+        and fields[1].type_id == TYPE_INT
+        and fields[2].type_id == TYPE_BYTE
+        and fields[3].type_id == TYPE_BYTE
+    )
+
+
+def gather_catalog_frame(targets: list) -> bytes:
+    """S->C 1141 gather target catalog (no action byte, 9-field records)."""
+    fields: list[Field] = [integer(len(targets))]
+    for target in targets:
+        fields.extend((
+            integer(int(target.target_id)),
+            string(target.name),
+            integer(int(target.category)),
+            integer(int(target.x)),
+            integer(int(target.y)),
+            integer(0),
+            integer(0),
+            integer(int(target.map_id)),
+            integer(0),
+        ))
+    return encode_frame(1141, fields)
+
+
+def gather_spawn_frame(target) -> bytes:
+    """S->C 2027 action 0: spawn one gather entity (b/i) on the map.
+
+    Fields are stored on the entity at their own indices; index 9 is the
+    tap-menu label the client compares before sending the gather request.
+    Indices 6/7/8 are unread compatibility placeholders.
+    """
+    return encode_frame(2027, [
+        byte(0),
+        integer(int(target.target_id)),
+        integer(int(target.x)),
+        integer(int(target.y)),
+        integer(int(target.model_id)),
+        string(target.name),
+        integer(0),
+        integer(0),
+        integer(0),
+        string(GATHER_MENU_LABEL),
+    ])
+
+
+def gather_start_frame(duration_seconds: int, target_id: int) -> bytes:
+    """S->C 2027 action 1: duration is SECONDS (client multiplies by 1000)."""
+    return encode_frame(2027, [
+        byte(1), integer(int(duration_seconds)), integer(int(target_id)),
+    ])
+
+
+def gather_interrupt_frame() -> bytes:
+    """S->C 2027 action 2: stop timer, clear process, '采集中断!'."""
+    return encode_frame(2027, [byte(2)])
+
+
+def gather_remove_frame(target_id: int) -> bytes:
+    """S->C 2027 action 3: stop timer and remove the map entity."""
+    return encode_frame(2027, [byte(3), integer(int(target_id))])
+
+
+def map_pathfind_frame(map_id: int, x: int, y: int) -> bytes:
+    """S->C 1145 action 0: single-hop path record (same-map walk)."""
+    return encode_frame(1145, [
+        byte(0), integer(1), integer(int(map_id)), integer(int(x)), integer(int(y)),
+        integer(0),
+    ])
+
+
+def is_forge_list_request(fields: list[Field]) -> bool:
+    """C->S 1084 list: [BYTE 0, INT context, SHORT, SHORT, BYTE]."""
+    return bool(
+        len(fields) == 5
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == 0
+        and fields[1].type_id == TYPE_INT
+        and fields[2].type_id == TYPE_SHORT
+        and fields[3].type_id == TYPE_SHORT
+        and fields[4].type_id == TYPE_BYTE
+    )
+
+
+def is_forge_select_request(fields: list[Field]) -> bool:
+    """C->S 1084 select/attr: [BYTE 1|2, INT recipe_id]."""
+    return bool(
+        len(fields) == 2
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value in (1, 2)
+        and fields[1].type_id == TYPE_INT
+    )
+
+
+def _is_forge_slot_request(fields: list[Field], action: int) -> bool:
+    return bool(
+        len(fields) == 6
+        and fields[0].type_id == TYPE_BYTE
+        and fields[0].value == action
+        and all(field.type_id == TYPE_INT for field in fields[1:])
+    )
+
+
+def is_forge_collect_request(fields: list[Field]) -> bool:
+    """C->S 1084 collect after the forge animation: [BYTE 3, INT x5]."""
+    return _is_forge_slot_request(fields, 3)
+
+
+def is_forge_confirm_request(fields: list[Field]) -> bool:
+    """C->S 1084 confirm forge: [BYTE 5, INT x5]."""
+    return _is_forge_slot_request(fields, 5)
+
+
+class ConnectionGathering:
+    """Connection-scoped gathering state: one active gather, token-guarded.
+
+    The asyncio completion task closes over the session; every wakeup must
+    pass `is_current` (same token/role/target) and `consume` before any
+    reward is applied, so a stale task can never pay out twice.
+    """
+
+    def __init__(self) -> None:
+        self.session: dict[str, object] | None = None
+        self.task: asyncio.Task | None = None
+        self._token = 0
+
+    def start(
+        self,
+        role: dict[str, object],
+        target,
+        map_id: int,
+    ) -> tuple[tuple[bytes, ...], dict[str, object] | None]:
+        if self.session is not None:
+            return (), None
+        self._token += 1
+        self.session = {
+            'token': self._token,
+            'role_id': int(role.get('id', 0)),
+            'target_id': int(target.target_id),
+            'map_id': int(map_id),
+            'x': int(target.x),
+            'y': int(target.y),
+        }
+        return (gather_start_frame(int(target.duration_seconds), int(target.target_id)),), self.session
+
+    def is_current(self, session: dict[str, object] | None) -> bool:
+        return (
+            self.session is not None
+            and session is not None
+            and self.session is session
+            and self.session.get('token') == self._token
+        )
+
+    def consume(self, session: dict[str, object] | None) -> bool:
+        """Atomically claim the reward right for a current session."""
+        if not self.is_current(session):
+            return False
+        self.session = None
+        return True
+
+    def cancel(self) -> bytes | None:
+        """Stop any active gather; returns the 2027 interrupt frame if one ran."""
+        had_session = self.session is not None
+        self.session = None
+        if self.task is not None:
+            self.task.cancel()
+            self.task = None
+        return gather_interrupt_frame() if had_session else None
 
 
 def menu_prefetch_empty_ack(message_id: int) -> bytes:
@@ -163,6 +1033,8 @@ class Settings:
     default_map_id: int = 58
     map_registry: MapRegistry = field(default_factory=default_map_registry)
     item_registry: ItemRegistry = field(default_factory=default_item_registry)
+    shop_registry: ShopRegistry = field(default_factory=default_shop_registry)
+    life_registry: LifeSkillRegistry = field(default_factory=default_life_skill_registry)
     # Deprecated aliases retained for protocol helpers and older local tests.
     # Map entry, entities and routing use ``map_registry`` below.
     map_id: int = 58
@@ -232,7 +1104,9 @@ class Settings:
                 LOG.warning('failed to load NPC catalog %s: %s', catalog, exc)
 
         registry = load_map_registry(payload, npc_catalog=npc_catalog)
-        allowed = {item.name for item in fields(cls)} - {'map_registry', 'item_registry'}
+        allowed = {
+            item.name for item in fields(cls)
+        } - {'map_registry', 'item_registry', 'shop_registry', 'life_registry'}
         values = {key: value for key, value in payload.items() if key in allowed}
         values['default_map_id'] = registry.default_map_id
         settings = cls(map_registry=registry, **values)
@@ -1275,10 +2149,13 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
             normalized_currency_balance(currencies.get(name))
         )
     properties[54] = string('无')
-    properties[55] = integer(100)
-    properties[56] = integer(100)
-    properties[57] = integer(100)
-    properties[58] = integer(100)
+    # Properties 55-58 are the life-skill stamina/vitality pair; the role
+    # state in role['life_skills'] is the single truth, migrated on load.
+    life_state = ensure_life_skills(role, settings.life_registry) if role is not None else None
+    properties[55] = integer(int(life_state.get('stamina', 100)) if life_state else 100)
+    properties[56] = integer(int(life_state.get('stamina_max', 100)) if life_state else 100)
+    properties[57] = integer(int(life_state.get('vitality', 100)) if life_state else 100)
+    properties[58] = integer(int(life_state.get('vitality_max', 100)) if life_state else 100)
     # APK pmsj/work/b/ab.g() reads character property 62 as the personal
     # inventory capacity. Property 59 is the separate warehouse capacity and
     # deliberately remains untouched while warehouse support is out of scope.
@@ -3550,6 +4427,180 @@ class LocalGameServer:
             raise
         return result.frames
 
+    def handle_shop_purchase(
+        self,
+        role: dict[str, object],
+        fields: list[Field],
+        mode: int = 0,
+        category_id: int = 0,
+    ) -> ShopPurchaseResult:
+        """Apply one 1033 mall purchase and persist mutations only.
+
+        ``mode``/``category_id`` are the connection-level mall state tracked
+        by the 1067 handlers; the request's shop_id must match the shop the
+        connection is currently browsing.
+        """
+        if not is_shop_purchase_request(fields):
+            return ShopPurchaseResult((), False, '购买请求格式非法')
+        shop = self.settings.shop_registry.by_mode(mode)
+        if shop is None:
+            return ShopPurchaseResult((), False, '当前不在商城')
+        shop_id = int(fields[0].value)
+        if shop_id != shop.shop_id:
+            return ShopPurchaseResult((), False, '商店与当前商城不匹配')
+        item_id = int(fields[2].value)
+        quantity = int(fields[3].value)
+        snapshot = copy.deepcopy(role)
+        try:
+            result = shop_purchase_result(
+                role,
+                shop,
+                category_id,
+                item_id,
+                quantity,
+                item_registry=self.settings.item_registry,
+            )
+            if result.changed:
+                self.roles.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        return result
+
+    def handle_life_craft(
+        self,
+        role: dict[str, object],
+        fields: list[Field],
+    ) -> LifeTransactionResult:
+        """Apply one 1143/action-5 craft and persist mutations only."""
+        recipe_id = int(fields[1].value)
+        slots = [int(field.value) for field in fields[2:6]]
+        quantity = int(fields[6].value)
+        recipe = self.settings.life_registry.recipe(recipe_id)
+        snapshot = copy.deepcopy(role)
+        try:
+            result = craft_result(
+                role,
+                recipe,
+                slots,
+                quantity,
+                life_registry=self.settings.life_registry,
+                item_registry=self.settings.item_registry,
+            )
+            if result.changed:
+                self.roles.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        return result
+
+    def handle_life_learn(
+        self,
+        role: dict[str, object],
+        fields: list[Field],
+        trainer_id: int = 0,
+    ) -> LifeTransactionResult:
+        """Apply one 1143/action-3 trainer learn and persist mutations only."""
+        entry_id = int(fields[1].value)
+        trainer = self.settings.life_registry.trainers.get(int(trainer_id))
+        entry = self.settings.life_registry.learnable.get(entry_id)
+        snapshot = copy.deepcopy(role)
+        try:
+            result = learn_result(
+                role, trainer, entry, life_registry=self.settings.life_registry,
+            )
+            if result.changed:
+                self.roles.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        return result
+
+    def handle_life_upgrade(
+        self,
+        role: dict[str, object],
+        fields: list[Field],
+    ) -> LifeTransactionResult:
+        """Apply one 1132/action-6 skill upgrade and persist mutations only."""
+        skill_id = int(fields[1].value)
+        skill = self.settings.life_registry.skills.get(skill_id)
+        snapshot = copy.deepcopy(role)
+        try:
+            result = upgrade_result(
+                role, skill, life_registry=self.settings.life_registry,
+            )
+            if result.changed:
+                self.roles.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        return result
+
+    def handle_gather_completion(
+        self,
+        role: dict[str, object],
+        target,
+    ) -> LifeTransactionResult:
+        """Apply one gather reward and persist mutations only."""
+        snapshot = copy.deepcopy(role)
+        try:
+            result = gathering_reward_result(
+                role,
+                target,
+                life_registry=self.settings.life_registry,
+                item_registry=self.settings.item_registry,
+            )
+            if result.changed:
+                self.roles.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        return result
+
+    async def _finish_gathering_later(
+        self,
+        writer: asyncio.StreamWriter,
+        cipher: GameCipher | None,
+        lock: asyncio.Lock | None,
+        username: str,
+        active_role: dict[str, object],
+        gathering: ConnectionGathering,
+        session: dict[str, object],
+        target,
+        delay: float,
+    ) -> None:
+        """Complete a gather after `delay` seconds unless the session stale."""
+        try:
+            if delay > 0:
+                await asyncio.sleep(delay)
+            if not gathering.is_current(session):
+                return
+            if int(session.get('role_id', 0)) != int(active_role.get('id', 0)):
+                return
+            if not gathering.consume(session):
+                return
+            result = self.handle_gather_completion(active_role, target)
+            if not result.changed:
+                return
+            LOG.info(
+                'GATHER_COMPLETE user=%r role_id=%d target_id=%d stamina=%d proficiency=%d',
+                username,
+                int(active_role.get('id', 0)),
+                int(session.get('target_id', 0)),
+                life_stamina(active_role),
+                (life_skill_state(active_role, target.skill_id) or {}).get('proficiency', 0),
+            )
+            await self._send(writer, *result.frames, cipher=cipher, lock=lock)
+        except asyncio.CancelledError:
+            raise
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            return
+
     async def _send(
         self,
         writer: asyncio.StreamWriter,
@@ -3790,6 +4841,12 @@ class LocalGameServer:
         heartbeat_task: asyncio.Task[None] | None = None
         position_dirty = False
         last_position_checkpoint_at = time.monotonic()
+        # Connection-level mall state (screen 611 tab + selected category).
+        # Never persisted to the role; cleared implicitly on disconnect.
+        current_shop_mode = 0
+        current_shop_category = 0
+        # Connection-level gathering state (one active 2027 gather at most).
+        gathering = ConnectionGathering()
         try:
             while True:
                 header = await reader.readexactly(2)
@@ -3878,12 +4935,17 @@ class LocalGameServer:
                                 int(active_role.get('race', 0)),
                             )
                             LOG.info('%s', format_map_player_appearance_log(username, active_role, self.settings))
+                            role_map_id = int(active_role.get('map_id', self.settings.default_map_id))
+                            gather_targets = self.settings.life_registry.gather_targets_for(role_map_id)
                             await self._send(
                                 writer,
                                 player_info(self.settings, active_role),
                                 character_extension_info(),
-                                *initial_skill_frames(active_role),
+                                life_skill_list_frame(active_role, self.settings),
+                                sect_skill_list(active_role),
                                 *(item_frame(item) for item in role_items(active_role)),
+                                gather_catalog_frame(gather_targets),
+                                *(gather_spawn_frame(target) for target in gather_targets),
                                 cipher=game_cipher,
                                 lock=send_lock,
                             )
@@ -3931,6 +4993,16 @@ class LocalGameServer:
                     )
 
                 elif message_id == 1005 and len(values) >= 2:
+                    movement_interrupt = gathering.cancel()
+                    if movement_interrupt is not None:
+                        LOG.info(
+                            'GATHER_CANCEL user=%r role_id=%d reason=movement',
+                            username,
+                            int(active_role.get('id', 0)) if active_role is not None else 0,
+                        )
+                        await self._send(
+                            writer, movement_interrupt, cipher=game_cipher, lock=send_lock,
+                        )
                     old_tile = battle_state.player_tile
                     movement_x, movement_y = map_movement_final_tile(values)
                     guard_had_no_origin = bool(
@@ -4022,6 +5094,13 @@ class LocalGameServer:
                         # newly loaded scene.
                         battle_state.reset_encounter()
                         npc_dialogue_state.clear()
+                        gather_transition = gathering.cancel()
+                        if gather_transition is not None:
+                            LOG.info(
+                                'GATHER_CANCEL user=%r role_id=%d reason=map_transition',
+                                username,
+                                int(active_role.get('id', 0)) if active_role is not None else 0,
+                            )
                         monster = current_settings.monster
                         LOG.info(
                             'client requested map reference; map=%d entering at %d,%d; monster=%s',
@@ -4035,9 +5114,18 @@ class LocalGameServer:
                             ),
                         )
                         role_id = int(active_role['id']) if active_role is not None else self.settings.role_id
+                        enter_frames = list(map_enter_frames(current_settings, role_id))
+                        if gather_transition is not None:
+                            enter_frames.insert(0, gather_transition)
+                        enter_frames.extend(
+                            gather_spawn_frame(target)
+                            for target in self.settings.life_registry.gather_targets_for(
+                                current_settings.id
+                            )
+                        )
                         await self._send(
                             writer,
-                            *map_enter_frames(current_settings, role_id),
+                            *enter_frames,
                             cipher=game_cipher,
                             lock=send_lock,
                         )
@@ -4070,6 +5158,13 @@ class LocalGameServer:
                 elif message_id == 2031 and values:
                     # main/k encodes [object_id, 0, x, y, action, 0]. Native
                     # 2030 NPCs use action 0; generic 1126 actors use action 6.
+                    gather_interrupt = gathering.cancel()
+                    if gather_interrupt is not None:
+                        LOG.info(
+                            'GATHER_CANCEL user=%r role_id=%d reason=map_interaction',
+                            username,
+                            int(active_role.get('id', 0)) if active_role is not None else 0,
+                        )
                     object_id, object_x, object_y, object_action = map_object_interaction_values(values)
                     await self._handle_map_object_interaction(
                         username=username,
@@ -4465,13 +5560,130 @@ class LocalGameServer:
                         lock=send_lock,
                     )
                 elif message_id == 1132 and active_role is not None:
-                    LOG.info('character skill list requested values=%r', values)
-                    await self._send(
-                        writer,
-                        character_skill_list(active_role),
-                        cipher=game_cipher,
-                        lock=send_lock,
-                    )
+                    if is_life_skill_list_request(fields):
+                        LOG.info(
+                            'character skill list requested user=%r role_id=%d',
+                            username,
+                            int(active_role.get('id', 0)),
+                        )
+                        await self._send(
+                            writer,
+                            life_skill_list_frame(active_role, self.settings),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif is_life_skill_open_request(fields):
+                        skill_id = int(fields[1].value)
+                        skill = self.settings.life_registry.skills.get(skill_id)
+                        if skill is None:
+                            LOG.info(
+                                'LIFE_SKILL_OPEN_REJECT user=%r skill_id=%d reason=unknown_skill',
+                                username,
+                                skill_id,
+                            )
+                        else:
+                            LOG.info(
+                                'LIFE_SKILL_OPEN user=%r role_id=%d skill_id=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                skill_id,
+                            )
+                            await self._send(
+                                writer,
+                                life_tier_frame(skill, self.settings.life_registry),
+                                life_skill_info_frame(
+                                    skill_id,
+                                    int((life_skill_state(active_role, skill_id) or {}).get('level', 0)),
+                                    f'{skill.name} 熟练度 '
+                                    f'{int((life_skill_state(active_role, skill_id) or {}).get("proficiency", 0))}',
+                                ),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    elif is_life_recipe_list_request(fields):
+                        skill_id = int(fields[1].value)
+                        tier = int(fields[2].value)
+                        skill = self.settings.life_registry.skills.get(skill_id)
+                        recipes = self.settings.life_registry.recipes_for(skill_id, tier)
+                        if skill is None or not recipes:
+                            LOG.info(
+                                'LIFE_SKILL_LIST_REJECT user=%r skill_id=%d tier=%d reason=no_recipes',
+                                username,
+                                skill_id,
+                                tier,
+                            )
+                        else:
+                            LOG.info(
+                                'LIFE_SKILL_LIST user=%r role_id=%d skill_id=%d tier=%d count=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                skill_id,
+                                tier,
+                                len(recipes),
+                            )
+                            await self._send(
+                                writer,
+                                life_recipe_list_frame(skill, tier, recipes, self.settings.life_registry),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    elif is_life_skill_info_request(fields):
+                        skill_id = int(fields[1].value)
+                        skill = self.settings.life_registry.skills.get(skill_id)
+                        state = life_skill_state(active_role, skill_id) or {}
+                        text = f'{skill.name} 等级 {state.get("level", 0)}' if skill else '未知技能'
+                        await self._send(
+                            writer,
+                            life_skill_info_frame(
+                                skill_id, int(state.get('level', 0)), text,
+                            ),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif is_life_skill_upgrade_request(fields):
+                        skill_id = int(fields[1].value)
+                        skill = self.settings.life_registry.skills.get(skill_id)
+                        if skill is None:
+                            LOG.info(
+                                'LIFE_SKILL_UPGRADE_REJECT user=%r skill_id=%d reason=unknown_skill',
+                                username,
+                                skill_id,
+                            )
+                        else:
+                            LOG.info(
+                                'LIFE_SKILL_UPGRADE_REQUEST user=%r role_id=%d skill_id=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                skill_id,
+                            )
+                            result = self.handle_life_upgrade(active_role, fields)
+                            if result.changed:
+                                state = life_skill_state(active_role, skill_id) or {}
+                                LOG.info(
+                                    'LIFE_SKILL_UPGRADE_SUCCESS user=%r skill_id=%d level=%d '
+                                    'silver=%d experience=%d',
+                                    username,
+                                    skill_id,
+                                    int(state.get('level', 0)),
+                                    int(active_role.get('currencies', {}).get('silver', 0)),
+                                    int(active_role.get('experience', 0)),
+                                )
+                                await self._send(writer, *result.frames, cipher=game_cipher, lock=send_lock)
+                            else:
+                                LOG.info(
+                                    'LIFE_SKILL_UPGRADE_REJECT user=%r skill_id=%d reason=%s',
+                                    username,
+                                    skill_id,
+                                    result.reason or 'unknown',
+                                )
+                                await self._send(
+                                    writer,
+                                    life_skill_info_frame(skill_id, 0, result.reason),
+                                    cipher=game_cipher,
+                                    lock=send_lock,
+                                )
+                    else:
+                        LOG.info('ignored skill message=%d values=%r', message_id, values)
                 elif message_id in MENU_PREFETCH_EMPTY_SUBTYPES:
                     LOG.info('menu prefetch acknowledged as empty message=%d values=%r', message_id, values)
                     await self._send(
@@ -4668,6 +5880,503 @@ class LocalGameServer:
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     else:
                         LOG.info('ignored item action=%d item_id=%d values=%r', action, item_id, values)
+
+                elif message_id == 1067 and len(fields) >= 3 and fields[0].type_id == TYPE_BYTE:
+                    if is_mall_category_request(fields) or is_mall_title_request(fields):
+                        tab_mode = int(values[2])
+                        shop = self.settings.shop_registry.find_bk_mode(tab_mode)
+                        if shop is None:
+                            LOG.info(
+                                'SHOP_OPEN_REJECT user=%r reason=unknown_mall_mode mode=%d',
+                                username,
+                                tab_mode,
+                            )
+                        else:
+                            current_shop_mode = MALL_TAB_TO_DP_MODE[tab_mode]
+                            current_shop_category = 0
+                            LOG.info(
+                                'SHOP_OPEN user=%r role_id=%d mode=%d currency_property=%d',
+                                username,
+                                int(active_role.get('id', 0)) if active_role is not None else 0,
+                                current_shop_mode,
+                                shop.currency_property,
+                            )
+                            if is_mall_category_request(fields):
+                                await self._send(
+                                    writer,
+                                    mall_category_list_frame(shop.categories),
+                                    cipher=game_cipher,
+                                    lock=send_lock,
+                                )
+                            else:
+                                await self._send(
+                                    writer,
+                                    mall_title_frame(shop.name),
+                                    cipher=game_cipher,
+                                    lock=send_lock,
+                                )
+                    elif is_mall_open_category_request(fields):
+                        shop = self.settings.shop_registry.by_mode(current_shop_mode)
+                        category_id = int(values[2])
+                        if shop is None or shop.category(category_id) is None:
+                            LOG.info(
+                                'SHOP_CATEGORY_REJECT user=%r mode=%d category_id=%d',
+                                username,
+                                current_shop_mode,
+                                category_id,
+                            )
+                        else:
+                            current_shop_category = category_id
+                            LOG.info(
+                                'SHOP_CATEGORY user=%r mode=%d category_id=%d',
+                                username,
+                                current_shop_mode,
+                                category_id,
+                            )
+                            # The client drops 1067 action-1 responses; the
+                            # screen-7 shop page opens only via this bridge.
+                            await self._send(
+                                writer,
+                                shop_screen_bridge_frame(current_shop_mode),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    else:
+                        LOG.info('ignored mall message=%d values=%r', message_id, values)
+
+                elif message_id == 1033 and is_shop_list_request(fields):
+                    shop = self.settings.shop_registry.by_mode(current_shop_mode)
+                    category = (
+                        shop.category(current_shop_category) if shop is not None else None
+                    )
+                    if active_role is None or shop is None or category is None:
+                        LOG.info(
+                            'SHOP_LIST_REJECT user=%r mode=%d category=%d reason=no_mall_session',
+                            username,
+                            current_shop_mode,
+                            current_shop_category,
+                        )
+                    elif int(values[0]) != shop.shop_id:
+                        LOG.info(
+                            'SHOP_LIST_REJECT user=%r shop_id=%d expected=%d reason=shop_mismatch',
+                            username,
+                            int(values[0]),
+                            shop.shop_id,
+                        )
+                    else:
+                        LOG.info(
+                            'SHOP_LIST user=%r mode=%d category=%d count=%d',
+                            username,
+                            current_shop_mode,
+                            current_shop_category,
+                            len(category.goods),
+                        )
+                        await self._send(
+                            writer,
+                            shop_goods_list_frame(
+                                shop, category, self.settings.item_registry
+                            ),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+
+                elif message_id == 1033 and is_shop_purchase_request(fields):
+                    if active_role is None:
+                        LOG.info(
+                            'SHOP_PURCHASE_REJECT user=%r reason=no_active_role',
+                            username,
+                        )
+                    else:
+                        shop = self.settings.shop_registry.by_mode(current_shop_mode)
+                        if shop is None:
+                            LOG.info(
+                                'SHOP_PURCHASE_REJECT user=%r reason=no_mall_session',
+                                username,
+                            )
+                        else:
+                            item_id = int(fields[2].value)
+                            quantity = int(fields[3].value)
+                            goods = shop.find_goods(
+                                current_shop_category, item_id
+                            )
+                            price = goods.price if goods is not None else 0
+                            currencies = active_role.get('currencies')
+                            balance_before = normalized_currency_balance(
+                                (currencies or {}).get(shop.currency_name)
+                            )
+                            LOG.info(
+                                'SHOP_PURCHASE_REQUEST user=%r shop_id=%d mode=%d '
+                                'item_id=%d quantity=%d price=%d total=%d',
+                                username,
+                                shop.shop_id,
+                                current_shop_mode,
+                                item_id,
+                                quantity,
+                                price,
+                                price * quantity,
+                            )
+                            result = self.handle_shop_purchase(
+                                active_role,
+                                fields,
+                                mode=current_shop_mode,
+                                category_id=current_shop_category,
+                            )
+                            if result.changed:
+                                currencies_after = active_role.get('currencies')
+                                LOG.info(
+                                    'SHOP_PURCHASE_SUCCESS user=%r role_id=%d '
+                                    'item_id=%d quantity=%d currency_property=%d '
+                                    'currency_before=%d currency_after=%d',
+                                    username,
+                                    int(active_role.get('id', 0)),
+                                    item_id,
+                                    quantity,
+                                    shop.currency_property,
+                                    balance_before,
+                                    normalized_currency_balance(
+                                        (currencies_after or {}).get(shop.currency_name)
+                                    ),
+                                )
+                                await self._send(writer, *result.frames, cipher=game_cipher, lock=send_lock)
+                            else:
+                                LOG.info(
+                                    'SHOP_PURCHASE_REJECT user=%r item_id=%d quantity=%d reason=%s',
+                                    username,
+                                    item_id,
+                                    quantity,
+                                    result.reason or 'unknown',
+                                )
+
+                elif message_id == 1143 and active_role is not None and fields:
+                    action = int(fields[0].value) if fields[0].type_id == TYPE_BYTE else -1
+                    if is_life_trainer_list_request(fields):
+                        trainer_id = int(fields[1].value)
+                        trainer = self.settings.life_registry.trainers.get(trainer_id)
+                        if trainer is None:
+                            LOG.info(
+                                'LIFE_SKILL_LEARN_REJECT user=%r trainer_id=%d reason=unknown_trainer',
+                                username,
+                                trainer_id,
+                            )
+                        else:
+                            LOG.info(
+                                'LIFE_SKILL_LEARN_LIST user=%r role_id=%d trainer_id=%d count=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                trainer_id,
+                                len(trainer.entry_ids),
+                            )
+                            await self._send(
+                                writer,
+                                life_learnable_list_frame(trainer, active_role, self.settings),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    elif is_life_learnable_detail_request(fields):
+                        entry = self.settings.life_registry.learnable.get(int(fields[1].value))
+                        if entry is None:
+                            LOG.info(
+                                'LIFE_SKILL_LEARN_REJECT user=%r reason=unknown_entry id=%d',
+                                username,
+                                int(fields[1].value),
+                            )
+                        else:
+                            await self._send(
+                                writer,
+                                life_learnable_detail_frame(entry),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    elif is_life_learn_request(fields):
+                        entry_id = int(fields[1].value)
+                        entry = self.settings.life_registry.learnable.get(entry_id)
+                        trainer = next(
+                            (
+                                candidate for candidate in self.settings.life_registry.trainers.values()
+                                if candidate.teaches(entry_id)
+                            ),
+                            None,
+                        )
+                        LOG.info(
+                            'LIFE_SKILL_LEARN_REQUEST user=%r role_id=%d entry_id=%d',
+                            username,
+                            int(active_role.get('id', 0)),
+                            entry_id,
+                        )
+                        result = self.handle_life_learn(
+                            active_role, fields, trainer_id=trainer.trainer_id if trainer else 0,
+                        )
+                        if result.changed:
+                            LOG.info(
+                                'LIFE_SKILL_LEARN_SUCCESS user=%r role_id=%d entry_id=%d skill_id=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                entry_id,
+                                entry.skill_id if entry is not None else 0,
+                            )
+                            await self._send(
+                                writer,
+                                *result.frames,
+                                life_trainer_page_frame(trainer),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                        else:
+                            LOG.info(
+                                'LIFE_SKILL_LEARN_REJECT user=%r entry_id=%d reason=%s',
+                                username,
+                                entry_id,
+                                result.reason or 'unknown',
+                            )
+                            # Failure must still clear the APK wait state: the
+                            # router only clears it when a 1143 frame arrives,
+                            # so echo the unchanged row (confirmed wire shape).
+                            if entry is not None and trainer is not None:
+                                await self._send(
+                                    writer,
+                                    life_learn_result_frame(0, entry, False, entry),
+                                    cipher=game_cipher,
+                                    lock=send_lock,
+                                )
+                    elif is_life_craft_detail_request(fields):
+                        recipe = self.settings.life_registry.recipe(int(fields[1].value))
+                        if recipe is None:
+                            LOG.info(
+                                'LIFE_CRAFT_REJECT user=%r recipe_id=%d reason=unknown_recipe',
+                                username,
+                                int(fields[1].value),
+                            )
+                        else:
+                            LOG.info(
+                                'LIFE_CRAFT_OPEN user=%r role_id=%d recipe_id=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                recipe.recipe_id,
+                            )
+                            await self._send(
+                                writer,
+                                life_craft_detail_frame(recipe, active_role, self.settings),
+                                life_craft_text_frame(recipe.description),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    elif is_life_craft_request(fields) or is_life_direct_use_request(fields):
+                        recipe_id = int(fields[1].value)
+                        if is_life_direct_use_request(fields):
+                            slots = [0, 0, 0, 0]
+                            quantity = 1
+                        else:
+                            slots = [int(field.value) for field in fields[2:6]]
+                            quantity = int(fields[6].value)
+                        recipe = self.settings.life_registry.recipe(recipe_id)
+                        LOG.info(
+                            'LIFE_CRAFT_REQUEST user=%r role_id=%d recipe_id=%d quantity=%d vitality=%d',
+                            username,
+                            int(active_role.get('id', 0)),
+                            recipe_id,
+                            quantity,
+                            life_vitality(active_role),
+                        )
+                        result = self.handle_life_craft(active_role, fields) if (
+                            is_life_craft_request(fields)
+                        ) else LifeTransactionResult((), False, '该配方不支持直接使用')
+                        if result.changed:
+                            LOG.info(
+                                'LIFE_CRAFT_SUCCESS user=%r role_id=%d recipe_id=%d '
+                                'vitality=%d proficiency=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                recipe_id,
+                                life_vitality(active_role),
+                                int((life_skill_state(active_role, recipe.skill_id) or {}).get('proficiency', 0))
+                                if recipe is not None else 0,
+                            )
+                            await self._send(writer, *result.frames, cipher=game_cipher, lock=send_lock)
+                        else:
+                            LOG.info(
+                                'LIFE_CRAFT_REJECT user=%r recipe_id=%d reason=%s',
+                                username,
+                                recipe_id,
+                                result.reason or 'unknown',
+                            )
+                            # The APK craft handler has no failure branch; the
+                            # confirmed action-6 text channel reports the
+                            # reason and the empty action-5 ack rescans the bag.
+                            await self._send(
+                                writer,
+                                life_craft_text_frame(result.reason or '无法制造'),
+                                life_craft_ack_frame(),
+                                cipher=game_cipher,
+                                lock=send_lock,
+                            )
+                    elif is_life_craft_text_request(fields):
+                        recipe = self.settings.life_registry.recipe(int(fields[1].value))
+                        text = recipe.description if recipe is not None else ''
+                        await self._send(
+                            writer,
+                            life_craft_text_frame(text),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    else:
+                        LOG.info('ignored life skill message=%d values=%r', message_id, values)
+
+                elif message_id == 2027 and is_gather_start_request(fields) and active_role is not None:
+                    target_id = int(fields[1].value)
+                    target = self.settings.life_registry.gather_target(target_id)
+                    reason = (
+                        gather_start_check(
+                            active_role,
+                            target,
+                            gathering.session is not None,
+                            self.settings.life_registry,
+                        )
+                        if target is not None
+                        else '采集目标不存在'
+                    )
+                    if reason:
+                        LOG.info(
+                            'GATHER_REJECT user=%r target_id=%d reason=%s',
+                            username,
+                            target_id,
+                            reason,
+                        )
+                        await self._send(writer, gather_interrupt_frame(), cipher=game_cipher, lock=send_lock)
+                    elif int(active_role.get('map_id', self.settings.default_map_id)) != int(target.map_id):
+                        LOG.info(
+                            'GATHER_REJECT user=%r target_id=%d reason=wrong_map',
+                            username,
+                            target_id,
+                        )
+                        await self._send(writer, gather_interrupt_frame(), cipher=game_cipher, lock=send_lock)
+                    else:
+                        frames, session = gathering.start(active_role, target, int(target.map_id))
+                        if session is None:
+                            LOG.info(
+                                'GATHER_REJECT user=%r target_id=%d reason=already_gathering',
+                                username,
+                                target_id,
+                            )
+                            await self._send(writer, gather_interrupt_frame(), cipher=game_cipher, lock=send_lock)
+                        else:
+                            LOG.info(
+                                'GATHER_START user=%r role_id=%d target_id=%d duration=%d stamina=%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                target_id,
+                                int(target.duration_seconds),
+                                life_stamina(active_role),
+                            )
+                            task = asyncio.create_task(self._finish_gathering_later(
+                                writer,
+                                game_cipher,
+                                send_lock,
+                                username=username,
+                                active_role=active_role,
+                                gathering=gathering,
+                                session=session,
+                                target=target,
+                                delay=max(0.0, float(target.duration_seconds)),
+                            ))
+                            gathering.task = task
+                            await self._send(writer, *frames, cipher=game_cipher, lock=send_lock)
+
+                elif message_id == 1145 and is_map_pathfind_request(fields) and active_role is not None:
+                    map_id = int(fields[1].value)
+                    target_x = int(fields[2].value)
+                    target_y = int(fields[3].value)
+                    current_map = int(active_role.get('map_id', self.settings.default_map_id))
+                    known = any(
+                        target.map_id == map_id and target.x == target_x and target.y == target_y
+                        for target in self.settings.life_registry.gather_targets
+                    )
+                    if map_id != current_map or not known:
+                        LOG.info(
+                            'GATHER_REJECT user=%r pathfind map=%d tile=%d,%d reason=unknown_target',
+                            username,
+                            map_id,
+                            target_x,
+                            target_y,
+                        )
+                    else:
+                        await self._send(
+                            writer,
+                            map_pathfind_frame(map_id, target_x, target_y),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+
+                elif message_id == 1084 and fields and fields[0].type_id == TYPE_BYTE:
+                    # 1084 forging: the C->S request shapes are APK-confirmed
+                    # but the S->C recipe-list record semantics are not fully
+                    # locked, so no response is fabricated (see
+                    # docs/protocol/life-skills.md). Requests are validated
+                    # and logged only.
+                    action = int(fields[0].value)
+                    if is_forge_list_request(fields):
+                        LOG.info('FORGE_OPEN user=%r context=%d', username, int(fields[1].value))
+                    elif is_forge_select_request(fields):
+                        LOG.info('FORGE_REQUEST user=%r recipe_id=%d', username, int(fields[1].value))
+                    elif is_forge_collect_request(fields):
+                        LOG.info(
+                            'FORGE_REQUEST user=%r recipe_id=%d slots=%r kind=collect',
+                            username,
+                            int(fields[1].value),
+                            [int(field.value) for field in fields[2:]],
+                        )
+                    elif is_forge_confirm_request(fields):
+                        LOG.info(
+                            'FORGE_REQUEST user=%r recipe_id=%d slots=%r kind=confirm',
+                            username,
+                            int(fields[1].value),
+                            [int(field.value) for field in fields[2:]],
+                        )
+                    else:
+                        LOG.info('ignored forge message=%d values=%r', message_id, values)
+
+                elif message_id == 1054 and is_logout_page_request(fields):
+                    # APK logout step 1: open the logout confirmation page.
+                    LOG.info('logout page requested user=%r', username)
+                    await self._send(
+                        writer,
+                        logout_page_frame(),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
+
+                elif message_id == 1003 and is_logout_confirm_request(fields):
+                    # APK logout step 2: clean logout. Persist any position
+                    # change that has not been checkpointed yet, then ack.
+                    if position_dirty:
+                        self.roles.save()
+                        position_dirty = False
+                        last_position_checkpoint_at = time.monotonic()
+                        if active_role is not None:
+                            LOG.info(
+                                'ROLE_POSITION_LOGOUT_SAVE '
+                                'user=%r role_id=%d map=%d tile=%d,%d',
+                                username,
+                                int(active_role.get('id', 0)),
+                                int(active_role.get('map_id', self.settings.default_map_id)),
+                                int(active_role.get('map_x', 0)),
+                                int(active_role.get('map_y', 0)),
+                            )
+                    LOG.info(
+                        'ROLE_LOGOUT_ACK user=%r role_id=%d',
+                        username,
+                        int(active_role.get('id', 0)) if active_role is not None else 0,
+                    )
+                    # Keep the loop alive after the ack: the original APK
+                    # waits about one second, cleans up role/UI state, then
+                    # closes the connection itself. Never break/return/close
+                    # here; the finally block only runs on real disconnect.
+                    await self._send(
+                        writer,
+                        logout_ack_frame(),
+                        cipher=game_cipher,
+                        lock=send_lock,
+                    )
+
                 else:
                     LOG.info('ignored unimplemented message=%d values=%r', message_id, values)
         except (asyncio.IncompleteReadError, ConnectionResetError):
@@ -4675,6 +6384,9 @@ class LocalGameServer:
         except (ProtocolError, UnicodeDecodeError, ValueError) as exc:
             LOG.warning('protocol error from %s: %s', peer, exc)
         finally:
+            # Cancel any active gather; the socket is closing so the 2027
+            # interrupt frame must NOT be sent.
+            gathering.cancel()
             if position_dirty:
                 try:
                     self.roles.save()
