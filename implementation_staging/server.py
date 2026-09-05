@@ -2253,12 +2253,9 @@ def _get_sect_skill_level(role: dict[str, object], skill_id: int, settings: Sett
                 pass
     
     # Use default level from registry if available
-    try:
-        skill = settings.sect_registry.skill(skill_id)
-        if skill:
-            return skill.default_level
-    except:
-        pass
+    skill = settings.sect_registry.skill(skill_id)
+    if skill is not None:
+        return max(0, min(skill.default_level, skill.max_level))
     
     return 0
 
@@ -3399,8 +3396,8 @@ def map_npc_for_object_id(
 
 def map_npc_dialogue_frames(
     npc: MapActorDefinition,
-    role: dict[str, object] | None = None,
-    settings: Settings | None = None,
+    role: dict[str, object] | None,
+    settings: Settings,
 ) -> list[bytes]:
     """Open the compact map-overlay NPC dialogue used by the original client.
 
@@ -3409,8 +3406,6 @@ def map_npc_dialogue_frames(
     2 supplies an option row, and type 100 finalizes layout after resolving the
     native 2030 NPC by id for its title and portrait.
     """
-    if settings is None:
-        settings = Settings()
     npc_id = npc.id
     is_sect_mentor = npc.service == 'sect_skill_mentor' and npc.sect_id is not None
     sect_matches = (
@@ -4777,7 +4772,7 @@ class LocalGameServer:
             )
             await self._send(
                 writer,
-                *map_npc_dialogue_frames(npc, active_role),
+                *map_npc_dialogue_frames(npc, active_role, self.settings),
                 cipher=cipher,
                 lock=send_lock,
             )

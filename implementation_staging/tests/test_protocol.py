@@ -1362,7 +1362,7 @@ class ProtocolTests(unittest.TestCase):
         enter_action = field_values(decode_frame(map_enter_frames(kunlun)[0])[1])
         self.assertEqual(enter_action[4:], [0, 13])
 
-        message_id, fields = decode_frame(server_module.map_npc_dialogue_frames(mentor, kunlun_role)[0])
+        message_id, fields = decode_frame(server_module.map_npc_dialogue_frames(mentor, kunlun_role, settings)[0])
         values = field_values(fields)
 
         self.assertEqual(message_id, 2032)
@@ -1373,14 +1373,14 @@ class ProtocolTests(unittest.TestCase):
 
         outsider = default_role(settings)
         outsider['sect_id'] = 2
-        _, outsider_fields = decode_frame(server_module.map_npc_dialogue_frames(mentor, outsider)[0])
+        _, outsider_fields = decode_frame(server_module.map_npc_dialogue_frames(mentor, outsider, settings)[0])
         outsider_values = field_values(outsider_fields)
         self.assertEqual(outsider_values[:2], [1900101, 3])
         self.assertEqual(outsider_values[8], '仅限昆仑弟子学习。')
         self.assertNotIn('学习门派技能', outsider_values)
 
         ordinary = server_module.settings_for_map(settings, 58).npcs[0]
-        _, ordinary_fields = decode_frame(server_module.map_npc_dialogue_frames(ordinary, kunlun_role)[0])
+        _, ordinary_fields = decode_frame(server_module.map_npc_dialogue_frames(ordinary, kunlun_role, settings)[0])
         ordinary_values = field_values(ordinary_fields)
         self.assertEqual(ordinary_values[:2], [1900002, 3])
         self.assertNotIn('学习门派技能', ordinary_values)
