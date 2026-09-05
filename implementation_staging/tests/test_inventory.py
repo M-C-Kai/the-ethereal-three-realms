@@ -10,8 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from protocol import decode_frame, field_values
 import server as server_module
 from server import (
+    BASE_CHARACTER_APPEARANCE,
     RoleStore,
     Settings,
+    character_appearance,
     default_role,
     ensure_equipment_resource_preview_items,
     player_info,
@@ -184,6 +186,109 @@ class EquipmentResourcePreviewGrantTests(unittest.TestCase):
         ]
         self.assertTrue(all(item['location'] == 'bag' for item in preview_items))
         self.assertTrue(all(item['quantity'] == 1 for item in preview_items))
+
+    def test_login_grant_does_not_change_character_appearance(self):
+        settings = Settings()
+        registry = settings.item_registry
+        role = {
+            'id': 10001,
+            'bag_capacity': 40,
+            'items': [
+                {
+                    'id': 1000104,
+                    'template_id': 10001001,
+                    'quantity': 1,
+                    'location': 'equipped',
+                }
+            ],
+        }
+        before = character_appearance(role, registry)
+        ensure_equipment_resource_preview_items(role, registry)
+        after = character_appearance(role, registry)
+        self.assertEqual(after, before)
+        self.assertTrue(
+            all(
+                item['location'] == 'bag'
+                for item in role['items']
+                if item['template_id'] in set(registry.preview_template_ids())
+            )
+        )
+
+    def _preview_item_changing_property(self, registry, slot, property_index, current):
+        candidates = [
+            definition
+            for definition in (
+                registry.require(template_id)
+                for template_id in registry.preview_template_ids()
+            )
+            if definition.equipment_slot == slot
+            and int(definition.appearance_properties.get(str(property_index), current)) != current
+        ]
+        self.assertTrue(candidates, f'no preview item for slot {slot} changes property {property_index}')
+        return candidates[0]
+
+    def test_equipping_preview_shoulder_changes_property16(self):
+        settings = Settings()
+        registry = settings.item_registry
+        role = {'id': 10001, 'items': []}
+        before = character_appearance(role, registry)
+        definition = self._preview_item_changing_property(registry, 2, 16, before[16])
+        role['items'] = [{
+            'id': 1,
+            'template_id': definition.template_id,
+            'quantity': 1,
+            'location': 'equipped',
+        }]
+        after = character_appearance(role, registry)
+        self.assertEqual(after[16], definition.appearance_properties['16'])
+        self.assertNotEqual(after[16], before[16])
+
+    def test_equipping_preview_armor_changes_property15(self):
+        settings = Settings()
+        registry = settings.item_registry
+        role = {'id': 10001, 'items': []}
+        before = character_appearance(role, registry)
+        definition = self._preview_item_changing_property(registry, 3, 15, before[15])
+        role['items'] = [{
+            'id': 1,
+            'template_id': definition.template_id,
+            'quantity': 1,
+            'location': 'equipped',
+        }]
+        after = character_appearance(role, registry)
+        self.assertEqual(after[15], definition.appearance_properties['15'])
+        self.assertNotEqual(after[15], before[15])
+
+    def test_unequipping_preview_restores_base_or_remaining_equipped(self):
+        settings = Settings()
+        registry = settings.item_registry
+        role = {'id': 10001, 'items': []}
+        shoulder = self._preview_item_changing_property(registry, 2, 16, 0)
+        armor = self._preview_item_changing_property(registry, 3, 15, 0)
+        role['items'] = [
+            {
+                'id': 1,
+                'template_id': shoulder.template_id,
+                'quantity': 1,
+                'location': 'equipped',
+            },
+            {
+                'id': 2,
+                'template_id': armor.template_id,
+                'quantity': 1,
+                'location': 'equipped',
+            },
+        ]
+        equipped = character_appearance(role, registry)
+        self.assertEqual(equipped[16], shoulder.appearance_properties['16'])
+        self.assertEqual(equipped[15], armor.appearance_properties['15'])
+        role['items'][0]['location'] = 'bag'
+        after_unequip = character_appearance(role, registry)
+        self.assertEqual(after_unequip[16], BASE_CHARACTER_APPEARANCE[16])
+        self.assertEqual(after_unequip[15], armor.appearance_properties['15'])
+        role['items'][1]['location'] = 'bag'
+        after_all = character_appearance(role, registry)
+        self.assertEqual(after_all, dict(BASE_CHARACTER_APPEARANCE))
 
 
 if __name__ == '__main__':

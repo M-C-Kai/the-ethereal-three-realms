@@ -8,7 +8,9 @@
     "synthetic_required_level": true,
     "only_icon_resource_is_apk_confirmed": true,
     "not_official_equipment_template": true,
-    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。"
+    "appearance_pairing": "compatibility_preview_pairing",
+    "appearance_not_official_icon_mapping": true,
+    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。appearance_properties 引用 appearance-layer-audit 中已确认的人物图层候选，配对关系是 compatibility preview pairing，不是官方 icon→appearance 映射。"
   },
   "items": [
     {
@@ -30,7 +32,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001011,
@@ -51,7 +55,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001021,
@@ -72,7 +78,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001031,
@@ -93,7 +101,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001041,
@@ -114,7 +124,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001051,
@@ -135,7 +147,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001061,
@@ -156,7 +170,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001071,
@@ -177,7 +193,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001081,
@@ -198,7 +216,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001091,
@@ -219,7 +239,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 20002001,
@@ -240,7 +262,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 0
+      }
     },
     {
       "template_id": 20002011,
@@ -261,7 +285,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 1
+      }
     },
     {
       "template_id": 20002021,
@@ -282,7 +308,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 2
+      }
     },
     {
       "template_id": 20002031,
@@ -303,7 +331,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 3
+      }
     },
     {
       "template_id": 20002041,
@@ -324,7 +354,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 4
+      }
     },
     {
       "template_id": 20002051,
@@ -345,7 +377,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 5
+      }
     },
     {
       "template_id": 20002061,
@@ -366,7 +400,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 6
+      }
     },
     {
       "template_id": 20002071,
@@ -387,7 +423,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 7
+      }
     },
     {
       "template_id": 20002081,
@@ -408,7 +446,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 8
+      }
     },
     {
       "template_id": 20002091,
@@ -429,7 +469,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "16": 9
+      }
     },
     {
       "template_id": 30003001,
@@ -450,7 +492,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 0
+      }
     },
     {
       "template_id": 30003011,
@@ -471,7 +515,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 1
+      }
     },
     {
       "template_id": 30003021,
@@ -492,7 +538,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 2
+      }
     },
     {
       "template_id": 30003031,
@@ -513,7 +561,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 3
+      }
     },
     {
       "template_id": 30003041,
@@ -534,7 +584,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 4
+      }
     },
     {
       "template_id": 30003051,
@@ -555,7 +607,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 5
+      }
     },
     {
       "template_id": 30003061,
@@ -576,7 +630,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 6
+      }
     },
     {
       "template_id": 30003071,
@@ -597,7 +653,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 7
+      }
     },
     {
       "template_id": 30003081,
@@ -618,7 +676,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 8
+      }
     },
     {
       "template_id": 30003091,
@@ -639,7 +699,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "15": 9
+      }
     },
     {
       "template_id": 40004001,
@@ -870,7 +932,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 0
+      }
     },
     {
       "template_id": 50005011,
@@ -891,7 +955,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 1
+      }
     },
     {
       "template_id": 50005021,
@@ -912,7 +978,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 2
+      }
     },
     {
       "template_id": 50005031,
@@ -933,7 +1001,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 3
+      }
     },
     {
       "template_id": 50005041,
@@ -954,7 +1024,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 4
+      }
     },
     {
       "template_id": 50005051,
@@ -975,7 +1047,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 5
+      }
     },
     {
       "template_id": 50005061,
@@ -996,7 +1070,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 6
+      }
     },
     {
       "template_id": 50005071,
@@ -1017,7 +1093,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 7
+      }
     },
     {
       "template_id": 50005081,
@@ -1038,7 +1116,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 8
+      }
     },
     {
       "template_id": 50005091,
@@ -1059,7 +1139,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "14": 9
+      }
     },
     {
       "template_id": 60006001,
@@ -1290,7 +1372,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 0
+      }
     },
     {
       "template_id": 70007011,
@@ -1311,7 +1395,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 1
+      }
     },
     {
       "template_id": 70007021,
@@ -1332,7 +1418,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 2
+      }
     },
     {
       "template_id": 70007031,
@@ -1353,7 +1441,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 3
+      }
     },
     {
       "template_id": 70007041,
@@ -1374,7 +1464,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 4
+      }
     },
     {
       "template_id": 70007051,
@@ -1395,7 +1487,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 5
+      }
     },
     {
       "template_id": 70007061,
@@ -1416,7 +1510,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 6
+      }
     },
     {
       "template_id": 70007071,
@@ -1437,7 +1533,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 7
+      }
     },
     {
       "template_id": 70007081,
@@ -1458,7 +1556,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 8
+      }
     },
     {
       "template_id": 70007091,
@@ -1479,7 +1579,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "19": 9
+      }
     },
     {
       "template_id": 80008001,
@@ -1500,7 +1602,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 0
+      }
     },
     {
       "template_id": 80008011,
@@ -1521,7 +1625,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 1
+      }
     },
     {
       "template_id": 80008021,
@@ -1542,7 +1648,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 2
+      }
     },
     {
       "template_id": 80008031,
@@ -1563,7 +1671,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 3
+      }
     },
     {
       "template_id": 80008041,
@@ -1584,7 +1694,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 4
+      }
     },
     {
       "template_id": 80008051,
@@ -1605,7 +1717,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 5
+      }
     },
     {
       "template_id": 80008061,
@@ -1626,7 +1740,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 6
+      }
     },
     {
       "template_id": 80008071,
@@ -1647,7 +1763,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 7
+      }
     },
     {
       "template_id": 80008081,
@@ -1668,7 +1786,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 8
+      }
     },
     {
       "template_id": 80008091,
@@ -1689,7 +1809,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "17": 9
+      }
     },
     {
       "template_id": 90009001,
@@ -1710,7 +1832,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 0
+      }
     },
     {
       "template_id": 90009011,
@@ -1731,7 +1855,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 1
+      }
     },
     {
       "template_id": 90009021,
@@ -1752,7 +1878,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 2
+      }
     },
     {
       "template_id": 90009031,
@@ -1773,7 +1901,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 3
+      }
     },
     {
       "template_id": 90009041,
@@ -1794,7 +1924,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 4
+      }
     },
     {
       "template_id": 90009051,
@@ -1815,7 +1947,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 5
+      }
     },
     {
       "template_id": 90009061,
@@ -1836,7 +1970,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 6
+      }
     },
     {
       "template_id": 90009071,
@@ -1857,7 +1993,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 7
+      }
     },
     {
       "template_id": 90009081,
@@ -1878,7 +2016,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 8
+      }
     },
     {
       "template_id": 90009091,
@@ -1899,7 +2039,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "18": 9
+      }
     },
     {
       "template_id": 140010001,

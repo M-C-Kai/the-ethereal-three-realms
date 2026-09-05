@@ -8,6 +8,17 @@ from typing import Any, Iterable, Sequence
 
 PREVIEW_QUALITY = 1
 PREVIEW_SERIAL_COLLISION_OFFSET = 50_000
+# Compatibility-preview pairing only. Not an official icon→appearance mapping.
+PREVIEW_SLOT_APPEARANCE_PROPERTY = {
+    1: 20,
+    2: 16,
+    3: 15,
+    5: 14,
+    7: 19,
+    8: 17,
+    9: 18,
+}
+PREVIEW_SLOTS_WITHOUT_APPEARANCE = frozenset({4, 6, 10, 11, 12, 13, 14})
 SLOT_FAMILY_LABELS = {
     'helmet': '头盔',
     'shoulder': '肩甲',
@@ -24,6 +35,10 @@ SLOT_FAMILY_LABELS = {
     'accessory': '饰品',
     'talisman': '法宝',
 }
+
+
+class ItemCatalogError(Exception):
+    """Raised when item catalog or starter inventory is invalid."""
 
 
 def preview_category_for_slot(equipment_slot: int) -> int:
@@ -52,8 +67,30 @@ def synthetic_preview_template_id(
     return template_id
 
 
-class ItemCatalogError(Exception):
-    """Raised when item catalog or starter inventory is invalid."""
+def preview_appearance_properties(
+    equipment_slot: int,
+    preview_index_in_slot: int,
+    manifest: dict[str, Any],
+) -> dict[str, int]:
+    """Pair one preview item to an APK-confirmed character-layer candidate.
+
+    This is a compatibility preview pairing, not an official equipment mapping.
+    """
+    slot = int(equipment_slot)
+    if slot in PREVIEW_SLOTS_WITHOUT_APPEARANCE:
+        return {}
+    property_index = PREVIEW_SLOT_APPEARANCE_PROPERTY.get(slot)
+    if property_index is None:
+        return {}
+    layer = manifest.get(str(property_index))
+    if not isinstance(layer, dict):
+        raise ItemCatalogError(f'missing appearance-layer audit for property {property_index}')
+    candidates = layer.get('candidate_image_ids')
+    if not isinstance(candidates, list) or not candidates:
+        raise ItemCatalogError(f'empty candidate_image_ids for property {property_index}')
+    group_base = int(layer['group_base'])
+    image_id = int(candidates[int(preview_index_in_slot) % len(candidates)])
+    return {str(property_index): image_id - group_base}
 
 
 @dataclass(frozen=True)

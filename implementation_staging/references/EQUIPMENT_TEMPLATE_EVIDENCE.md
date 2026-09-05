@@ -174,4 +174,12 @@
 `data/catalog/equipment_resource_preview_items.json`
 
 这些条目的 `kind/status` 为 `compatibility_preview`。  
-其中仅 `icon_code` / 资源分组来自 APK；`template_id`、名称、等级、属性均为本地预览构造，**不代表官方装备**。
+其中 `icon_code` / 资源分组来自 APK；`template_id`、名称、等级、属性均为本地预览构造，**不代表官方装备**。
+
+人物外观：slot 1/2/3/5/7/8/9 的 preview `appearance_properties` 现在引用 `materials/appearance-layer-audit/manifest.json` 中 **APK-confirmed character-layer candidates**（`candidate_image_ids - group_base`，按 `sort_order` 配对，超出则循环）。
+
+这是 **APK资源预览配对 / compatibility preview pairing**，**不是**官方 `icon_code → appearance` 或 `template_id → appearance` 映射。
+
+以下槽位仍保持 `appearance_properties: {}`：腰带(4)、项链(6)、武器(10)、戒指(11)、外套(12)、饰品(13)、法宝(14)。武器虽已知 property 7，但尚未恢复 icon group 21..33 → weapon appearance code 的完整映射，本轮不猜测。
+
+预览项只进入背包。登录补齐 **不修改** 人物 appearance；只有玩家手动装备后，才通过现有 `character_appearance()` / `character_appearance_change_frame()` 生效。

@@ -18,7 +18,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from item_registry import (
     ItemCatalogError,
     ItemRegistry,
+    PREVIEW_SLOT_APPEARANCE_PROPERTY,
+    PREVIEW_SLOTS_WITHOUT_APPEARANCE,
     default_item_registry,
+    preview_appearance_properties,
     synthetic_preview_template_id,
 )
 from server import (
@@ -454,13 +457,16 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
         self.assertEqual(len(set(preview_ids)), 252)
         self.assertEqual(len(set(icon_codes)), 252)
         self.assertEqual(set(preview_ids) & official_ids, set())
+        manifest = json.loads(
+            (root / 'materials' / 'appearance-layer-audit' / 'manifest.json').read_text(encoding='utf-8')
+        )
+        by_slot: dict[int, list] = {}
         for resource, item in zip(resources, preview_items):
             template_id = int(item['template_id'])
             category = (template_id // 10_000_000) % 100
             self.assertTrue(1 <= category <= 21, template_id)
             self.assertEqual(int(item['equipment_slot']), int(resource['equipment_slot']))
             self.assertEqual(int(item['icon_code']), int(resource['icon_code']))
-            self.assertEqual(item['appearance_properties'], {})
             self.assertEqual(item['quality'], 1)
             expected = synthetic_preview_template_id(
                 resource['equipment_slot'],
@@ -472,6 +478,30 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
             if int(resource['equipment_slot']) == 10:
                 self.assertEqual(category, 10)
                 self.assertEqual((template_id // 100_000) % 100, 0)
+            by_slot.setdefault(int(item['equipment_slot']), []).append(item)
+        for slot, slot_items in by_slot.items():
+            slot_items.sort(key=lambda item: int(item['sort_order']))
+            for preview_index, item in enumerate(slot_items):
+                expected_appearance = preview_appearance_properties(
+                    slot, preview_index, manifest,
+                )
+                self.assertEqual(item['appearance_properties'], expected_appearance)
+            if slot in PREVIEW_SLOT_APPEARANCE_PROPERTY:
+                self.assertTrue(
+                    all(item['appearance_properties'] for item in slot_items),
+                    slot,
+                )
+                property_key = str(PREVIEW_SLOT_APPEARANCE_PROPERTY[slot])
+                layer = manifest[property_key]
+                allowed = {
+                    int(image_id) - int(layer['group_base'])
+                    for image_id in layer['candidate_image_ids']
+                }
+                for item in slot_items:
+                    value = item['appearance_properties'][property_key]
+                    self.assertIn(value, allowed)
+            if slot in PREVIEW_SLOTS_WITHOUT_APPEARANCE:
+                self.assertTrue(all(item['appearance_properties'] == {} for item in slot_items))
 
         registry = default_item_registry()
         self.assertEqual(len(registry.preview_template_ids()), 252)

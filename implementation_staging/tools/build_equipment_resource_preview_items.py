@@ -8,11 +8,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from item_registry import SLOT_FAMILY_LABELS, synthetic_preview_template_id
+from item_registry import (
+    SLOT_FAMILY_LABELS,
+    preview_appearance_properties,
+    synthetic_preview_template_id,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 RESOURCES_FILE = ROOT / 'data' / 'catalog' / 'apk_equipment_resources.json'
 ITEMS_FILE = ROOT / 'data' / 'catalog' / 'items.json'
+MANIFEST_FILE = ROOT / 'materials' / 'appearance-layer-audit' / 'manifest.json'
 OUTPUT_FILE = ROOT / 'data' / 'catalog' / 'equipment_resource_preview_items.json'
 
 DESCRIPTION = (
@@ -24,6 +29,7 @@ DESCRIPTION = (
 def main() -> None:
     resources = json.loads(RESOURCES_FILE.read_text(encoding='utf-8'))['resources']
     official_items = json.loads(ITEMS_FILE.read_text(encoding='utf-8'))['items']
+    manifest = json.loads(MANIFEST_FILE.read_text(encoding='utf-8'))
     reserved = {int(item['template_id']) for item in official_items}
     preview_items = []
     used = set(reserved)
@@ -56,6 +62,17 @@ def main() -> None:
             'equipment_attributes': [0, 0, 0, 0],
             'appearance_properties': {},
         })
+    by_slot: dict[int, list[dict]] = {}
+    for item in preview_items:
+        by_slot.setdefault(int(item['equipment_slot']), []).append(item)
+    for slot, slot_items in by_slot.items():
+        slot_items.sort(key=lambda item: int(item['sort_order']))
+        for preview_index, item in enumerate(slot_items):
+            item['appearance_properties'] = preview_appearance_properties(
+                slot,
+                preview_index,
+                manifest,
+            )
     payload = {
         'version': 1,
         'kind': 'compatibility_preview',
@@ -66,9 +83,13 @@ def main() -> None:
             'synthetic_required_level': True,
             'only_icon_resource_is_apk_confirmed': True,
             'not_official_equipment_template': True,
+            'appearance_pairing': 'compatibility_preview_pairing',
+            'appearance_not_official_icon_mapping': True,
             'note': (
                 'APK装备资源预览项。仅 icon_code/资源分组来自 APK；'
                 'template_id、名称、等级、属性均为本地预览构造，不代表官方装备。'
+                'appearance_properties 引用 appearance-layer-audit 中已确认的人物图层候选，'
+                '配对关系是 compatibility preview pairing，不是官方 icon→appearance 映射。'
             ),
         },
         'items': preview_items,
