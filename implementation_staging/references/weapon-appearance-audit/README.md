@@ -48,10 +48,12 @@ weapon_image =
 
 以下**尚未恢复**，不得写成已确认：
 
-- `icon_code → property7`
+- `icon_code → property7` 官方映射
 - 背包图标组 `21..33` = 地图武器外观组
 - 130 个 preview weapon 已有官方映射
 - `property7` 高位的完整官方编码（当前只证明低 4 位资源语义）
+
+兼容服 preview catalog 会对 130 个武器图标做 **循环 compatibility pairing**：低 4 位来自本目录 69 个 APK-confirmed 候选，高位使用 `icon_code // 100`。那是预览构造，不是官方装备映射。
 
 ---
 
@@ -70,6 +72,20 @@ weapon_image = 40001
 
 `270001` 只能作为已知兼容服样本记录在此。  
 **不能**把 `27xxxx` 当成所有候选的高位模板。候选表只写 `property7_low4_candidate`。
+
+---
+
+## 兼容服 preview pairing（非官方）
+
+`equipment_resource_preview_items.json` 中 130 个 slot10 武器按 `sort_order` 循环配对本目录 69 个低 4 位候选：
+
+```text
+property7 = (icon_code // 100) * 10000 + property7_low4_candidate
+```
+
+- 69 个低 4 位是 APK-confirmed resource candidates（DAT + 40000 段图片实际存在）
+- 高位取 icon group 21..33 仅为 preview construction
+- **不是**官方装备映射，也不是已恢复的 icon_code → property7 公式
 
 ---
 

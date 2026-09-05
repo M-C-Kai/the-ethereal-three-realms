@@ -18,7 +18,7 @@ PREVIEW_SLOT_APPEARANCE_PROPERTY = {
     8: 17,
     9: 18,
 }
-PREVIEW_SLOTS_WITHOUT_APPEARANCE = frozenset({4, 6, 10, 11, 12, 13, 14})
+PREVIEW_SLOTS_WITHOUT_APPEARANCE = frozenset({4, 6, 11, 12, 13, 14})
 SLOT_FAMILY_LABELS = {
     'helmet': '头盔',
     'shoulder': '肩甲',
@@ -67,16 +67,59 @@ def synthetic_preview_template_id(
     return template_id
 
 
+def confirmed_weapon_preview_candidates(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return APK-confirmed low4 weapon candidates, sorted by weapon_image_id."""
+    rows = payload.get('candidates', [])
+    confirmed = [
+        row for row in rows
+        if isinstance(row, dict)
+        and bool(row.get('role_dat_exists'))
+        and bool(row.get('weapon_image_exists'))
+    ]
+    confirmed.sort(key=lambda row: int(row['weapon_image_id']))
+    return confirmed
+
+
+def preview_weapon_property7(
+    icon_code: int,
+    preview_index_in_slot: int,
+    candidates: Sequence[dict[str, Any]],
+) -> int:
+    """Compatibility preview pairing for map-character property 7.
+
+    low4 comes from APK-confirmed resource candidates.
+    The high digits use icon_group = icon_code // 100 as local preview construction.
+    This is not an official icon_code → property7 mapping.
+    """
+    if not candidates:
+        raise ItemCatalogError('weapon preview requires confirmed property7 candidates')
+    candidate = candidates[int(preview_index_in_slot) % len(candidates)]
+    icon_group = int(icon_code) // 100
+    low4 = int(candidate['property7_low4_candidate'])
+    return icon_group * 10_000 + low4
+
+
 def preview_appearance_properties(
     equipment_slot: int,
     preview_index_in_slot: int,
     manifest: dict[str, Any],
+    *,
+    icon_code: int = 0,
+    weapon_candidates: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, int]:
     """Pair one preview item to an APK-confirmed character-layer candidate.
 
     This is a compatibility preview pairing, not an official equipment mapping.
     """
     slot = int(equipment_slot)
+    if slot == 10:
+        return {
+            '7': preview_weapon_property7(
+                icon_code,
+                preview_index_in_slot,
+                weapon_candidates or (),
+            )
+        }
     if slot in PREVIEW_SLOTS_WITHOUT_APPEARANCE:
         return {}
     property_index = PREVIEW_SLOT_APPEARANCE_PROPERTY.get(slot)

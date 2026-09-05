@@ -178,8 +178,17 @@
 
 人物外观：slot 1/2/3/5/7/8/9 的 preview `appearance_properties` 现在引用 `materials/appearance-layer-audit/manifest.json` 中 **APK-confirmed character-layer candidates**（`candidate_image_ids - group_base`，按 `sort_order` 配对，超出则循环）。
 
-这是 **APK资源预览配对 / compatibility preview pairing**，**不是**官方 `icon_code → appearance` 或 `template_id → appearance` 映射。
+武器 slot 10：130 个 preview weapon 按 `sort_order` 升序，循环配对 `weapon-appearance-audit/property7_candidates.json` 中 69 个 **APK-confirmed** 低 4 位候选（DAT 与 40000 段图片均实际存在）。
 
-以下槽位仍保持 `appearance_properties: {}`：腰带(4)、项链(6)、武器(10)、戒指(11)、外套(12)、饰品(13)、法宝(14)。武器虽已知 property 7，但尚未恢复 icon group 21..33 → weapon appearance code 的完整映射，本轮不猜测。
+```text
+compatibility_property7 = (icon_code // 100) * 10000 + property7_low4_candidate
+```
 
-预览项只进入背包。登录补齐 **不修改** 人物 appearance；只有玩家手动装备后，才通过现有 `character_appearance()` / `character_appearance_change_frame()` 生效。
+- 低 4 位：APK 已证实的 `role DAT / weapon layer / 40000` 资源选择
+- 高位 `icon_group` 21..33：仅为本地预览构造策略
+
+这是 **APK资源预览配对 / compatibility preview pairing**，**不是**官方 `icon_code → appearance`、`icon_code → property7` 或 `template_id → appearance` 映射。
+
+以下槽位仍保持 `appearance_properties: {}`：腰带(4)、项链(6)、戒指(11)、外套(12)、饰品(13)、法宝(14)。
+
+预览项只进入背包。登录补齐 **不修改** 人物 appearance；只有玩家手动装备后，才通过现有 `character_appearance()` / `character_appearance_change_frame()` 生效。地图人物武器外观走 property 7；本次不改战斗 1048。

@@ -10,7 +10,7 @@
     "not_official_equipment_template": true,
     "appearance_pairing": "compatibility_preview_pairing",
     "appearance_not_official_icon_mapping": true,
-    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。appearance_properties 引用 appearance-layer-audit 中已确认的人物图层候选，配对关系是 compatibility preview pairing，不是官方 icon→appearance 映射。"
+    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。防具 appearance_properties 引用 appearance-layer-audit 人物图层候选。武器 property7 低4位循环配对 weapon-appearance-audit 中 69 个 APK-confirmed 候选；高位使用 icon_group=icon_code//100，仅为 compatibility preview pairing，不是官方 icon_code→property7 映射。"
   },
   "items": [
     {
@@ -2734,7 +2734,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 210001
+      }
     },
     {
       "template_id": 100021011,
@@ -2755,7 +2757,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 210002
+      }
     },
     {
       "template_id": 100021021,
@@ -2776,7 +2780,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 210003
+      }
     },
     {
       "template_id": 100021031,
@@ -2797,7 +2803,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 210101
+      }
     },
     {
       "template_id": 100021041,
@@ -2818,7 +2826,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 210102
+      }
     },
     {
       "template_id": 100021051,
@@ -2839,7 +2849,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 210201
+      }
     },
     {
       "template_id": 100021061,
@@ -2860,7 +2872,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 211001
+      }
     },
     {
       "template_id": 100021071,
@@ -2881,7 +2895,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 211002
+      }
     },
     {
       "template_id": 100021081,
@@ -2902,7 +2918,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 211003
+      }
     },
     {
       "template_id": 100021091,
@@ -2923,7 +2941,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 211004
+      }
     },
     {
       "template_id": 100022001,
@@ -2944,7 +2964,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221005
+      }
     },
     {
       "template_id": 100022011,
@@ -2965,7 +2987,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221006
+      }
     },
     {
       "template_id": 100022021,
@@ -2986,7 +3010,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221007
+      }
     },
     {
       "template_id": 100022031,
@@ -3007,7 +3033,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221008
+      }
     },
     {
       "template_id": 100022041,
@@ -3028,7 +3056,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221009
+      }
     },
     {
       "template_id": 100022051,
@@ -3049,7 +3079,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221010
+      }
     },
     {
       "template_id": 100022061,
@@ -3070,7 +3102,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221012
+      }
     },
     {
       "template_id": 100022071,
@@ -3091,7 +3125,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221013
+      }
     },
     {
       "template_id": 100022081,
@@ -3112,7 +3148,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221014
+      }
     },
     {
       "template_id": 100022091,
@@ -3133,7 +3171,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 221015
+      }
     },
     {
       "template_id": 100023001,
@@ -3154,7 +3194,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231016
+      }
     },
     {
       "template_id": 100023011,
@@ -3175,7 +3217,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231017
+      }
     },
     {
       "template_id": 100023021,
@@ -3196,7 +3240,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231018
+      }
     },
     {
       "template_id": 100023031,
@@ -3217,7 +3263,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231019
+      }
     },
     {
       "template_id": 100023041,
@@ -3238,7 +3286,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231020
+      }
     },
     {
       "template_id": 100023051,
@@ -3259,7 +3309,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231022
+      }
     },
     {
       "template_id": 100023061,
@@ -3280,7 +3332,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231023
+      }
     },
     {
       "template_id": 100023071,
@@ -3301,7 +3355,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231024
+      }
     },
     {
       "template_id": 100023081,
@@ -3322,7 +3378,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231025
+      }
     },
     {
       "template_id": 100023091,
@@ -3343,7 +3401,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 231026
+      }
     },
     {
       "template_id": 100024001,
@@ -3364,7 +3424,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241027
+      }
     },
     {
       "template_id": 100024011,
@@ -3385,7 +3447,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241028
+      }
     },
     {
       "template_id": 100024021,
@@ -3406,7 +3470,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241029
+      }
     },
     {
       "template_id": 100024031,
@@ -3427,7 +3493,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241030
+      }
     },
     {
       "template_id": 100024041,
@@ -3448,7 +3516,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241034
+      }
     },
     {
       "template_id": 100024051,
@@ -3469,7 +3539,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241036
+      }
     },
     {
       "template_id": 100024061,
@@ -3490,7 +3562,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241038
+      }
     },
     {
       "template_id": 100024071,
@@ -3511,7 +3585,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241101
+      }
     },
     {
       "template_id": 100024081,
@@ -3532,7 +3608,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241102
+      }
     },
     {
       "template_id": 100024091,
@@ -3553,7 +3631,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 241103
+      }
     },
     {
       "template_id": 100025001,
@@ -3574,7 +3654,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251104
+      }
     },
     {
       "template_id": 100025011,
@@ -3595,7 +3677,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251105
+      }
     },
     {
       "template_id": 100025021,
@@ -3616,7 +3700,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251106
+      }
     },
     {
       "template_id": 100025031,
@@ -3637,7 +3723,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251107
+      }
     },
     {
       "template_id": 100025041,
@@ -3658,7 +3746,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251108
+      }
     },
     {
       "template_id": 100025051,
@@ -3679,7 +3769,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251111
+      }
     },
     {
       "template_id": 100025061,
@@ -3700,7 +3792,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251112
+      }
     },
     {
       "template_id": 100025071,
@@ -3721,7 +3815,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251113
+      }
     },
     {
       "template_id": 100025081,
@@ -3742,7 +3838,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 251114
+      }
     },
     {
       "template_id": 100025091,
@@ -3763,7 +3861,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 252001
+      }
     },
     {
       "template_id": 100026001,
@@ -3784,7 +3884,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262003
+      }
     },
     {
       "template_id": 100026011,
@@ -3805,7 +3907,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262004
+      }
     },
     {
       "template_id": 100026021,
@@ -3826,7 +3930,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262005
+      }
     },
     {
       "template_id": 100026031,
@@ -3847,7 +3953,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262006
+      }
     },
     {
       "template_id": 100026041,
@@ -3868,7 +3976,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262007
+      }
     },
     {
       "template_id": 100026051,
@@ -3889,7 +3999,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262011
+      }
     },
     {
       "template_id": 100026061,
@@ -3910,7 +4022,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262021
+      }
     },
     {
       "template_id": 100026071,
@@ -3931,7 +4045,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 262031
+      }
     },
     {
       "template_id": 100026081,
@@ -3952,7 +4068,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 263001
+      }
     },
     {
       "template_id": 100026091,
@@ -3973,7 +4091,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 263002
+      }
     },
     {
       "template_id": 100027001,
@@ -3994,7 +4114,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 273003
+      }
     },
     {
       "template_id": 100027011,
@@ -4015,7 +4137,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 274002
+      }
     },
     {
       "template_id": 100027021,
@@ -4036,7 +4160,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 274003
+      }
     },
     {
       "template_id": 100027031,
@@ -4057,7 +4183,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 274005
+      }
     },
     {
       "template_id": 100027041,
@@ -4078,7 +4206,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 274007
+      }
     },
     {
       "template_id": 100027051,
@@ -4099,7 +4229,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 274009
+      }
     },
     {
       "template_id": 100027061,
@@ -4120,7 +4252,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 274010
+      }
     },
     {
       "template_id": 100027071,
@@ -4141,7 +4275,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 275001
+      }
     },
     {
       "template_id": 100027081,
@@ -4162,7 +4298,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 275002
+      }
     },
     {
       "template_id": 100027091,
@@ -4183,7 +4321,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 270001
+      }
     },
     {
       "template_id": 100028001,
@@ -4204,7 +4344,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 280002
+      }
     },
     {
       "template_id": 100028011,
@@ -4225,7 +4367,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 280003
+      }
     },
     {
       "template_id": 100028021,
@@ -4246,7 +4390,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 280101
+      }
     },
     {
       "template_id": 100028031,
@@ -4267,7 +4413,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 280102
+      }
     },
     {
       "template_id": 100028041,
@@ -4288,7 +4436,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 280201
+      }
     },
     {
       "template_id": 100028051,
@@ -4309,7 +4459,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 281001
+      }
     },
     {
       "template_id": 100028061,
@@ -4330,7 +4482,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 281002
+      }
     },
     {
       "template_id": 100028071,
@@ -4351,7 +4505,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 281003
+      }
     },
     {
       "template_id": 100028081,
@@ -4372,7 +4528,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 281004
+      }
     },
     {
       "template_id": 100028091,
@@ -4393,7 +4551,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 281005
+      }
     },
     {
       "template_id": 100029001,
@@ -4414,7 +4574,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291006
+      }
     },
     {
       "template_id": 100029011,
@@ -4435,7 +4597,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291007
+      }
     },
     {
       "template_id": 100029021,
@@ -4456,7 +4620,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291008
+      }
     },
     {
       "template_id": 100029031,
@@ -4477,7 +4643,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291009
+      }
     },
     {
       "template_id": 100029041,
@@ -4498,7 +4666,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291010
+      }
     },
     {
       "template_id": 100029051,
@@ -4519,7 +4689,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291012
+      }
     },
     {
       "template_id": 100029061,
@@ -4540,7 +4712,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291013
+      }
     },
     {
       "template_id": 100029071,
@@ -4561,7 +4735,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291014
+      }
     },
     {
       "template_id": 100029081,
@@ -4582,7 +4758,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291015
+      }
     },
     {
       "template_id": 100029091,
@@ -4603,7 +4781,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 291016
+      }
     },
     {
       "template_id": 100030001,
@@ -4624,7 +4804,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301017
+      }
     },
     {
       "template_id": 100030011,
@@ -4645,7 +4827,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301018
+      }
     },
     {
       "template_id": 100030021,
@@ -4666,7 +4850,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301019
+      }
     },
     {
       "template_id": 100030031,
@@ -4687,7 +4873,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301020
+      }
     },
     {
       "template_id": 100030041,
@@ -4708,7 +4896,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301022
+      }
     },
     {
       "template_id": 100030051,
@@ -4729,7 +4919,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301023
+      }
     },
     {
       "template_id": 100030061,
@@ -4750,7 +4942,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301024
+      }
     },
     {
       "template_id": 100030071,
@@ -4771,7 +4965,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301025
+      }
     },
     {
       "template_id": 100030081,
@@ -4792,7 +4988,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301026
+      }
     },
     {
       "template_id": 100030091,
@@ -4813,7 +5011,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 301027
+      }
     },
     {
       "template_id": 100031001,
@@ -4834,7 +5034,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311028
+      }
     },
     {
       "template_id": 100031011,
@@ -4855,7 +5057,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311029
+      }
     },
     {
       "template_id": 100031021,
@@ -4876,7 +5080,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311030
+      }
     },
     {
       "template_id": 100031031,
@@ -4897,7 +5103,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311034
+      }
     },
     {
       "template_id": 100031041,
@@ -4918,7 +5126,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311036
+      }
     },
     {
       "template_id": 100031051,
@@ -4939,7 +5149,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311038
+      }
     },
     {
       "template_id": 100031061,
@@ -4960,7 +5172,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311101
+      }
     },
     {
       "template_id": 100031071,
@@ -4981,7 +5195,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311102
+      }
     },
     {
       "template_id": 100031081,
@@ -5002,7 +5218,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311103
+      }
     },
     {
       "template_id": 100031091,
@@ -5023,7 +5241,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 311104
+      }
     },
     {
       "template_id": 100032001,
@@ -5044,7 +5264,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321105
+      }
     },
     {
       "template_id": 100032011,
@@ -5065,7 +5287,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321106
+      }
     },
     {
       "template_id": 100032021,
@@ -5086,7 +5310,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321107
+      }
     },
     {
       "template_id": 100032031,
@@ -5107,7 +5333,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321108
+      }
     },
     {
       "template_id": 100032041,
@@ -5128,7 +5356,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321111
+      }
     },
     {
       "template_id": 100032051,
@@ -5149,7 +5379,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321112
+      }
     },
     {
       "template_id": 100032061,
@@ -5170,7 +5402,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321113
+      }
     },
     {
       "template_id": 100032071,
@@ -5191,7 +5425,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 321114
+      }
     },
     {
       "template_id": 100032081,
@@ -5212,7 +5448,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 322001
+      }
     },
     {
       "template_id": 100032091,
@@ -5233,7 +5471,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 322003
+      }
     },
     {
       "template_id": 100033001,
@@ -5254,7 +5494,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 332004
+      }
     },
     {
       "template_id": 100033011,
@@ -5275,7 +5517,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 332005
+      }
     },
     {
       "template_id": 100033021,
@@ -5296,7 +5540,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 332006
+      }
     },
     {
       "template_id": 100033031,
@@ -5317,7 +5563,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 332007
+      }
     },
     {
       "template_id": 100033041,
@@ -5338,7 +5586,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 332011
+      }
     },
     {
       "template_id": 100033051,
@@ -5359,7 +5609,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 332021
+      }
     },
     {
       "template_id": 100033061,
@@ -5380,7 +5632,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 332031
+      }
     },
     {
       "template_id": 100033071,
@@ -5401,7 +5655,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 333001
+      }
     },
     {
       "template_id": 100033081,
@@ -5422,7 +5678,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 333002
+      }
     },
     {
       "template_id": 100033091,
@@ -5443,7 +5701,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "7": 333003
+      }
     }
   ]
 }

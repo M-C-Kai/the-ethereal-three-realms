@@ -290,6 +290,62 @@ class EquipmentResourcePreviewGrantTests(unittest.TestCase):
         after_all = character_appearance(role, registry)
         self.assertEqual(after_all, dict(BASE_CHARACTER_APPEARANCE))
 
+    def test_equipping_preview_weapon_changes_property7(self):
+        settings = Settings()
+        registry = settings.item_registry
+        role = {'id': 10001, 'items': []}
+        before = character_appearance(role, registry)
+        definition = self._preview_item_changing_property(registry, 10, 7, before[7])
+        role['items'] = [{
+            'id': 1,
+            'template_id': definition.template_id,
+            'quantity': 1,
+            'location': 'equipped',
+        }]
+        after = character_appearance(role, registry)
+        self.assertEqual(after[7], definition.appearance_properties['7'])
+        self.assertNotEqual(after[7], before[7])
+
+    def test_unequipping_preview_weapon_restores_property7(self):
+        settings = Settings()
+        registry = settings.item_registry
+        first = self._preview_item_changing_property(registry, 10, 7, 0)
+        second = next(
+            definition
+            for definition in (
+                registry.require(template_id)
+                for template_id in registry.preview_template_ids()
+            )
+            if definition.equipment_slot == 10
+            and definition.template_id != first.template_id
+            and int(definition.appearance_properties.get('7', 0)) != 0
+        )
+        role = {
+            'id': 10001,
+            'items': [
+                {
+                    'id': 1,
+                    'template_id': first.template_id,
+                    'quantity': 1,
+                    'location': 'equipped',
+                },
+                {
+                    'id': 2,
+                    'template_id': second.template_id,
+                    'quantity': 1,
+                    'location': 'equipped',
+                },
+            ],
+        }
+        equipped = character_appearance(role, registry)
+        self.assertEqual(equipped[7], second.appearance_properties['7'])
+        role['items'][1]['location'] = 'bag'
+        after_one = character_appearance(role, registry)
+        self.assertEqual(after_one[7], first.appearance_properties['7'])
+        role['items'][0]['location'] = 'bag'
+        after_all = character_appearance(role, registry)
+        self.assertEqual(after_all[7], BASE_CHARACTER_APPEARANCE[7])
+
 
 if __name__ == '__main__':
     unittest.main()
