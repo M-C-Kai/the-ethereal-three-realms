@@ -14,6 +14,7 @@
 | `build/apk_decoded/smali/pmsj/work/e/au.smali` | 仓库存放菜单；确认 `1009` 动作 47（NPC 兼容动作 29），本轮仅记录不实现 |
 | `build/apk_decoded/smali/pmsj/work/e/ea.smali` | 仓库界面和取出菜单；确认属性 59、位置 51、`1009` 动作 48（NPC 兼容动作 30），本轮仅记录不实现 |
 | `smali/pmsj/work/b/v.smali` | 人物属性到角色叠加资源的转换 |
+| `smali/pmsj/work/b/h.smali` | 战斗人物 work/b/h；1048 kind=1 field[2] 的人物底板、武器图层和品质覆盖层解析证据。 |
 | `smali/pmsj/work/e/af.smali` | 人物装备面板；14 个装备槽位及其名称 |
 | `smali/pmsj/work/d/a.smali` | UI 物品控件；图标字段到图片资源的调用 |
 | `smali/a/c/x.smali` | 图片图集编号算法；`f(int)` 是 24×24 物品图标转换 |
