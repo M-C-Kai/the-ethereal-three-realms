@@ -1,17 +1,5 @@
 {
-  "version": 1,
-  "kind": "apk_equipment_resource_candidates",
-  "status": "resource_only",
-  "source": "apk",
-  "stats": {
-    "equipment_slots": 14,
-    "resource_groups": 26,
-    "icon_candidates": 252,
-    "normal_or_accessory_icon_candidates": 122,
-    "weapon_icon_candidates": 130
-  },
-  "note": "Resource existence does not prove an official item template. template_id / name / required_level / quality / appearance must remain null without further APK evidence.",
-  "entries": [
+  "resources": [
     {
       "icon_code": 100,
       "resource_group": 1,
@@ -1186,7 +1174,7 @@
       "icon_code": 1000,
       "resource_group": 10,
       "frame": 0,
-      "equipment_slot": 10,
+      "equipment_slot": 14,
       "slot_family": "talisman",
       "source": "apk",
       "template_id": null,
@@ -1199,7 +1187,7 @@
       "icon_code": 1001,
       "resource_group": 10,
       "frame": 1,
-      "equipment_slot": 10,
+      "equipment_slot": 14,
       "slot_family": "talisman",
       "source": "apk",
       "template_id": null,
