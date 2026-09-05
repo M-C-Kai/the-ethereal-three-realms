@@ -34,6 +34,7 @@ from protocol import (
     TYPE_SHORT,
     binary,
     byte,
+    decode_frame,
     decode_payload,
     encode_frame,
     field_debug_entries,
@@ -451,6 +452,9 @@ def shop_purchase_result(
 # ---------------------------------------------------------------------------
 GATHER_MENU_LABEL = '采集'  # [compat] entity field 9 tap-menu text
 LIFE_SKILL_PLACEHOLDER_NAME = '基础技能'
+LIFE_SKILL_LOCKED_SLOT_NAME = '未开放'
+LIFE_SKILL_LOCKED_SLOT_ID_BASE = 2_147_000_000
+LIFE_SKILL_SCREEN_SLOTS = 7
 # 14 fields per record: [name, skill_id, level, max_level, proficiency,
 # max_proficiency, flags, (7 reserved ints)]
 SKILL_RECORD_WIDTH = 14
@@ -461,8 +465,10 @@ def life_skill_list_frame(role: dict[str, object], settings: Settings) -> bytes:
     """S->C 1132 action 0: the merged sect + life skill container list.
 
     All records share the 14-field width so the APK's `(size-2)/count`
-    slicing stays correct; the placeholder sect record keeps its historical
-    position first (the client merges records into b/f.n by skill id).
+    slicing stays correct. Screen 603 has a fixed seven-element array and
+    dereferences every slot, so unused positions must be represented by
+    unique, locked records. The sect record keeps its historical position
+    first (the client merges records into b/f.n by skill id).
     """
     life_state = ensure_life_skills(role, settings.life_registry)
     records: list[list[object]] = []
@@ -479,6 +485,16 @@ def life_skill_list_frame(role: dict[str, object], settings: Settings) -> bytes:
         records.append(life_skill_record(
             skill, life_skill_state(role, skill.skill_id),
         ))
+    if len(records) > LIFE_SKILL_SCREEN_SLOTS:
+        raise ValueError(
+            f'life skill screen supports at most {LIFE_SKILL_SCREEN_SLOTS} records'
+        )
+    while len(records) < LIFE_SKILL_SCREEN_SLOTS:
+        records.append([
+            LIFE_SKILL_LOCKED_SLOT_NAME,
+            LIFE_SKILL_LOCKED_SLOT_ID_BASE + len(records),
+            *(0 for _ in range(SKILL_RECORD_WIDTH - 2)),
+        ])
     fields: list[Field] = [byte(0), byte(len(records))]
     for record in records:
         fields.append(string(str(record[0])))

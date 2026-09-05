@@ -310,12 +310,22 @@ class LifeSkillFrameTests(unittest.TestCase):
         values = field_values(fields)
         self.assertEqual(values[0], 0)
         count = values[1]
-        life_skill_count = len(self.settings.life_registry.skills)
-        self.assertEqual(count, life_skill_count + 1)  # sect record + all life skills
+        # APK screen 603 allocates exactly seven entries and dereferences all
+        # of them without null checks while constructing the life-skill page.
+        self.assertEqual(count, 7)
         size = len(values)
         self.assertEqual((size - 2) % count, 0)
         width = (size - 2) // count
         self.assertEqual(width, 14)
+        records = [
+            values[2 + i * width:2 + (i + 1) * width]
+            for i in range(count)
+        ]
+        self.assertEqual(len({record[1] for record in records}), 7)
+        self.assertEqual(
+            [(record[0], record[2]) for record in records[-2:]],
+            [('未开放', 0), ('未开放', 0)],
+        )
         first = values[2:2 + width]
         self.assertIn(first[0], ('基础技能', '协议测试技能'))
         # Find the alchemy record by skill_id across all records
@@ -328,6 +338,19 @@ class LifeSkillFrameTests(unittest.TestCase):
         self.assertIsNotNone(alchemy_record)
         self.assertEqual(alchemy_record[2], 1)
         self.assertEqual(alchemy_record[4], 30)
+
+    def test_skill_list_frame_uses_visible_kunlun_skill_as_first_record(self):
+        role = copy.deepcopy(self.role)
+        role['sect_id'] = 1
+
+        message_id, fields = decode_frame(life_skill_list_frame(role, self.settings))
+        values = field_values(fields)
+
+        self.assertEqual(message_id, 1132)
+        self.assertEqual(
+            values[2:16],
+            ['协议测试技能', 10001, 3, 20, 123, 1000, 1, *([0] * 7)],
+        )
 
     def test_recipe_list_frame_layout(self):
         skill = self.registry.skills[ALCHEMY_SKILL_ID]
