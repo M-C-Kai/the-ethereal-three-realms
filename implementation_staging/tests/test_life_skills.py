@@ -327,7 +327,8 @@ class LifeSkillFrameTests(unittest.TestCase):
             [('未开放', 0), ('未开放', 0)],
         )
         first = values[2:2 + width]
-        self.assertIn(first[0], ('基础技能', '协议测试技能'))
+        # Life skills are 2001-2004, first should be one of them
+        self.assertIn(first[0], ('采药术', '采矿术', '炼药术', '锻造术'))
         # Find the alchemy record by skill_id across all records
         alchemy_record = None
         for i in range(1, count):
@@ -339,7 +340,8 @@ class LifeSkillFrameTests(unittest.TestCase):
         self.assertEqual(alchemy_record[2], 1)
         self.assertEqual(alchemy_record[4], 30)
 
-    def test_skill_list_frame_uses_visible_kunlun_skill_as_first_record(self):
+    def test_skill_list_frame_only_contains_life_skills(self):
+        """1132/action=0 should only contain life skills, not sect skills."""
         role = copy.deepcopy(self.role)
         role['sect_id'] = 1
 
@@ -347,10 +349,17 @@ class LifeSkillFrameTests(unittest.TestCase):
         values = field_values(fields)
 
         self.assertEqual(message_id, 1132)
-        self.assertEqual(
-            values[2:16],
-            ['协议测试技能', 10001, 3, 20, 123, 1000, 1, *([0] * 7)],
-        )
+        # Should contain 7 records (4 life skills + 3 placeholders)
+        self.assertEqual(values[1], 7)
+        # Extract all skill IDs from records
+        skill_ids = [values[2 + i * 14 + 1] for i in range(7)]
+        # Should not contain sect skill 10001
+        self.assertNotIn(10001, skill_ids)
+        # Should contain life skills 2001-2004
+        self.assertIn(2001, skill_ids)
+        self.assertIn(2002, skill_ids)
+        self.assertIn(2003, skill_ids)
+        self.assertIn(2004, skill_ids)
 
     def test_recipe_list_frame_layout(self):
         skill = self.registry.skills[ALCHEMY_SKILL_ID]

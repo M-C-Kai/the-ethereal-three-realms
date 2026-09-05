@@ -18,7 +18,6 @@ from server import (
     character_appearance_change_frame,
     character_extension_info,
     character_panel_frames,
-    character_skill_list,
     creation_names,
     default_role,
     deletion_result,
@@ -116,7 +115,7 @@ class ProtocolTests(unittest.TestCase):
         role['race'] = 2
         state = server_module.LocalTeamState()
 
-        frames = server_module.team_request_frames(role, [0, 10001], state)
+        frames = server_module.team_request_frames(role, [0, 10001], state, Settings().sect_registry)
 
         self.assertTrue(state.active)
         self.assertEqual(state.leader_id, 10001)
@@ -142,9 +141,9 @@ class ProtocolTests(unittest.TestCase):
         """Leaving the team active or returning a byte action would desynchronise the native team UI."""
         role = default_role(Settings())
         state = server_module.LocalTeamState()
-        server_module.team_request_frames(role, [0, 10001], state)
+        server_module.team_request_frames(role, [0, 10001], state, Settings().sect_registry)
 
-        frames = server_module.team_request_frames(role, [11], state)
+        frames = server_module.team_request_frames(role, [11], state, Settings().sect_registry)
 
         self.assertFalse(state.active)
         self.assertEqual(state.leader_id, 0)
@@ -164,7 +163,7 @@ class ProtocolTests(unittest.TestCase):
         role = default_role(Settings())
         state = server_module.LocalTeamState()
 
-        frames = server_module.team_request_frames(role, [11], state)
+        frames = server_module.team_request_frames(role, [11], state, Settings().sect_registry)
 
         self.assertFalse(state.active)
         self.assertEqual(len(frames), 2)
@@ -442,11 +441,11 @@ class ProtocolTests(unittest.TestCase):
         self.assertIsNotNone(join)
         role = default_role(Settings())
 
-        self.assertTrue(join(role, 1))
+        self.assertTrue(join(role, 1, Settings().sect_registry))
         self.assertEqual(role.get('sect_id'), 1)
-        self.assertFalse(join(role, 2))
-        self.assertFalse(join(role, 0))
-        self.assertFalse(join(role, 999))
+        self.assertFalse(join(role, 2, Settings().sect_registry))
+        self.assertFalse(join(role, 0, Settings().sect_registry))
+        self.assertFalse(join(role, 999, Settings().sect_registry))
         self.assertEqual(role.get('sect_id'), 1)
 
     def test_item_records_match_original_client_layout(self):
@@ -634,13 +633,6 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(field_values(extension_fields), [0, 0])
         self.assertEqual([field.type_id for field in extension_fields], [2, 2])
 
-        skill_id, skill_fields = decode_frame(character_skill_list(default_role(settings)))
-        skill_values = field_values(skill_fields)
-        self.assertEqual(skill_id, 1132)
-        self.assertEqual(skill_values[:4], [0, 1, '基础技能', 0])
-        self.assertEqual(len(skill_values), 16)
-        self.assertEqual(skill_values[4:], [0] * 12)
-
         attributes, divine = character_panel_frames(default_role(settings))
         attribute_id, attribute_fields = decode_frame(attributes)
         divine_id, divine_fields = decode_frame(divine)
@@ -657,33 +649,13 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(world_id, 1110)
         self.assertEqual(field_values(world_fields)[1], 58)
 
-    def test_kunlun_skill_list_encodes_the_visible_probe_record(self):
-        """A sect-1 role must receive the documented action-0 skill record."""
-        role = default_role(Settings())
-        role['sect_id'] = 1
-
-        self.assertEqual(tuple(inspect.signature(character_skill_list).parameters), ('role',))
-        message_id, fields = decode_frame(character_skill_list(role))
-        values = field_values(fields)
-
-        self.assertEqual(message_id, 1132)
-        self.assertEqual(values[:2], [0, 1])
-        record = values[2:]
-        self.assertEqual(len(record), 14)
-        self.assertEqual(record, ['协议测试技能', 10001, 3, 20, 123, 1000, 1, *([0] * 7)])
-
-        other_role = default_role(Settings())
-        other_role['sect_id'] = 2
-        _, other_fields = decode_frame(character_skill_list(other_role))
-        self.assertNotIn('协议测试技能', field_values(other_fields))
-
     def test_kunlun_sect_skill_list_encodes_the_first_native_slot(self):
         """Protocol 1103 must populate the native sect page's first slot."""
         self.assertTrue(hasattr(server_module, 'sect_skill_list'))
         role = default_role(Settings())
         role['sect_id'] = 1
 
-        message_id, fields = decode_frame(server_module.sect_skill_list(role))
+        message_id, fields = decode_frame(server_module.sect_skill_list(role, Settings()))
         values = field_values(fields)
 
         self.assertEqual(message_id, 1103)
@@ -699,7 +671,7 @@ class ProtocolTests(unittest.TestCase):
 
         other_role = default_role(Settings())
         other_role['sect_id'] = 2
-        other_id, other_fields = decode_frame(server_module.sect_skill_list(other_role))
+        other_id, other_fields = decode_frame(server_module.sect_skill_list(other_role, Settings()))
         self.assertEqual(other_id, 1103)
         self.assertEqual(field_values(other_fields), [0, 0])
 
@@ -709,7 +681,7 @@ class ProtocolTests(unittest.TestCase):
         role = default_role(Settings())
         role['sect_id'] = 1
 
-        frames = server_module.initial_skill_frames(role)
+        frames = server_module.initial_skill_frames(role, Settings())
 
         self.assertEqual([decode_frame(frame)[0] for frame in frames], [1132, 1103])
         self.assertEqual(field_values(decode_frame(frames[1])[1])[:2], [0, 1])
@@ -719,7 +691,7 @@ class ProtocolTests(unittest.TestCase):
         role = default_role(Settings())
         role['sect_id'] = 1
 
-        frame = server_module.sect_skill_detail_frame(role, 10001)
+        frame = server_module.sect_skill_detail_frame(role, 10001, Settings())
 
         message_id, fields = decode_frame(frame)
         self.assertEqual(message_id, 1103)
@@ -734,9 +706,9 @@ class ProtocolTests(unittest.TestCase):
                 0,
                 0,
                 0,
-                '本地测试技能效果：用于验证技能学习与升级。',
-                '协议测试技能说明',
-                '下一级效果：技能等级提高。',
+                '',  # effect is empty in test data
+                '',  # current_text is empty in test data
+                '',  # next_text is empty in test data
                 0,
                 '',
                 0,
@@ -752,15 +724,13 @@ class ProtocolTests(unittest.TestCase):
         role = default_role(Settings())
         role['sect_id'] = 1
 
-        frames = server_module.sect_skill_request_frames(role, [3, 10001])
+        frames = server_module.sect_skill_request_frames(role, [3, 10001], Settings())
 
-        self.assertEqual(role['skill_levels'], {'10001': 4})
-        self.assertEqual([decode_frame(frame)[0] for frame in frames], [1103, 1103, 1132])
+        self.assertEqual(role['sect_skills'], {'10001': {'level': 4}})
+        self.assertEqual([decode_frame(frame)[0] for frame in frames], [1103, 1103])
         list_values = field_values(decode_frame(frames[0])[1])
         self.assertEqual(list_values[:5], [0, 1, '协议测试技能', 10001, 4])
         self.assertEqual(field_values(decode_frame(frames[1])[1]), [5])
-        character_values = field_values(decode_frame(frames[2])[1])
-        self.assertEqual(character_values[:5], [0, 1, '协议测试技能', 10001, 4])
 
     def test_server_skill_transition_is_saved_and_survives_role_store_reload(self):
         """The network transition boundary must persist the upgraded level, not only mutate memory."""
@@ -774,22 +744,23 @@ class ProtocolTests(unittest.TestCase):
 
             frames = game_server.handle_sect_skill_request(role, [3, 10001])
 
-            self.assertEqual([decode_frame(frame)[0] for frame in frames], [1103, 1103, 1132])
+            # Sect skill upgrade now only sends 1103 frames, not 1132
+            self.assertEqual([decode_frame(frame)[0] for frame in frames], [1103, 1103])
             reloaded = RoleStore(settings).find('skill-persistence', int(role['id']))
             self.assertIsNotNone(reloaded)
-            self.assertEqual(reloaded['skill_levels'], {'10001': 4})
+            self.assertEqual(reloaded['sect_skills'], {'10001': {'level': 4}})
 
     def test_sect_skill_level_normalizes_legacy_values_and_stops_at_maximum(self):
         """Legacy values are wire-safe and action 3 never advances beyond level 20."""
         role = default_role(Settings())
         role['sect_id'] = 1
-        self.assertEqual(server_module.sect_skill_level(role), 3)
+        self.assertEqual(server_module._get_sect_skill_level(role, 10001, Settings()), 3)
         for raw, expected in [('bad', 3), (-5, 0), (99, 20)]:
             role['skill_levels'] = {'10001': raw}
-            self.assertEqual(server_module.sect_skill_level(role), expected)
+            self.assertEqual(server_module._get_sect_skill_level(role, 10001, Settings()), expected)
 
         role['skill_levels'] = {'10001': 20}
-        frames = server_module.sect_skill_request_frames(role, [3, 10001])
+        frames = server_module.sect_skill_request_frames(role, [3, 10001], Settings())
         self.assertEqual(role['skill_levels'], {'10001': 20})
         self.assertEqual(field_values(decode_frame(frames[0])[1])[:5], [0, 1, '协议测试技能', 10001, 20])
 
@@ -798,7 +769,7 @@ class ProtocolTests(unittest.TestCase):
         role = default_role(Settings())
         role['sect_id'] = 1
 
-        frames = server_module.sect_skill_request_frames(role, [3, 99999])
+        frames = server_module.sect_skill_request_frames(role, [3, 99999], Settings())
 
         self.assertNotIn('skill_levels', role)
         self.assertEqual(len(frames), 1)

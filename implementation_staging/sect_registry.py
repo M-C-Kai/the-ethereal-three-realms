@@ -171,6 +171,20 @@ class SectRegistry:
             LOG.info("Sect registry loaded: %d sects, %d skills",
                     len(self._sects), len(self._skills))
 
+            # Perform reverse validation: check all sect.skill_ids reference existing skills
+            for sect in self._sects.values():
+                for skill_id in sect.skill_ids:
+                    skill = self._skills.get(skill_id)
+                    if skill is None:
+                        raise SectRegistryError(
+                            f"Sect {sect.sect_id} references unknown skill {skill_id}"
+                        )
+                    if skill.sect_id != sect.sect_id:
+                        raise SectRegistryError(
+                            f"Skill {skill_id} belongs to sect "
+                            f"{skill.sect_id}, not {sect.sect_id}"
+                        )
+
         except json.JSONDecodeError as e:
             raise SectRegistryError(f"Invalid JSON in catalog: {e}") from e
         except Exception as e:
