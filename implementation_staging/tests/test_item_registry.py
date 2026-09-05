@@ -8,13 +8,19 @@ Verifies that:
 - apply_battle_rewards() creates minimal instances.
 - equipped_weapon_attack() reads instance state, not template.
 """
+import json
 import sys
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from item_registry import ItemCatalogError, ItemRegistry, default_item_registry
+from item_registry import (
+    ItemCatalogError,
+    ItemRegistry,
+    default_item_registry,
+    synthetic_preview_template_id,
+)
 from server import (
     Settings,
     RoleStore,
@@ -424,6 +430,53 @@ class RegressionTests(unittest.TestCase):
             for field in TEMPLATE_FIELDS:
                 self.assertNotIn(field, item,
                     f'template field {field!r} leaked to instance (template_id={item.get("template_id")})')
+
+
+class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
+    def test_preview_catalog_matches_apk_resources(self):
+        root = Path(__file__).resolve().parents[1]
+        resources = json.loads(
+            (root / 'data' / 'catalog' / 'apk_equipment_resources.json').read_text(encoding='utf-8')
+        )['resources']
+        items_catalog = json.loads(
+            (root / 'data' / 'catalog' / 'items.json').read_text(encoding='utf-8')
+        )['items']
+        preview_catalog = json.loads(
+            (root / 'data' / 'catalog' / 'equipment_resource_preview_items.json').read_text(encoding='utf-8')
+        )
+        official_ids = {int(item['template_id']) for item in items_catalog}
+        preview_items = preview_catalog['items']
+        self.assertEqual(len(resources), 252)
+        self.assertEqual(len(preview_items), 252)
+        self.assertEqual(preview_catalog.get('status'), 'compatibility_preview')
+        preview_ids = [int(item['template_id']) for item in preview_items]
+        icon_codes = [int(item['icon_code']) for item in preview_items]
+        self.assertEqual(len(set(preview_ids)), 252)
+        self.assertEqual(len(set(icon_codes)), 252)
+        self.assertEqual(set(preview_ids) & official_ids, set())
+        for resource, item in zip(resources, preview_items):
+            template_id = int(item['template_id'])
+            category = (template_id // 10_000_000) % 100
+            self.assertTrue(1 <= category <= 21, template_id)
+            self.assertEqual(int(item['equipment_slot']), int(resource['equipment_slot']))
+            self.assertEqual(int(item['icon_code']), int(resource['icon_code']))
+            self.assertEqual(item['appearance_properties'], {})
+            self.assertEqual(item['quality'], 1)
+            expected = synthetic_preview_template_id(
+                resource['equipment_slot'],
+                resource['resource_group'],
+                resource['frame'],
+                reserved_ids=official_ids,
+            )
+            self.assertEqual(template_id, expected)
+            if int(resource['equipment_slot']) == 10:
+                self.assertEqual(category, 10)
+                self.assertEqual((template_id // 100_000) % 100, 0)
+
+        registry = default_item_registry()
+        self.assertEqual(len(registry.preview_template_ids()), 252)
+        for template_id in preview_ids:
+            registry.require(template_id)
 
 
 if __name__ == '__main__':

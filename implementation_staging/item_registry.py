@@ -3,7 +3,53 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Sequence
+
+
+PREVIEW_QUALITY = 1
+PREVIEW_SERIAL_COLLISION_OFFSET = 50_000
+SLOT_FAMILY_LABELS = {
+    'helmet': '头盔',
+    'shoulder': '肩甲',
+    'armor': '铠甲',
+    'belt': '腰带',
+    'leg_armor': '腿甲',
+    'necklace': '项链',
+    'cloak': '披风',
+    'bracer': '护腕',
+    'boots': '鞋子',
+    'weapon': '武器',
+    'ring': '戒指',
+    'coat': '外套',
+    'accessory': '饰品',
+    'talisman': '法宝',
+}
+
+
+def preview_category_for_slot(equipment_slot: int) -> int:
+    slot = int(equipment_slot)
+    return 10 if slot == 10 else slot
+
+
+def synthetic_preview_template_id(
+    equipment_slot: int,
+    resource_group: int,
+    frame: int,
+    reserved_ids: Iterable[int] = (),
+) -> int:
+    """Build a stable compatibility-preview template_id.
+
+    These IDs are synthetic. They are not official equipment template IDs.
+    Weapons keep weapon_type == 0 so property 63 bit0 can show 装备.
+    """
+    category = preview_category_for_slot(equipment_slot)
+    base = category * 10_000_000
+    preview_serial = int(resource_group) * 1000 + int(frame) * 10
+    template_id = base + preview_serial + PREVIEW_QUALITY
+    reserved = set(int(value) for value in reserved_ids)
+    if template_id in reserved:
+        template_id = base + PREVIEW_SERIAL_COLLISION_OFFSET + preview_serial + PREVIEW_QUALITY
+    return template_id
 
 
 class ItemCatalogError(Exception):
@@ -43,21 +89,42 @@ class StarterItemDefinition:
 class ItemRegistry:
     """Load and validate item templates from catalog JSON files."""
 
-    def __init__(self, items_file: Path, starter_inventory_file: Path) -> None:
+    def __init__(
+        self,
+        items_file: Path,
+        starter_inventory_file: Path,
+        extra_items_files: Sequence[Path] | None = None,
+    ) -> None:
         self._items: dict[int, ItemDefinition] = {}
+        self._preview_template_ids: tuple[int, ...] = ()
         self._starter_items: list[StarterItemDefinition] = []
-        self._load_items(items_file)
+        self._load_items(items_file, preview=False)
+        preview_ids: list[int] = []
+        for extra_path in extra_items_files or ():
+            before = set(self._items)
+            self._load_items(extra_path, preview=True)
+            preview_ids.extend(sorted(set(self._items) - before))
+        self._preview_template_ids = tuple(preview_ids)
         self._load_starter_inventory(starter_inventory_file)
 
-    def _load_items(self, path: Path) -> None:
+    def preview_template_ids(self) -> tuple[int, ...]:
+        return self._preview_template_ids
+
+    def _load_items(self, path: Path, *, preview: bool = False) -> None:
         data = json.loads(path.read_text(encoding='utf-8'))
         if not isinstance(data, dict) or 'items' not in data:
-            raise ItemCatalogError(f'items.json missing "items" key: {path}')
+            raise ItemCatalogError(f'catalog missing "items" key: {path}')
         raw_items = data['items']
         if not isinstance(raw_items, list):
-            raise ItemCatalogError(f'items.json "items" must be a list: {path}')
-        seen_ids: set[int] = set()
-        items: dict[int, ItemDefinition] = {}
+            raise ItemCatalogError(f'catalog "items" must be a list: {path}')
+        if preview:
+            status = str(data.get('status') or data.get('kind') or '')
+            if status and status != 'compatibility_preview':
+                raise ItemCatalogError(
+                    f'preview catalog status must be compatibility_preview: {path}'
+                )
+        items = self._items
+        seen_ids = set(items)
         for raw in raw_items:
             if not isinstance(raw, dict):
                 raise ItemCatalogError(f'each item must be a dict: {path}')
@@ -202,7 +269,11 @@ class ItemRegistry:
 
 _DEFAULT_ITEMS_FILE = Path(__file__).resolve().parent / 'data' / 'catalog' / 'items.json'
 _DEFAULT_STARTER_FILE = Path(__file__).resolve().parent / 'data' / 'catalog' / 'starter_inventory.json'
+_DEFAULT_PREVIEW_FILE = (
+    Path(__file__).resolve().parent / 'data' / 'catalog' / 'equipment_resource_preview_items.json'
+)
 
 
 def default_item_registry() -> ItemRegistry:
-    return ItemRegistry(_DEFAULT_ITEMS_FILE, _DEFAULT_STARTER_FILE)
+    extra = (_DEFAULT_PREVIEW_FILE,) if _DEFAULT_PREVIEW_FILE.is_file() else ()
+    return ItemRegistry(_DEFAULT_ITEMS_FILE, _DEFAULT_STARTER_FILE, extra_items_files=extra)

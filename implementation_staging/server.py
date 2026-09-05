@@ -355,9 +355,25 @@ def is_shop_purchase_request(fields: list[Field]) -> bool:
 
 
 def allocate_item_instance_id(role: dict[str, object]) -> int:
-    """Allocate a free role-scoped item instance id (role_id * 100 + n)."""
-    used = {int(item.get('id', 0)) for item in role_items(role)}
-    candidate = int(role.get('id', 0)) * 100 + 50
+    """Allocate a free positive item instance id unique within this role.
+
+    Starter inventory still uses role_id * 100 + offset. New allocations use
+    role_id * 10_000 so 252 preview items cannot collide with adjacent roles'
+    starter offsets or the old 1..99 block.
+    """
+    used: set[int] = set()
+    for item in role_items(role):
+        try:
+            item_id = int(item.get('id', 0))
+        except (TypeError, ValueError):
+            continue
+        if item_id > 0:
+            used.add(item_id)
+    try:
+        role_id = int(role.get('id', 0))
+    except (TypeError, ValueError):
+        role_id = 0
+    candidate = max(1, role_id * 10_000)
     while candidate in used:
         candidate += 1
     return candidate
@@ -1412,7 +1428,8 @@ BATTLE_EXP_REWARD = 50
 BATTLE_DROP_TEMPLATE_ID = 260_000_001
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
-DEFAULT_BAG_CAPACITY = 40
+DEFAULT_BAG_CAPACITY = 320
+EQUIPMENT_RESOURCE_PREVIEW_VERSION = 1
 DEFAULT_CURRENCY_BALANCE = 10_000_000
 MAX_CURRENCY_BALANCE = 2_147_483_647
 CURRENCY_PROPERTIES = {
@@ -1581,6 +1598,7 @@ def default_role(settings: Settings) -> dict[str, object]:
         'currencies': initial_currency_balances(),
     }
     role['items'] = starter_items(int(role['id']), settings.item_registry)
+    ensure_equipment_resource_preview_items(role, settings.item_registry)
     role['strengthening_stones_initialized'] = True
     role['mailbox'] = starter_mail(int(role['id']))
     role['mailbox_initialized'] = True
@@ -1662,6 +1680,49 @@ def starter_items(
     return registry.starter_instances(role_id)
 
 
+def ensure_equipment_resource_preview_items(
+    role: dict[str, object],
+    item_registry: ItemRegistry | None = None,
+) -> bool:
+    """Idempotently grant every APK equipment-resource preview item into the bag.
+
+    Preview items are compatibility constructs, not official equipment templates.
+    Existing items, equipped slots and appearance are left unchanged.
+    """
+    if item_registry is None:
+        item_registry = default_item_registry()
+    changed = False
+    try:
+        existing_capacity = int(role.get('bag_capacity', 0))
+    except (TypeError, ValueError):
+        existing_capacity = 0
+    new_capacity = max(existing_capacity, DEFAULT_BAG_CAPACITY)
+    if role.get('bag_capacity') != new_capacity:
+        role['bag_capacity'] = new_capacity
+        changed = True
+    items = role_items(role)
+    present = {
+        int(item.get('template_id', 0))
+        for item in items
+        if isinstance(item, dict)
+    }
+    for template_id in item_registry.preview_template_ids():
+        if template_id in present:
+            continue
+        items.append({
+            'id': allocate_item_instance_id(role),
+            'template_id': int(template_id),
+            'quantity': 1,
+            'location': 'bag',
+        })
+        present.add(int(template_id))
+        changed = True
+    if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:
+        role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION
+        changed = True
+    return changed
+
+
 def starter_mail(role_id: int) -> list[dict[str, object]]:
     """Return the one persisted system mail delivered to a new or legacy role."""
     return [{
@@ -1707,6 +1768,7 @@ class RoleStore:
         if not isinstance(items, list):
             role['items'] = starter_items(int(role.get('id', 0)), registry)
             role['strengthening_stones_initialized'] = True
+            ensure_equipment_resource_preview_items(role, registry)
             return True
         changed = False
         stones_initialized = bool(role.get('strengthening_stones_initialized', False))
@@ -1880,6 +1942,7 @@ class RoleStore:
         if not stones_initialized:
             role['strengthening_stones_initialized'] = True
             changed = True
+        changed = ensure_equipment_resource_preview_items(role, registry) or changed
         for item in items:
             if not isinstance(item, dict) or not is_strengthenable_weapon(item):
                 continue
@@ -1947,8 +2010,13 @@ class RoleStore:
             if 'sect_id' not in role:
                 role['sect_id'] = 0
                 changed = True
-            if 'bag_capacity' not in role:
-                role['bag_capacity'] = DEFAULT_BAG_CAPACITY
+            try:
+                existing_capacity = int(role.get('bag_capacity', 0))
+            except (TypeError, ValueError):
+                existing_capacity = 0
+            new_capacity = max(existing_capacity, DEFAULT_BAG_CAPACITY)
+            if role.get('bag_capacity') != new_capacity:
+                role['bag_capacity'] = new_capacity
                 changed = True
             currencies = role.get('currencies')
             if not isinstance(currencies, dict):
@@ -2046,6 +2114,7 @@ class RoleStore:
             'currencies': initial_currency_balances(),
         }
         role['items'] = starter_items(role_id, self.settings.item_registry)
+        ensure_equipment_resource_preview_items(role, self.settings.item_registry)
         role['strengthening_stones_initialized'] = True
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
