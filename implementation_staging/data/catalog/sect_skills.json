@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "skill_id": 10001,
+      "sect_id": 1,
+      "name": "协议测试技能",
+      "max_level": 20,
+      "default_level": 3,
+      "icon": 0,
+      "required_role_level": 1,
+      "silver_base": 0,
+      "experience_base": 0,
+      "effect": "",
+      "current_text": "",
+      "next_text": "",
+      "required_item_id": 0,
+      "required_item_name": "",
+      "required_item_count": 0,
+      "source": "compat"
+    }
+  ]
+}

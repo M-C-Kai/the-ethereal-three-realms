@@ -75,6 +75,12 @@ from life_skill_service import (
     craft_result,
     upgrade_result,
 )
+from sect_registry import (
+    SectRegistry,
+    SectSkillDefinition,
+    SectRegistryError,
+    default_sect_registry,
+)
 from strengthening import (
     INITIAL_STRENGTHEN_STONE_TEMPLATE_ID,
     MIDDLE_STRENGTHEN_STONE_TEMPLATE_ID,
@@ -462,39 +468,34 @@ FORGE_LOG_PREFIX = 'FORGE'
 
 
 def life_skill_list_frame(role: dict[str, object], settings: Settings) -> bytes:
-    """S->C 1132 action 0: the merged sect + life skill container list.
+    """S->C 1132 action 0: life skill container list only.
 
-    All records share the 14-field width so the APK's `(size-2)/count`
-    slicing stays correct. Screen 603 has a fixed seven-element array and
-    dereferences every slot, so unused positions must be represented by
-    unique, locked records. The sect record keeps its historical position
-    first (the client merges records into b/f.n by skill id).
+    [compat] Screen 603 expects exactly 7 slots.  Current life skills are
+    [compat] {2001, 2002, 2003, 2004} plus locked placeholders to fill to 7.
+    Sect skills (e.g. 10001) are NO LONGER included here.
     """
     life_state = ensure_life_skills(role, settings.life_registry)
     records: list[list[object]] = []
-    sect_id = normalized_sect_id(role)
-    if sect_id == TEST_SECT_ID:
-        sect_record = list(field_values(decode_frame(character_skill_list(role))[1]))[2:]
-        records.append(sect_record)
-    else:
-        records.append([
-            LIFE_SKILL_PLACEHOLDER_NAME, 0,
-            *(0 for _ in range(SKILL_RECORD_WIDTH - 2)),
-        ])
+
+    # Add real life skills
     for skill in settings.life_registry.skills.values():
         records.append(life_skill_record(
             skill, life_skill_state(role, skill.skill_id),
         ))
-    if len(records) > LIFE_SKILL_SCREEN_SLOTS:
-        raise ValueError(
-            f'life skill screen supports at most {LIFE_SKILL_SCREEN_SLOTS} records'
-        )
+
+    # Add locked placeholders to reach 7 total records
     while len(records) < LIFE_SKILL_SCREEN_SLOTS:
         records.append([
             LIFE_SKILL_LOCKED_SLOT_NAME,
             LIFE_SKILL_LOCKED_SLOT_ID_BASE + len(records),
             *(0 for _ in range(SKILL_RECORD_WIDTH - 2)),
         ])
+
+    if len(records) > LIFE_SKILL_SCREEN_SLOTS:
+        raise ValueError(
+            f'life skill screen supports at most {LIFE_SKILL_SCREEN_SLOTS} records'
+        )
+
     fields: list[Field] = [byte(0), byte(len(records))]
     for record in records:
         fields.append(string(str(record[0])))
@@ -1051,6 +1052,7 @@ class Settings:
     item_registry: ItemRegistry = field(default_factory=default_item_registry)
     shop_registry: ShopRegistry = field(default_factory=default_shop_registry)
     life_registry: LifeSkillRegistry = field(default_factory=default_life_skill_registry)
+    sect_registry: SectRegistry = field(default_factory=default_sect_registry)
     # Deprecated aliases retained for protocol helpers and older local tests.
     # Map entry, entities and routing use ``map_registry`` below.
     map_id: int = 58
@@ -1971,6 +1973,25 @@ class RoleStore:
                 if type(current_balance) is not int or current_balance != normalized_balance:
                     currencies[name] = normalized_balance
                     changed = True
+
+            # Migrate skill_levels to sect_skills
+            if 'sect_skills' not in role:
+                skill_levels = role.get('skill_levels')
+                if isinstance(skill_levels, dict):
+                    sect_skills = {}
+                    for skill_id_str, level in skill_levels.items():
+                        try:
+                            sect_skills[skill_id_str] = {'level': int(level)}
+                        except (TypeError, ValueError):
+                            pass
+                    if sect_skills:
+                        role['sect_skills'] = sect_skills
+                        changed = True
+                    # Preserve old skill_levels for backward compatibility
+                else:
+                    # Initialize empty sect_skills for new roles
+                    role['sect_skills'] = {}
+                    changed = True
             try:
                 current_map = self.settings.map_registry.require(
                     int(role.get('map_id', self.settings.default_map_id))
@@ -2206,100 +2227,101 @@ def character_extension_info() -> bytes:
     return encode_frame(1089, [byte(0), byte(0)])
 
 
-def character_skill_list(role: dict[str, object]) -> bytes:
-    """Return the minimal action-0 skill list appropriate for one role."""
+def character_skill_list(role: dict[str, object], settings: Settings) -> bytes:
+    """Return the sect skill list for 1103 protocol.
+
+    [compat] This is a compatibility wrapper for the old code that mixed
+    sect skills with life skills.  New code should use sect_skill_list()
+    and life_skill_list_frame() separately.
+    """
     sect_id = normalized_sect_id(role)
-    if sect_id == TEST_SECT_ID:
-        skill_id = TEST_SKILL_ID
-        skill_name = TEST_SKILL_NAME
-        level = sect_skill_level(role)
-        max_level = TEST_SKILL_MAX_LEVEL
-        proficiency = 123
-        max_proficiency = 1000
-        flags = 1  # APK: field[6] bit 0 enables proficiency display.
-        skill = [
-            string(skill_name),
-            integer(skill_id),
+    skills = settings.sect_registry.skills_for_sect(sect_id)
+
+    if not skills:
+        # No sect skills - return empty list
+        return encode_frame(1132, [byte(0), byte(0)])
+
+    fields = [byte(0), byte(len(skills))]
+    for skill_def in skills:
+        level = _get_sect_skill_level(role, skill_def.skill_id)
+        proficiency = 0  # Sect skills don't have proficiency
+        max_proficiency = 0
+
+        fields.extend([
+            string(skill_def.name),
+            integer(skill_def.skill_id),
             integer(level),
-            integer(max_level),
+            integer(skill_def.max_level),
             integer(proficiency),
             integer(max_proficiency),
-            integer(flags),
-            *(integer(0) for _ in range(7)),
-        ]
-    else:
-        skill_id = 0
-        skill_name = '基础技能'
-        level = max_level = proficiency = max_proficiency = flags = 0
-        skill = [
-            string(skill_name),
-            integer(skill_id),
-            integer(0),
-            integer(0),
-            integer(0),
-            integer(0),
-            integer(0),
-            *(integer(0) for _ in range(7)),
-        ]
+            integer(1),  # flags - proficiency display enabled
+            integer(skill_def.icon),
+            *(integer(0) for _ in range(SKILL_RECORD_WIDTH - 8)),
+        ])
 
     LOG.info(
-        'SKILL_1132_LIST role_id=%s sect_id=%d count=1 skill_id=%d name=%r '
-        'level=%d/%d proficiency=%d/%d flags=%d',
-        role.get('id', 0), sect_id, skill_id, skill_name,
-        level, max_level, proficiency, max_proficiency, flags,
+        'SECT_SKILL_LIST role_id=%s sect_id=%d count=%d',
+        role.get('id', 0), sect_id, len(skills),
     )
-    return encode_frame(1132, [byte(0), byte(1), *skill])
+    return encode_frame(1132, fields)
 
 
-def sect_skill_list(role: dict[str, object]) -> bytes:
-    """Return the minimal protocol-1103 list consumed by the sect-skill page."""
+def _get_sect_skill_level(role: dict[str, object], skill_id: int) -> int:
+    """Get the level of a sect skill for a role.
+
+    Supports both old skill_levels format and new sect_skills format.
+    """
+    # Try new sect_skills format first
+    if 'sect_skills' in role and skill_id in role['sect_skills']:
+        return int(role['sect_skills'][skill_id].get('level', 0))
+
+    # Fall back to old skill_levels format
+    if 'skill_levels' in role and str(skill_id) in role['skill_levels']:
+        return int(role['skill_levels'][str(skill_id)])
+
+    return 0
+
+
+def sect_skill_list(role: dict[str, object], settings: Settings) -> bytes:
+    """Return the protocol-1103 list for the role's sect skills."""
     sect_id = normalized_sect_id(role)
-    if sect_id != TEST_SECT_ID:
+    skills = settings.sect_registry.skills_for_sect(sect_id)
+
+    if not skills:
         LOG.info(
-            'SKILL_1103_LIST role_id=%s sect_id=%d count=0',
+            'SKILL_1103_LIST role_id=%s sect_id=%d count=0 (no skills for this sect)',
             role.get('id', 0), sect_id,
         )
         return encode_frame(1103, [byte(0), byte(0)])
 
-    skill_id = TEST_SKILL_ID
-    skill_name = TEST_SKILL_NAME
-    level = sect_skill_level(role)
-    max_level = TEST_SKILL_MAX_LEVEL
-    slot = 1
-    record = [
-        string(skill_name),
-        integer(skill_id),
-        integer(level),
-        integer(max_level),
-        integer(0),  # field[4]: icon code; zero is a valid APK image object.
-        *(integer(0) for _ in range(7)),
-        integer(slot),  # field[12]: native sect-skill slot, 1..14.
-        integer(0),
-    ]
+    records = []
+    for slot, skill_def in enumerate(skills, start=1):
+        level = _get_sect_skill_level(role, skill_def.skill_id)
+        record = [
+            string(skill_def.name),
+            integer(skill_def.skill_id),
+            integer(level),
+            integer(skill_def.max_level),
+            integer(skill_def.icon),  # field[4]: icon code
+            *(integer(0) for _ in range(7)),
+            integer(slot),  # field[12]: native sect-skill slot, 1..14.
+            integer(0),
+        ]
+        records.append(record)
+
     LOG.info(
-        'SKILL_1103_LIST role_id=%s sect_id=%d count=1 skill_id=%d name=%r '
-        'level=%d/%d slot=%d',
-        role.get('id', 0), sect_id, skill_id, skill_name,
-        level, max_level, slot,
+        'SKILL_1103_LIST role_id=%s sect_id=%d count=%d',
+        role.get('id', 0), sect_id, len(skills),
     )
-    return encode_frame(1103, [byte(0), byte(1), *record])
+    return encode_frame(1103, [byte(0), byte(len(skills)), *[field for record in records for field in record]])
 
 
-def sect_skill_level(role: dict[str, object]) -> int:
-    """Return the persisted level of the local sect-skill probe."""
-    if normalized_sect_id(role) != TEST_SECT_ID:
-        return 0
-    levels = role.get('skill_levels')
-    if not isinstance(levels, dict):
-        return TEST_SKILL_DEFAULT_LEVEL
-    try:
-        level = int(levels.get(str(TEST_SKILL_ID), TEST_SKILL_DEFAULT_LEVEL))
-    except (TypeError, ValueError):
-        level = TEST_SKILL_DEFAULT_LEVEL
-    return max(0, min(TEST_SKILL_MAX_LEVEL, level))
+def sect_skill_level(role: dict[str, object], skill_id: int) -> int:
+    """Return the persisted level of a sect skill."""
+    return _get_sect_skill_level(role, skill_id)
 
 
-def sect_skill_detail_frame(role: dict[str, object], skill_id: int) -> bytes:
+def sect_skill_detail_frame(role: dict[str, object], skill_id: int, settings: Settings) -> bytes:
     """Answer the native 1103/action-2 skill detail and learning-condition query.
 
     ``pmsj/work/e/dy.a(main/w)`` reads the first three fields as
@@ -2308,63 +2330,106 @@ def sect_skill_detail_frame(role: dict[str, object], skill_id: int) -> bytes:
     ``int, string, int`` triple.  Returning nothing leaves the client's
     global wait flag set.
     """
-    if normalized_sect_id(role) != TEST_SECT_ID or int(skill_id) != TEST_SKILL_ID:
+    sect_id = normalized_sect_id(role)
+    skill = settings.sect_registry.skill(skill_id)
+
+    if skill is None:
+        LOG.warning(
+            'SECT_SKILL_DETAIL_REJECT role_id=%s sect_id=%d skill_id=%d reason=unknown_skill',
+            role.get('id', 0), sect_id, skill_id,
+        )
         return encode_frame(1103, [byte(3)])
+
+    if not settings.sect_registry.skill_belongs_to_sect(skill_id, sect_id):
+        LOG.warning(
+            'SECT_SKILL_DETAIL_REJECT role_id=%s sect_id=%d skill_id=%d reason=wrong_sect',
+            role.get('id', 0), sect_id, skill_id,
+        )
+        return encode_frame(1103, [byte(3)])
+
+    level = _get_sect_skill_level(role, skill_id)
     return encode_frame(1103, [
         byte(2),
-        integer(TEST_SKILL_ID),
-        integer(sect_skill_level(role)),
-        integer(1),  # Required character level.
-        integer(0),  # Silver cost for the local probe.
-        integer(0),  # Experience cost for the local probe.
+        integer(skill_id),
+        integer(level),
+        integer(skill.required_role_level),
+        integer(skill.silver_base),
+        integer(skill.experience_base),
         integer(0),  # First prerequisite-skill level.
         integer(0),  # Second prerequisite-skill level.
-        string('本地测试技能效果：用于验证技能学习与升级。'),
-        string('协议测试技能说明'),
-        string('下一级效果：技能等级提高。'),
-        integer(0),  # Required item template id; zero means no item.
-        string(''),  # Required item display name.
-        integer(0),  # Required item quantity.
+        string(skill.effect),
+        string(skill.current_text),
+        string(skill.next_text),
+        integer(skill.required_item_id),
+        string(skill.required_item_name),
+        integer(skill.required_item_count),
     ])
 
 
 def sect_skill_request_frames(
     role: dict[str, object],
     values: list[object],
+    settings: Settings,
 ) -> tuple[bytes, ...]:
     """Handle the confirmed native sect-skill request actions."""
     if not values:
         return (encode_frame(1103, [byte(3)]),)
     action = int(values[0])
     if action == 6:
-        return (sect_skill_list(role),)
+        return (sect_skill_list(role, settings),)
 
     skill_id = int(values[1]) if len(values) > 1 else 0
-    valid_skill = (
-        normalized_sect_id(role) == TEST_SECT_ID
-        and skill_id == TEST_SKILL_ID
-    )
+    sect_id = normalized_sect_id(role)
+    skill = settings.sect_registry.skill(skill_id)
+
     if action == 2:
-        return (sect_skill_detail_frame(role, skill_id),)
-    if action == 3 and valid_skill:
-        current_level = sect_skill_level(role)
-        if current_level < TEST_SKILL_MAX_LEVEL:
-            levels = role.get('skill_levels')
-            if not isinstance(levels, dict):
-                levels = {}
-                role['skill_levels'] = levels
-            levels[str(TEST_SKILL_ID)] = current_level + 1
-            LOG.info(
-                'SKILL_1103_LEARN role_id=%s skill_id=%d level=%d->%d',
-                role.get('id', 0), TEST_SKILL_ID, current_level, current_level + 1,
+        return (sect_skill_detail_frame(role, skill_id, settings),)
+
+    if action == 3:
+        # Learn/upgrade skill
+        if skill is None or not settings.sect_registry.skill_belongs_to_sect(skill_id, sect_id):
+            LOG.warning(
+                'SECT_SKILL_LEARN_REJECT role_id=%s sect_id=%d skill_id=%d reason=invalid_skill',
+                role.get('id', 0), sect_id, skill_id,
             )
+            return (encode_frame(1103, [byte(3)]),)
+
+        current_level = _get_sect_skill_level(role, skill_id)
+        if current_level >= skill.max_level:
+            LOG.info(
+                'SECT_SKILL_LEARN_MAX_LEVEL role_id=%s skill_id=%d level=%d max_level=%d',
+                role.get('id', 0), skill_id, current_level, skill.max_level,
+            )
+            return (
+                sect_skill_list(role, settings),
+                encode_frame(1103, [byte(5)]),
+                character_skill_list(role, settings),
+            )
+
+        # Perform the upgrade
+        new_level = current_level + 1
+
+        # Use new sect_skills format
+        if 'sect_skills' not in role:
+            role['sect_skills'] = {}
+        role['sect_skills'][str(skill_id)] = {'level': new_level}
+
+        # Migrate old skill_levels format if needed
+        if 'skill_levels' in role:
+            role['skill_levels'][str(skill_id)] = new_level
+
+        LOG.info(
+            'SECT_SKILL_LEARN role_id=%s sect_id=%d skill_id=%d level=%d->%d',
+            role.get('id', 0), sect_id, skill_id, current_level, new_level,
+        )
+
         # Action 0 replaces the record in b/y by skill id; action 5 redraws
         # the native sect page.  1132 keeps the character skill container in
         # sync for the battle/person screens.
         return (
-            sect_skill_list(role),
+            sect_skill_list(role, settings),
             encode_frame(1103, [byte(5)]),
-            character_skill_list(role),
+            character_skill_list(role, settings),
         )
 
     # Action 3 is a native no-op response.  It still passes through main/e's
@@ -2372,9 +2437,9 @@ def sect_skill_request_frames(
     return (encode_frame(1103, [byte(3)]),)
 
 
-def initial_skill_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
+def initial_skill_frames(role: dict[str, object], settings: Settings) -> tuple[bytes, bytes]:
     """Preload both skill containers before their native pages are opened."""
-    return character_skill_list(role), sect_skill_list(role)
+    return character_skill_list(role, settings), sect_skill_list(role, settings)
 
 
 def character_panel_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
@@ -4419,9 +4484,10 @@ class LocalGameServer:
         values: list[object],
     ) -> tuple[bytes, ...]:
         """Apply one 1103 transition and persist any resulting level change."""
-        before_level = sect_skill_level(role)
-        response_frames = sect_skill_request_frames(role, values)
-        if sect_skill_level(role) != before_level:
+        skill_id = int(values[1]) if len(values) > 1 else 0
+        before_level = _get_sect_skill_level(role, skill_id)
+        response_frames = sect_skill_request_frames(role, values, self.settings)
+        if _get_sect_skill_level(role, skill_id) != before_level:
             self.roles.save()
         return response_frames
 
@@ -4958,7 +5024,7 @@ class LocalGameServer:
                                 player_info(self.settings, active_role),
                                 character_extension_info(),
                                 life_skill_list_frame(active_role, self.settings),
-                                sect_skill_list(active_role),
+                                sect_skill_list(active_role, self.settings),
                                 *(item_frame(item) for item in role_items(active_role)),
                                 gather_catalog_frame(gather_targets),
                                 *(gather_spawn_frame(target) for target in gather_targets),

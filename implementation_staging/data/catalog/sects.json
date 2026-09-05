@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "sects": [
+    {
+      "sect_id": 1,
+      "name": "昆仑",
+      "skill_ids": [10001]
+    },
+    {
+      "sect_id": 2,
+      "name": "玄都洞",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 3,
+      "name": "瑶池",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 4,
+      "name": "蓬莱",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 5,
+      "name": "逍遥派",
+      "skill_ids": []
+    }
+  ]
+}
