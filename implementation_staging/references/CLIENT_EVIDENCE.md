@@ -26,6 +26,7 @@
 - `scripts/extract_game_images.py`：从 `images.o + png*.p` 提取图片。
 - `scripts/build_equipment_icon_sheet.py`：生成带图标编号的装备资源总览。
 - `scripts/render_role_resources.py`：解析并预览 `role/*.dat`。
+- `battle-weapon-appearance-audit/`：战斗武器图标组 21..33 与 battle image family 220..290 的视觉审计（不推断映射）。
 
 完整反编译目录仍位于：
 
