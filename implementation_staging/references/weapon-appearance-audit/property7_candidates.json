@@ -1,0 +1,627 @@
+{
+  "note": "Candidates are reverse-supported by extracted images.o IDs and archived role DATs. Only property7 low-4-digit resource semantics are recorded. This is not an official icon_code mapping.",
+  "count": 69,
+  "candidates": [
+    {
+      "suffix": 1,
+      "role_dat": 101000,
+      "weapon_layer": 32,
+      "weapon_image_id": 40001,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1
+    },
+    {
+      "suffix": 2,
+      "role_dat": 101000,
+      "weapon_layer": 32,
+      "weapon_image_id": 40002,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2
+    },
+    {
+      "suffix": 3,
+      "role_dat": 101000,
+      "weapon_layer": 32,
+      "weapon_image_id": 40003,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 3
+    },
+    {
+      "suffix": 101,
+      "role_dat": 101000,
+      "weapon_layer": 33,
+      "weapon_image_id": 40101,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 101
+    },
+    {
+      "suffix": 102,
+      "role_dat": 101000,
+      "weapon_layer": 33,
+      "weapon_image_id": 40102,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 102
+    },
+    {
+      "suffix": 201,
+      "role_dat": 101000,
+      "weapon_layer": 34,
+      "weapon_image_id": 40201,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 201
+    },
+    {
+      "suffix": 1001,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41001,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1001
+    },
+    {
+      "suffix": 1002,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41002,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1002
+    },
+    {
+      "suffix": 1003,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41003,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1003
+    },
+    {
+      "suffix": 1004,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41004,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1004
+    },
+    {
+      "suffix": 1005,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41005,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1005
+    },
+    {
+      "suffix": 1006,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41006,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1006
+    },
+    {
+      "suffix": 1007,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41007,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1007
+    },
+    {
+      "suffix": 1008,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41008,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1008
+    },
+    {
+      "suffix": 1009,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41009,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1009
+    },
+    {
+      "suffix": 1010,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41010,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1010
+    },
+    {
+      "suffix": 1012,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41012,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1012
+    },
+    {
+      "suffix": 1013,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41013,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1013
+    },
+    {
+      "suffix": 1014,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41014,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1014
+    },
+    {
+      "suffix": 1015,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41015,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1015
+    },
+    {
+      "suffix": 1016,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41016,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1016
+    },
+    {
+      "suffix": 1017,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41017,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1017
+    },
+    {
+      "suffix": 1018,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41018,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1018
+    },
+    {
+      "suffix": 1019,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41019,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1019
+    },
+    {
+      "suffix": 1020,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41020,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1020
+    },
+    {
+      "suffix": 1022,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41022,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1022
+    },
+    {
+      "suffix": 1023,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41023,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1023
+    },
+    {
+      "suffix": 1024,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41024,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1024
+    },
+    {
+      "suffix": 1025,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41025,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1025
+    },
+    {
+      "suffix": 1026,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41026,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1026
+    },
+    {
+      "suffix": 1027,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41027,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1027
+    },
+    {
+      "suffix": 1028,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41028,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1028
+    },
+    {
+      "suffix": 1029,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41029,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1029
+    },
+    {
+      "suffix": 1030,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41030,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1030
+    },
+    {
+      "suffix": 1034,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41034,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1034
+    },
+    {
+      "suffix": 1036,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41036,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1036
+    },
+    {
+      "suffix": 1038,
+      "role_dat": 102000,
+      "weapon_layer": 33,
+      "weapon_image_id": 41038,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1038
+    },
+    {
+      "suffix": 1101,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41101,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1101
+    },
+    {
+      "suffix": 1102,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41102,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1102
+    },
+    {
+      "suffix": 1103,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41103,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1103
+    },
+    {
+      "suffix": 1104,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41104,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1104
+    },
+    {
+      "suffix": 1105,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41105,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1105
+    },
+    {
+      "suffix": 1106,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41106,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1106
+    },
+    {
+      "suffix": 1107,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41107,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1107
+    },
+    {
+      "suffix": 1108,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41108,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1108
+    },
+    {
+      "suffix": 1111,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41111,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1111
+    },
+    {
+      "suffix": 1112,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41112,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1112
+    },
+    {
+      "suffix": 1113,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41113,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1113
+    },
+    {
+      "suffix": 1114,
+      "role_dat": 102000,
+      "weapon_layer": 34,
+      "weapon_image_id": 41114,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 1114
+    },
+    {
+      "suffix": 2001,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42001,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2001
+    },
+    {
+      "suffix": 2003,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42003,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2003
+    },
+    {
+      "suffix": 2004,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42004,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2004
+    },
+    {
+      "suffix": 2005,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42005,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2005
+    },
+    {
+      "suffix": 2006,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42006,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2006
+    },
+    {
+      "suffix": 2007,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42007,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2007
+    },
+    {
+      "suffix": 2011,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42011,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2011
+    },
+    {
+      "suffix": 2021,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42021,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2021
+    },
+    {
+      "suffix": 2031,
+      "role_dat": 103000,
+      "weapon_layer": 33,
+      "weapon_image_id": 42031,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 2031
+    },
+    {
+      "suffix": 3001,
+      "role_dat": 104000,
+      "weapon_layer": 33,
+      "weapon_image_id": 43001,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 3001
+    },
+    {
+      "suffix": 3002,
+      "role_dat": 104000,
+      "weapon_layer": 33,
+      "weapon_image_id": 43002,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 3002
+    },
+    {
+      "suffix": 3003,
+      "role_dat": 104000,
+      "weapon_layer": 33,
+      "weapon_image_id": 43003,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 3003
+    },
+    {
+      "suffix": 4002,
+      "role_dat": 105000,
+      "weapon_layer": 33,
+      "weapon_image_id": 44002,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 4002
+    },
+    {
+      "suffix": 4003,
+      "role_dat": 105000,
+      "weapon_layer": 33,
+      "weapon_image_id": 44003,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 4003
+    },
+    {
+      "suffix": 4005,
+      "role_dat": 105000,
+      "weapon_layer": 33,
+      "weapon_image_id": 44005,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 4005
+    },
+    {
+      "suffix": 4007,
+      "role_dat": 105000,
+      "weapon_layer": 33,
+      "weapon_image_id": 44007,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 4007
+    },
+    {
+      "suffix": 4009,
+      "role_dat": 105000,
+      "weapon_layer": 33,
+      "weapon_image_id": 44009,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 4009
+    },
+    {
+      "suffix": 4010,
+      "role_dat": 105000,
+      "weapon_layer": 33,
+      "weapon_image_id": 44010,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 4010
+    },
+    {
+      "suffix": 5001,
+      "role_dat": 106000,
+      "weapon_layer": 33,
+      "weapon_image_id": 45001,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 5001
+    },
+    {
+      "suffix": 5002,
+      "role_dat": 106000,
+      "weapon_layer": 33,
+      "weapon_image_id": 45002,
+      "role_dat_exists": true,
+      "weapon_image_exists": true,
+      "property7_low4_candidate": 5002
+    }
+  ]
+}
