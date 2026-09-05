@@ -1444,29 +1444,6 @@ ROLE_MODELS = (
     ((12, 14, 16), (13, 15, 17)),
 )
 
-SECTS = {
-    0: '无',
-    1: '昆仑',
-    2: '玄都洞',
-    3: '瑶池',
-    4: '蓬莱岛',
-    5: '轩辕宫',
-    6: '崂山',
-    7: '蜀山',
-    8: '女儿国',
-    9: '碧游宫',
-    10: '刑天殿',
-    11: '幽冥地府',
-    12: '兰若寺',
-    13: '古仙人',
-}
-
-TEST_SECT_ID = 1
-TEST_SKILL_ID = 10001
-TEST_SKILL_NAME = '协议测试技能'
-TEST_SKILL_DEFAULT_LEVEL = 3
-TEST_SKILL_MAX_LEVEL = 20
-
 ROLE_STATS = (
     (2, 16, 7, 28, 7, 18, 3, 15, 2, 15, 7, 14, 8, 15, 3, 11, 17, 28, 2, 16, 7, 28, 7, 18),
     (7, 7, 3, 25, 3, 25, 4, 22, 2, 22, 3, 23, 2, 22, 4, 1, 5, 25, 7, 7, 3, 25, 3, 25),
@@ -1613,14 +1590,17 @@ def normalized_sect_id(role: dict[str, object]) -> int:
     """Return a client-safe sect ID for the 1006 property table."""
     try:
         sect_id = int(role.get('sect_id', 0))
+        # Validate sect_id exists in registry
+        if sect_id < 0 or sect_id > 13:  # Based on sects.json
+            return 0
+        return sect_id
     except (TypeError, ValueError):
         return 0
-    return sect_id if sect_id in SECTS else 0
 
 
 def join_sect(role: dict[str, object], sect_id: int) -> bool:
     """Join one valid sect while the role currently has no sect."""
-    if sect_id not in SECTS or sect_id == 0 or normalized_sect_id(role) != 0:
+    if sect_id < 0 or sect_id > 13 or sect_id == 0 or normalized_sect_id(role) != 0:
         return False
     role['sect_id'] = sect_id
     return True
@@ -1981,7 +1961,10 @@ class RoleStore:
                     sect_skills = {}
                     for skill_id_str, level in skill_levels.items():
                         try:
-                            sect_skills[skill_id_str] = {'level': int(level)}
+                            skill_id = int(skill_id_str)
+                            # Only migrate skills that exist in registry
+                            if settings.sect_registry.skill(skill_id) is not None:
+                                sect_skills[str(skill_id)] = {'level': int(level)}
                         except (TypeError, ValueError):
                             pass
                     if sect_skills:
@@ -2228,57 +2211,65 @@ def character_extension_info() -> bytes:
 
 
 def character_skill_list(role: dict[str, object], settings: Settings) -> bytes:
-    """Return the sect skill list for 1103 protocol.
-
-    [compat] This is a compatibility wrapper for the old code that mixed
-    sect skills with life skills.  New code should use sect_skill_list()
-    and life_skill_list_frame() separately.
+    """Return the life skill list for 1132 protocol.
+    
+    This function only returns life skills, not sect skills.
+    Sect skills are handled separately via sect_skill_list() and 1103 protocol.
     """
-    sect_id = normalized_sect_id(role)
-    skills = settings.sect_registry.skills_for_sect(sect_id)
-
-    if not skills:
-        # No sect skills - return empty list
-        return encode_frame(1132, [byte(0), byte(0)])
-
-    fields = [byte(0), byte(len(skills))]
-    for skill_def in skills:
-        level = _get_sect_skill_level(role, skill_def.skill_id)
-        proficiency = 0  # Sect skills don't have proficiency
+    # Only return life skills, never sect skills
+    life_skill_ids = [2001, 2002, 2003, 2004]  # Only life skills
+    
+    fields = [byte(0), byte(len(life_skill_ids))]
+    for skill_id in life_skill_ids:
+        # Use default levels for life skills
+        level = 0
+        proficiency = 0
         max_proficiency = 0
 
         fields.extend([
-            string(skill_def.name),
-            integer(skill_def.skill_id),
+            string(""),  # Empty name for life skills
+            integer(skill_id),
             integer(level),
-            integer(skill_def.max_level),
+            integer(0),  # max_level
             integer(proficiency),
             integer(max_proficiency),
             integer(1),  # flags - proficiency display enabled
-            integer(skill_def.icon),
+            integer(0),  # icon
             *(integer(0) for _ in range(SKILL_RECORD_WIDTH - 8)),
         ])
 
     LOG.info(
-        'SECT_SKILL_LIST role_id=%s sect_id=%d count=%d',
-        role.get('id', 0), sect_id, len(skills),
+        'CHARACTER_SKILL_LIST role_id=%s count=%d (life skills only)',
+        role.get('id', 0), len(life_skill_ids),
     )
     return encode_frame(1132, fields)
 
 
-def _get_sect_skill_level(role: dict[str, object], skill_id: int) -> int:
+def _get_sect_skill_level(role: dict[str, object], skill_id: int, settings: Settings) -> int:
     """Get the level of a sect skill for a role.
 
     Supports both old skill_levels format and new sect_skills format.
     """
     # Try new sect_skills format first
-    if 'sect_skills' in role and skill_id in role['sect_skills']:
-        return int(role['sect_skills'][skill_id].get('level', 0))
-
+    if 'sect_skills' in role:
+        skill_data = role['sect_skills'].get(str(skill_id))
+        if skill_data and isinstance(skill_data, dict):
+            return int(skill_data.get('level', 0))
+    
     # Fall back to old skill_levels format
-    if 'skill_levels' in role and str(skill_id) in role['skill_levels']:
-        return int(role['skill_levels'][str(skill_id)])
-
+    if 'skill_levels' in role:
+        old_level = role['skill_levels'].get(str(skill_id))
+        if old_level is not None:
+            return int(old_level)
+    
+    # Use default level from registry if available
+    try:
+        skill = settings.sect_registry.skill(skill_id)
+        if skill:
+            return skill.default_level
+    except:
+        pass
+    
     return 0
 
 
@@ -2296,7 +2287,7 @@ def sect_skill_list(role: dict[str, object], settings: Settings) -> bytes:
 
     records = []
     for slot, skill_def in enumerate(skills, start=1):
-        level = _get_sect_skill_level(role, skill_def.skill_id)
+        level = _get_sect_skill_level(role, skill_def.skill_id, settings)
         record = [
             string(skill_def.name),
             integer(skill_def.skill_id),
@@ -2347,7 +2338,7 @@ def sect_skill_detail_frame(role: dict[str, object], skill_id: int, settings: Se
         )
         return encode_frame(1103, [byte(3)])
 
-    level = _get_sect_skill_level(role, skill_id)
+    level = _get_sect_skill_level(role, skill_id, settings)
     return encode_frame(1103, [
         byte(2),
         integer(skill_id),
@@ -2394,7 +2385,7 @@ def sect_skill_request_frames(
             )
             return (encode_frame(1103, [byte(3)]),)
 
-        current_level = _get_sect_skill_level(role, skill_id)
+        current_level = _get_sect_skill_level(role, skill_id, settings)
         if current_level >= skill.max_level:
             LOG.info(
                 'SECT_SKILL_LEARN_MAX_LEVEL role_id=%s skill_id=%d level=%d max_level=%d',
@@ -2403,7 +2394,6 @@ def sect_skill_request_frames(
             return (
                 sect_skill_list(role, settings),
                 encode_frame(1103, [byte(5)]),
-                character_skill_list(role, settings),
             )
 
         # Perform the upgrade
@@ -2429,7 +2419,6 @@ def sect_skill_request_frames(
         return (
             sect_skill_list(role, settings),
             encode_frame(1103, [byte(5)]),
-            character_skill_list(role, settings),
         )
 
     # Action 3 is a native no-op response.  It still passes through main/e's
@@ -2439,7 +2428,7 @@ def sect_skill_request_frames(
 
 def initial_skill_frames(role: dict[str, object], settings: Settings) -> tuple[bytes, bytes]:
     """Preload both skill containers before their native pages are opened."""
-    return character_skill_list(role, settings), sect_skill_list(role, settings)
+    return life_skill_list_frame(role, settings), sect_skill_list(role, settings)
 
 
 def character_panel_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
@@ -4485,9 +4474,9 @@ class LocalGameServer:
     ) -> tuple[bytes, ...]:
         """Apply one 1103 transition and persist any resulting level change."""
         skill_id = int(values[1]) if len(values) > 1 else 0
-        before_level = _get_sect_skill_level(role, skill_id)
+        before_level = _get_sect_skill_level(role, skill_id, self.settings)
         response_frames = sect_skill_request_frames(role, values, self.settings)
-        if _get_sect_skill_level(role, skill_id) != before_level:
+        if _get_sect_skill_level(role, skill_id, self.settings) != before_level:
             self.roles.save()
         return response_frames
 

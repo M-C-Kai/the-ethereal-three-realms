@@ -2,6 +2,11 @@
   "version": 1,
   "sects": [
     {
+      "sect_id": 0,
+      "name": "无",
+      "skill_ids": []
+    },
+    {
       "sect_id": 1,
       "name": "昆仑",
       "skill_ids": [10001]
@@ -18,12 +23,52 @@
     },
     {
       "sect_id": 4,
-      "name": "蓬莱",
+      "name": "蓬莱岛",
       "skill_ids": []
     },
     {
       "sect_id": 5,
-      "name": "逍遥派",
+      "name": "轩辕宫",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 6,
+      "name": "崂山",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 7,
+      "name": "蜀山",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 8,
+      "name": "女儿国",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 9,
+      "name": "碧游宫",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 10,
+      "name": "刑天殿",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 11,
+      "name": "幽冥地府",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 12,
+      "name": "兰若寺",
+      "skill_ids": []
+    },
+    {
+      "sect_id": 13,
+      "name": "古仙人",
       "skill_ids": []
     }
   ]

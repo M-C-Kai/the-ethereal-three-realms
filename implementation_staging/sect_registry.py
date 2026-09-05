@@ -46,11 +46,6 @@ class SectSkillDefinition:
     required_item_count: int
     source: str
 
-    @property
-    def is_locked(self) -> bool:
-        """Return True if this skill is a compat placeholder."""
-        return self.source == "compat"
-
 
 class SectRegistryError(Exception):
     """Raised for sect catalog errors."""
@@ -61,16 +56,18 @@ class SectRegistryError(Exception):
 class SectRegistry:
     """Catalog for sects and their skills."""
 
-    def __init__(self, catalog_path: Path):
-        """Initialize the sect registry from a catalog file.
+    def __init__(self, sects_path: Path, skills_path: Path):
+        """Initialize the sect registry from catalog files.
 
         Args:
-            catalog_path: Path to the sect catalog JSON file.
+            sects_path: Path to the sects JSON file.
+            skills_path: Path to the skills JSON file.
 
         Raises:
-            SectRegistryError: If the catalog is malformed.
+            SectRegistryError: If the catalogs are malformed.
         """
-        self.catalog_path = catalog_path
+        self.sects_path = sects_path
+        self.skills_path = skills_path
         self._sects: dict[int, SectDefinition] = {}
         self._skills: dict[int, SectSkillDefinition] = {}
         self._skills_by_sect: dict[int, list[SectSkillDefinition]] = {}
@@ -78,15 +75,20 @@ class SectRegistry:
         self._load_catalog()
 
     def _load_catalog(self) -> None:
-        """Load sect and skill definitions from the catalog file."""
+        """Load sect and skill definitions from catalog files."""
         try:
             import json
 
-            with open(self.catalog_path, "r", encoding="utf-8") as f:
-                catalog = json.load(f)
+            # Load sects
+            with open(self.sects_path, "r", encoding="utf-8") as f:
+                sects_catalog = json.load(f)
+
+            # Load skills
+            with open(self.skills_path, "r", encoding="utf-8") as f:
+                skills_catalog = json.load(f)
 
             # Load sects
-            for sect_data in catalog.get("sects", []):
+            for sect_data in sects_catalog.get("sects", []):
                 sect_id = int(sect_data.get("sect_id", 0))
                 name = str(sect_data.get("name", ""))
                 skill_ids = [int(sid) for sid in sect_data.get("skill_ids", [])]
@@ -104,7 +106,7 @@ class SectRegistry:
                 self._skills_by_sect[sect_id] = []
 
             # Load skills
-            for skill_data in catalog.get("skills", []):
+            for skill_data in skills_catalog.get("skills", []):
                 skill_id = int(skill_data.get("skill_id", 0))
                 sect_id = int(skill_data.get("sect_id", 0))
                 name = str(skill_data.get("name", ""))
@@ -133,7 +135,7 @@ class SectRegistry:
                     )
 
                 # Validate skill belongs to sect
-                if sect_id not in self._sects[sect_id].skill_ids:
+                if skill_id not in self._sects[sect_id].skill_ids:
                     raise SectRegistryError(
                         f"Skill {skill_id} (sect {sect_id}) not listed in sect's skill_ids"
                     )
@@ -156,6 +158,12 @@ class SectRegistry:
                     required_item_count=required_item_count,
                     source=source,
                 )
+
+                # Validate sect_id matches skill's sect_id
+                if skill.sect_id != sect_id:
+                    raise SectRegistryError(
+                        f"Skill {skill_id} has sect_id {skill.sect_id} but references sect {sect_id}"
+                    )
 
                 self._skills[skill_id] = skill
                 self._skills_by_sect[sect_id].append(skill)
@@ -221,5 +229,6 @@ def default_sect_registry() -> SectRegistry:
     Returns:
         The default sect registry.
     """
-    catalog_path = Path(__file__).parent / "data" / "catalog" / "sects.json"
-    return SectRegistry(catalog_path)
+    sects_path = Path(__file__).parent / "data" / "catalog" / "sects.json"
+    skills_path = Path(__file__).parent / "data" / "catalog" / "sect_skills.json"
+    return SectRegistry(sects_path, skills_path)
