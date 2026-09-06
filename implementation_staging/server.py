@@ -18,6 +18,7 @@ from item_registry import (
     battle_weapon_field2_from_icon,
     default_item_registry,
     deprecated_armor_template_ids,
+    deprecated_unsupported_equipment_template_ids,
 )
 from map_registry import (
     MapActorDefinition,
@@ -1462,8 +1463,8 @@ BATTLE_EXP_REWARD = 50
 BATTLE_DROP_TEMPLATE_ID = 260_000_001
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
-DEFAULT_BAG_CAPACITY = 320
-EQUIPMENT_RESOURCE_PREVIEW_VERSION = 2
+DEFAULT_BAG_CAPACITY = 1000
+EQUIPMENT_RESOURCE_PREVIEW_VERSION = 3
 DEFAULT_CURRENCY_BALANCE = 10_000_000
 MAX_CURRENCY_BALANCE = 2_147_483_647
 CURRENCY_PROPERTIES = {
@@ -1719,10 +1720,11 @@ def ensure_equipment_resource_preview_items(
     role: dict[str, object],
     item_registry: ItemRegistry | None = None,
 ) -> bool:
-    """Idempotently grant every APK equipment-resource preview item into the bag.
+    """Migrate deprecated local previews, then grant the supported APK preview set.
 
     Preview items are compatibility constructs, not official equipment templates.
-    Existing items, equipped slots and appearance are left unchanged.
+    Unsupported local starter/preview templates are removed from old roles before
+    the current supported preview catalog is re-granted.
     """
     if item_registry is None:
         item_registry = default_item_registry()
@@ -1736,9 +1738,12 @@ def ensure_equipment_resource_preview_items(
         role['bag_capacity'] = new_capacity
         changed = True
     items = role_items(role)
-    deprecated_armor = deprecated_armor_template_ids()
+    deprecated_templates = (
+        deprecated_armor_template_ids()
+        | deprecated_unsupported_equipment_template_ids()
+    )
     kept_items: list[dict[str, object]] = []
-    removed_legacy_armor = False
+    removed_deprecated = False
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -1746,11 +1751,11 @@ def ensure_equipment_resource_preview_items(
             template_id = int(item.get('template_id', 0))
         except (TypeError, ValueError):
             template_id = 0
-        if template_id in deprecated_armor:
-            removed_legacy_armor = True
+        if template_id in deprecated_templates:
+            removed_deprecated = True
             continue
         kept_items.append(item)
-    if removed_legacy_armor:
+    if removed_deprecated:
         role['items'] = kept_items
         items = role_items(role)
         changed = True

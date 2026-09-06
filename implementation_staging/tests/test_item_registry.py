@@ -449,9 +449,9 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
         )
         items = preview['items']
         self.assertEqual(len(resources), 252)
-        self.assertEqual(len(items), 273)
+        self.assertEqual(len(items), 251)
         self.assertEqual(preview.get('status'), 'compatibility_preview')
-        self.assertEqual(len({int(item['template_id']) for item in items}), 273)
+        self.assertEqual(len({int(item['template_id']) for item in items}), 251)
 
         armor_items = [item for item in items if int(item['equipment_slot']) == 3]
         self.assertEqual(len(armor_items), 31)
@@ -467,10 +467,14 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
             )
         )
 
-        nonarmor_resources = [r for r in resources if int(r['equipment_slot']) != 3]
+        nonarmor_resources = [
+            r for r in resources
+            if int(r['equipment_slot']) not in {3, 12, 13, 14}
+        ]
         nonarmor_items = [i for i in items if int(i['equipment_slot']) != 3]
-        self.assertEqual(len(nonarmor_resources), 242)
-        self.assertEqual(len(nonarmor_items), 242)
+        self.assertEqual(len(nonarmor_resources), 220)
+        self.assertEqual(len(nonarmor_items), 220)
+        self.assertTrue(all(int(i['equipment_slot']) not in {12, 13, 14} for i in items))
         expected_by_icon = {int(r['icon_code']): int(r['equipment_slot']) for r in nonarmor_resources}
         actual_by_icon = {int(i['icon_code']): int(i['equipment_slot']) for i in nonarmor_items}
         self.assertEqual(actual_by_icon, expected_by_icon)
@@ -478,7 +482,7 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
     def test_registry_loads_every_preview_template(self):
         registry = default_item_registry()
         preview_ids = registry.preview_template_ids()
-        self.assertEqual(len(preview_ids), 273)
+        self.assertEqual(len(preview_ids), 251)
         for template_id in preview_ids:
             registry.require(template_id)
 

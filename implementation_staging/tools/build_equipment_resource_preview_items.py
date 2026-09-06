@@ -13,6 +13,7 @@ from item_registry import (
     SLOT_FAMILY_LABELS,
     preview_appearance_properties,
     synthetic_preview_template_id,
+    unsupported_equipment_slots,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,7 @@ DESCRIPTION = (
 
 def main() -> None:
     resources = json.loads(RESOURCES_FILE.read_text(encoding='utf-8'))['resources']
+    disabled_slots = unsupported_equipment_slots()
     armor_catalog = json.loads(ARMOR_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
     official_items = json.loads(ITEMS_FILE.read_text(encoding='utf-8'))['items']
     manifest = json.loads(MANIFEST_FILE.read_text(encoding='utf-8'))
@@ -36,8 +38,12 @@ def main() -> None:
     preview_items = []
     used = set(reserved)
     for index, resource in enumerate(resources, start=1):
-        if int(resource['equipment_slot']) == 3:
+        slot = int(resource['equipment_slot'])
+        if slot == 3:
             # Old 0300..0309 icon-only armor previews are deprecated.
+            continue
+        if slot in disabled_slots:
+            # 外套/饰品/法宝尚无确认装备关系，暂不进入角色背包。
             continue
         template_id = synthetic_preview_template_id(
             resource['equipment_slot'],
@@ -135,6 +141,7 @@ def main() -> None:
                 'template_id、名称、等级、属性均为本地预览构造，不代表官方装备。'
                 '头盔 property20 只读取 helmet_appearance_mapping.json；未解析图标不猜。'
                 '铠甲旧0300..0309预览已废弃；现在下发31个14000..14030资源预览，槽3只使用property2。'
+                '外套(slot12)、饰品(slot13)、法宝(slot14)因没有明确装备关系暂时不下发。'
                 '其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。'
                 '武器 property7 使用 weapon_appearance_mapping.json 的证据映射；'
                 '地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。'

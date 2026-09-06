@@ -19,6 +19,9 @@ HELMET_APPEARANCE_MAPPING_FILE = (
 ARMOR_APPEARANCE_MAPPING_FILE = (
     Path(__file__).resolve().parent / 'data' / 'catalog' / 'armor_appearance_mapping.json'
 )
+UNSUPPORTED_EQUIPMENT_FILE = (
+    Path(__file__).resolve().parent / 'data' / 'catalog' / 'unsupported_equipment_slots.json'
+)
 
 
 @lru_cache(maxsize=1)
@@ -163,6 +166,35 @@ def armor_resource_preview_template_mapping() -> dict[int, int]:
 def deprecated_armor_template_ids() -> frozenset[int]:
     """Return local armor templates that must be removed from saved inventories."""
     return _armor_appearance_catalog()[3]
+
+
+@lru_cache(maxsize=1)
+def _unsupported_equipment_catalog() -> tuple[frozenset[int], frozenset[int]]:
+    """Load temporarily disabled equipment slots and their legacy local templates."""
+    data = json.loads(UNSUPPORTED_EQUIPMENT_FILE.read_text(encoding='utf-8'))
+    if not isinstance(data, dict) or int(data.get('version', 0)) != 1:
+        raise ValueError(f'invalid unsupported equipment catalog: {UNSUPPORTED_EQUIPMENT_FILE}')
+    raw_slots = data.get('disabled_slots')
+    raw_templates = data.get('deprecated_template_ids')
+    if not isinstance(raw_slots, list) or not isinstance(raw_templates, list):
+        raise ValueError(f'invalid unsupported equipment payload: {UNSUPPORTED_EQUIPMENT_FILE}')
+    slots = frozenset(int(value) for value in raw_slots)
+    templates = frozenset(int(value) for value in raw_templates)
+    if slots != frozenset({12, 13, 14}):
+        raise ValueError(f'unexpected disabled equipment slots: {sorted(slots)}')
+    if not templates:
+        raise ValueError('unsupported equipment deprecated template list is empty')
+    return slots, templates
+
+
+def unsupported_equipment_slots() -> frozenset[int]:
+    """Return equipment slots that must not be auto-granted yet."""
+    return _unsupported_equipment_catalog()[0]
+
+
+def deprecated_unsupported_equipment_template_ids() -> frozenset[int]:
+    """Return old local starter/preview templates removed from saved roles."""
+    return _unsupported_equipment_catalog()[1]
 
 
 def armor_property2_from_icon(icon_code: int) -> int | None:
