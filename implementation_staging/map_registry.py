@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
+
+
+NPC_APPEARANCE_MODEL_OFFSET = 2_100_000
+NPC_APPEARANCE_GALLERY_ID_BASE = 1_950_000
+NPC_APPEARANCE_GALLERY_X = tuple(range(8, 79, 10))
+NPC_APPEARANCE_GALLERY_Y = tuple(range(10, 61, 10))
 
 
 @dataclass(frozen=True)
@@ -234,6 +242,158 @@ def _merge_npc_catalog(
     return merged_maps
 
 
+def _default_data_file(name: str) -> Path:
+    return Path(__file__).with_name('data') / name
+
+
+def _load_json_file(path: Path) -> Any | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f'failed to load {path.name}: {exc}') from exc
+
+
+def _confirmed_appearance_entries(
+    appearance_catalog: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if appearance_catalog is None:
+        return []
+    if not isinstance(appearance_catalog, dict):
+        raise ValueError('NPC appearance catalog must be an object')
+    appearances = appearance_catalog.get('appearances')
+    if not isinstance(appearances, list):
+        raise ValueError('NPC appearance catalog requires appearances list')
+
+    confirmed: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    seen_dat_ids: set[int] = set()
+    for raw_entry in appearances:
+        if not isinstance(raw_entry, dict):
+            continue
+        if raw_entry.get('enabled') is not True or raw_entry.get('status') != 'confirmed':
+            continue
+        key = str(raw_entry.get('key', '')).strip()
+        if not key:
+            raise ValueError('confirmed NPC appearance requires key')
+        try:
+            dat_id = int(raw_entry['dat_id'])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f'NPC appearance {key!r} requires integer dat_id') from exc
+        if dat_id <= 0:
+            raise ValueError(f'NPC appearance {key!r} dat_id must be positive')
+        if key in seen_keys:
+            raise ValueError(f'duplicate NPC appearance key {key}')
+        if dat_id in seen_dat_ids:
+            raise ValueError(f'duplicate NPC appearance dat_id {dat_id}')
+        seen_keys.add(key)
+        seen_dat_ids.add(dat_id)
+        confirmed.append({'key': key, 'dat_id': dat_id})
+    return confirmed
+
+
+def _gallery_coordinates(definition: dict[str, Any]) -> list[tuple[int, int]]:
+    occupied: set[tuple[int, int]] = set()
+    spawn = definition.get('spawn')
+    if isinstance(spawn, dict):
+        occupied.add((int(spawn['x']), int(spawn['y'])))
+    monster = definition.get('monster')
+    if isinstance(monster, dict):
+        occupied.add((int(monster['x']), int(monster['y'])))
+    for portal in definition.get('portals', []):
+        if isinstance(portal, dict):
+            occupied.add((int(portal['x']), int(portal['y'])))
+    for npc in definition.get('npcs', []):
+        if isinstance(npc, dict):
+            occupied.add((int(npc['x']), int(npc['y'])))
+
+    width = int(definition['fallback_width'])
+    height = int(definition['fallback_height'])
+    return [
+        (x, y)
+        for y in NPC_APPEARANCE_GALLERY_Y
+        for x in NPC_APPEARANCE_GALLERY_X
+        if 0 <= x < width and 0 <= y < height and (x, y) not in occupied
+    ]
+
+
+def _merge_npc_appearance_catalog(
+    maps_payload: dict[str, Any],
+    appearance_catalog: dict[str, Any] | None,
+) -> dict[str, Any]:
+    confirmed = _confirmed_appearance_entries(appearance_catalog)
+    by_key = {entry['key']: entry for entry in confirmed}
+    merged_maps: dict[str, Any] = {}
+
+    for raw_map_id, raw_definition in maps_payload.items():
+        definition = dict(raw_definition)
+        resolved_npcs: list[dict[str, Any]] = []
+        used_dat_ids: set[int] = set()
+        used_object_ids: set[int] = set()
+
+        monster = definition.get('monster')
+        if isinstance(monster, dict) and 'id' in monster:
+            used_object_ids.add(int(monster['id']))
+        for portal in definition.get('portals', []):
+            if isinstance(portal, dict) and 'id' in portal:
+                used_object_ids.add(int(portal['id']))
+
+        for raw_npc in definition.get('npcs', []):
+            npc = dict(raw_npc)
+            key = npc.pop('appearance_key', None)
+            if key is not None:
+                normalized_key = str(key)
+                appearance = by_key.get(normalized_key)
+                if appearance is None:
+                    raise ValueError(f'unknown or unavailable NPC appearance key {normalized_key}')
+                dat_id = int(appearance['dat_id'])
+                npc['dat_id'] = dat_id
+                npc['model'] = dat_id - NPC_APPEARANCE_MODEL_OFFSET
+            dat_id = int(npc.get('dat_id', 0))
+            if dat_id > 0:
+                if dat_id in used_dat_ids:
+                    raise ValueError(f'duplicate NPC appearance dat_id {dat_id} on map {raw_map_id}')
+                used_dat_ids.add(dat_id)
+            used_object_ids.add(int(npc['id']))
+            resolved_npcs.append(npc)
+
+        definition['npcs'] = resolved_npcs
+        if bool(definition.get('npc_appearance_gallery', False)):
+            if not confirmed:
+                raise ValueError(f'map {raw_map_id} enables NPC appearance gallery but catalog is empty')
+            pending = [entry for entry in confirmed if int(entry['dat_id']) not in used_dat_ids]
+            coordinates = _gallery_coordinates(definition)
+            if len(coordinates) < len(pending):
+                raise ValueError(
+                    f'map {raw_map_id} has {len(coordinates)} gallery slots for {len(pending)} NPC appearances'
+                )
+
+            next_id = NPC_APPEARANCE_GALLERY_ID_BASE
+            for entry, (x, y) in zip(pending, coordinates):
+                while next_id in used_object_ids:
+                    next_id += 1
+                dat_id = int(entry['dat_id'])
+                resolved_npcs.append({
+                    'id': next_id,
+                    'name': f'NPC外观 {dat_id}',
+                    'label': str(entry['key']),
+                    'model': dat_id - NPC_APPEARANCE_MODEL_OFFSET,
+                    'dat_id': dat_id,
+                    'x': x,
+                    'y': y,
+                    'direction': 0,
+                })
+                used_object_ids.add(next_id)
+                used_dat_ids.add(dat_id)
+                next_id += 1
+            definition['npcs'] = resolved_npcs
+
+        definition.pop('npc_appearance_gallery', None)
+        merged_maps[str(raw_map_id)] = definition
+    return merged_maps
+
+
 def _coordinate_in_bounds(x: int, y: int, definition: MapDefinition) -> bool:
     return 0 <= int(x) < definition.fallback_width and 0 <= int(y) < definition.fallback_height
 
@@ -290,10 +450,20 @@ def _validate_registry(registry: MapRegistry, map_keys: dict[int, int]) -> None:
 def load_map_registry(
     payload: dict[str, Any],
     npc_catalog: list[dict[str, Any]] | None = None,
+    appearance_catalog: dict[str, Any] | None = None,
 ) -> MapRegistry:
     if not isinstance(payload.get('maps'), dict):
         payload = _legacy_registry_payload(payload)
     maps_payload = _merge_npc_catalog(payload['maps'], npc_catalog)
+    if appearance_catalog is None and any(
+        isinstance(definition, dict) and bool(definition.get('npc_appearance_gallery', False))
+        for definition in maps_payload.values()
+    ):
+        loaded = _load_json_file(_default_data_file('npc_appearance_catalog.json'))
+        if loaded is not None and not isinstance(loaded, dict):
+            raise ValueError('npc_appearance_catalog.json must contain an object')
+        appearance_catalog = loaded
+    maps_payload = _merge_npc_appearance_catalog(maps_payload, appearance_catalog)
     map_keys = {
         int(raw_map_id): int(map_payload.get('id', raw_map_id))
         for raw_map_id, map_payload in maps_payload.items()
@@ -330,8 +500,7 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'id': 1_900_002,
                     'name': '孙思邈',
                     'label': '药王',
-                    'model': -2_010_000,
-                    'dat_id': 90_000,
+                    'appearance_key': 'npc_95750',
                     'x': 50,
                     'y': 64,
                 },
@@ -339,8 +508,7 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'id': 1_900_003,
                     'name': '接引真人',
                     'label': '接引',
-                    'model': -2_009_990,
-                    'dat_id': 90_010,
+                    'appearance_key': 'npc_96010',
                     'x': 34,
                     'y': 50,
                 },
@@ -348,12 +516,12 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'id': 1_900_004,
                     'name': '赵公明',
                     'label': '赵公明',
-                    'model': -2_009_980,
-                    'dat_id': 90_020,
+                    'appearance_key': 'npc_95520',
                     'x': 11,
                     'y': 21,
                 },
             ],
+            'npc_appearance_gallery': True,
             'portals': [
                 {
                     'id': 580001,
@@ -433,8 +601,6 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
                     'name': '昆仑导师',
                     'label': '昆仑导师',
                     'introduction': '昆仑道法，贵在潜心修行。',
-                    'model': -2_009_990,
-                    'dat_id': 90_010,
                     'x': 12,
                     'y': 8,
                     'service': 'sect_skill_mentor',
@@ -460,4 +626,7 @@ DEFAULT_MAP_PAYLOAD: dict[str, Any] = {
 
 
 def default_map_registry() -> MapRegistry:
-    return load_map_registry(DEFAULT_MAP_PAYLOAD)
+    legacy_catalog = _load_json_file(_default_data_file('npcs.json'))
+    if legacy_catalog is not None and not isinstance(legacy_catalog, list):
+        raise ValueError('npcs.json must contain a list')
+    return load_map_registry(DEFAULT_MAP_PAYLOAD, npc_catalog=legacy_catalog)
