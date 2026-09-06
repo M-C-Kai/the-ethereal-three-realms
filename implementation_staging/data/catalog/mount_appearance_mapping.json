@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "source": "piaomiao_local_login.apk",
+  "character_property": 22,
+  "count": 54,
+  "rules": {
+    "role_model": "101000 + ((ride_code % 10000) // 1000) * 1000",
+    "primary_image": "40000 + (ride_code % 10000)"
+  },
+  "families": [
+    {"role_model": 101000, "image_ids": [40001, 40002, 40003]},
+    {"role_model": 102000, "image_ids": [41001, 41002, 41003, 41004, 41005, 41006, 41007, 41008, 41009, 41010, 41012, 41013, 41014, 41015, 41016, 41017, 41018, 41019, 41020, 41022, 41023, 41024, 41025, 41026, 41027, 41028, 41029, 41030, 41034, 41036, 41038]},
+    {"role_model": 103000, "image_ids": [42001, 42003, 42004, 42005, 42006, 42007, 42011, 42021, 42031]},
+    {"role_model": 104000, "image_ids": [43001, 43002, 43003]},
+    {"role_model": 105000, "image_ids": [44002, 44003, 44005, 44007, 44009, 44010]},
+    {"role_model": 106000, "image_ids": [45001, 45002]}
+  ],
+  "named_templates": {
+    "41004": {"template_id": 170410004, "name": "辟邪", "ride_code": 1004, "role_model": 102000}
+  },
+  "notes": [
+    "character property 22 stores the ride code, not the 101000..106000 role-model id",
+    "ride_code = image_id - 40000 for the verified primary riding layer",
+    "411xx resources are rider/saddle interface layers and are not counted as separate mounts"
+  ]
+}
