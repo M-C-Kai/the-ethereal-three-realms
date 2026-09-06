@@ -8,8 +8,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from item_registry import default_item_registry
+from mount_protocol import (
+    MOUNT_ATLAS_ACTION,
+    MOUNT_MESSAGE_ID,
+    is_mount_atlas_request,
+    load_mount_atlas_entries,
+    mount_atlas_frame,
+)
 from server import Settings, default_role, mount_update_frame
-from protocol import decode_frame, field_values
+from protocol import TYPE_BYTE, byte, decode_frame, field_values
 
 
 CATALOG = Path(__file__).resolve().parents[1] / 'data' / 'catalog' / 'mount_appearance_mapping.json'
@@ -66,6 +73,32 @@ class MountCatalogTests(unittest.TestCase):
         self.assertEqual(values[1], 1)
         self.assertEqual(values[2], 22)
         self.assertEqual(values[3], 1004)
+
+    def test_mount_atlas_entries_are_generated_from_resource_catalog(self):
+        entries = load_mount_atlas_entries(CATALOG)
+        self.assertEqual(len(entries), 54)
+        self.assertEqual(len({entry.ride_code for entry in entries}), 54)
+        bixie = next(entry for entry in entries if entry.ride_code == 1004)
+        self.assertEqual(bixie.catalog_id, 1004)
+        self.assertEqual(bixie.name, '辟邪')
+        self.assertEqual(bixie.mount_type, 0)
+
+    def test_mount_atlas_request_requires_byte_action_30(self):
+        self.assertTrue(is_mount_atlas_request([byte(MOUNT_ATLAS_ACTION)]))
+        self.assertFalse(is_mount_atlas_request([]))
+
+    def test_mount_atlas_frame_uses_protocol_1024_action_30(self):
+        entries = load_mount_atlas_entries(CATALOG)
+        message_id, payload = decode_frame(mount_atlas_frame(entries))
+        self.assertEqual(message_id, MOUNT_MESSAGE_ID)
+        values = field_values(payload)
+        self.assertEqual(values[0], MOUNT_ATLAS_ACTION)
+        self.assertEqual(values[1], 54)
+        # First record: catalog_id, name, ride_code, mount_type.
+        self.assertEqual(values[2], entries[0].catalog_id)
+        self.assertEqual(values[3], entries[0].name)
+        self.assertEqual(values[4], entries[0].ride_code)
+        self.assertEqual(values[5], entries[0].mount_type)
 
 
 if __name__ == '__main__':
