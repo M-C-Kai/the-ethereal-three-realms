@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,16 +21,18 @@ EXPECTED_MAP_O_SHA256 = 'f92cb8de6d5816e3311c2ad73f2ebfcbd069526da4349aa81855fda
 
 class DynamicMapBuilderTests(unittest.TestCase):
     def test_repository_package_60010_materializes_original_verified_bytes(self):
-        root = Path(__file__).resolve().parents[1] / 'maps'
-        packages = discover_dynamic_maps(root)
-        package = next(item for item in packages if item.map_id == 60010)
-        built = materialize_dynamic_map(package)
+        repository_maps = Path(__file__).resolve().parents[1] / 'maps'
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(repository_maps / '60010', root / '60010')
+            package = discover_dynamic_maps(root)[0]
+            built = materialize_dynamic_map(package)
 
-        ref_data = built.map_ref_path.read_bytes()
-        map_o_data = built.map_o_path.read_bytes()
+            ref_data = built.map_ref_path.read_bytes()
+            map_o_data = built.map_o_path.read_bytes()
+
         info = inspect_map_ref(ref_data)
         parsed = MapO.from_file(map_o_data)
-
         self.assertEqual(hashlib.sha256(ref_data).hexdigest(), EXPECTED_REF_SHA256)
         self.assertEqual(hashlib.sha256(map_o_data).hexdigest(), EXPECTED_MAP_O_SHA256)
         self.assertEqual(info.composite_tile_count, 6)
