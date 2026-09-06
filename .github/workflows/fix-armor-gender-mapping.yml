@@ -1,0 +1,61 @@
+name: Fix armor gender mapping
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/fix-armor-gender-mapping.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply armor gender mapping correction
+        run: python .github/scripts/fix_armor_gender_mapping.py
+      - name: Regenerate equipment preview catalog
+        working-directory: implementation_staging
+        env:
+          PYTHONPATH: .
+        run: python tools/build_equipment_resource_preview_items.py
+      - name: Run focused regressions
+        working-directory: implementation_staging
+        run: >-
+          python -m unittest
+          tests.test_armor_appearance_mapping
+          tests.test_armor_inventory_migration
+          tests.test_armor_downlink
+          tests.test_item_registry
+      - name: Verify gendered preview icons
+        working-directory: implementation_staging
+        env:
+          PYTHONPATH: .
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8'))
+          armor = {int(i['appearance_properties']['2']): int(i['icon_code']) for i in data['items'] if int(i.get('equipment_slot', 0)) == 3}
+          assert [armor[i] for i in range(11, 21)] == list(range(1300, 1310)), armor
+          assert [armor[i] for i in range(21, 31)] == list(range(1200, 1210)), armor
+          print('armor gendered preview icon mapping verified')
+          PY
+      - name: Commit verified correction and remove temporary files
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          rm -f .github/workflows/fix-armor-gender-mapping.yml
+          rm -f .github/scripts/fix_armor_gender_mapping.py
+          rmdir .github/scripts 2>/dev/null || true
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: correct male and female armor icon mapping'
+          git fetch origin master
+          git rebase origin/master
+          git push origin HEAD:master
