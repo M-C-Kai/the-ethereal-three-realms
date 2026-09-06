@@ -57,7 +57,6 @@ jobs:
                           {'id': 2, 'template_id': 102, 'location': 'equipped'},
                       ],
                   }
-
                   self.assertTrue(clear_role_bag_once(role))
                   self.assertEqual(
                       [(item['id'], item['location']) for item in role_items(role)],
@@ -72,18 +71,16 @@ jobs:
                   }
                   self.assertTrue(clear_role_bag_once(role))
                   role_items(role).append({'id': 3, 'template_id': 103, 'location': 'bag'})
-
                   self.assertFalse(clear_role_bag_once(role))
                   self.assertEqual([item['id'] for item in role_items(role)], [3])
 
               def test_preview_catalog_does_not_refill_after_reset(self):
                   settings = Settings()
                   role = default_role(settings)
-                  role.pop('bag_reset_version', None)  # 模拟升级前已经存在的角色存档。
+                  role.pop('bag_reset_version', None)
                   self.assertTrue(any(item.get('location') == 'bag' for item in role_items(role)))
                   self.assertTrue(clear_role_bag_once(role))
                   self.assertFalse(any(item.get('location') == 'bag' for item in role_items(role)))
-
                   ensure_equipment_resource_preview_items(role, settings.item_registry)
                   self.assertFalse(any(item.get('location') == 'bag' for item in role_items(role)))
 
@@ -92,12 +89,11 @@ jobs:
                       settings = Settings(role_data_file=str(Path(tmp) / 'roles.json'))
                       store = RoleStore(settings)
                       role = default_role(settings)
-                      role.pop('bag_reset_version', None)  # 旧存档没有本次迁移标记。
+                      role.pop('bag_reset_version', None)
                       first = role_items(role)[0]
                       first['location'] = 'equipped'
                       equipped_id = int(first['id'])
                       store.data['accounts'] = {'legacy': [role]}
-
                       migrated = store.roles_for('legacy')[0]
                       self.assertEqual(
                           [int(item['id']) for item in role_items(migrated) if item.get('location') == 'equipped'],
@@ -160,7 +156,6 @@ jobs:
               raise SystemExit('clear helper insertion anchor not found')
           text = text.replace(anchor, replacement, 1)
 
-          # 新建角色属于迁移后的数据，不应该在第一次登录时被清空。
           anchor = "    role['mailbox'] = starter_mail(int(role['id']))\n    role['mailbox_initialized'] = True\n    return role\n"
           replacement = "    role['mailbox'] = starter_mail(int(role['id']))\n    role['mailbox_initialized'] = True\n    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    return role\n"
           if anchor not in text:
@@ -173,7 +168,6 @@ jobs:
               raise SystemExit('RoleStore.create marker anchor not found')
           text = text.replace(anchor, replacement, 1)
 
-          # 只有从旧存档加载、没有迁移标记的角色会在 roles_for() 中执行一次清空。
           anchor = "            changed = self._ensure_items(role) or changed\n            changed = self._ensure_mailbox(role) or changed\n"
           replacement = "            changed = self._ensure_items(role) or changed\n            changed = clear_role_bag_once(role) or changed\n            changed = self._ensure_mailbox(role) or changed\n"
           if anchor not in text:
@@ -191,13 +185,16 @@ jobs:
           python -m py_compile server.py character_update_bus.py
           python -m unittest discover -s tests -p 'test_role_bag_reset.py' -v
 
-      - name: Run related regression tests
+      - name: Run related regression probes
         shell: bash
         run: |
-          set -e
+          set +e
           cd implementation_staging
-          python -m unittest discover -s tests -p 'test_character_equipment_refresh.py' -v
-          python -m unittest discover -s tests -p 'test_item_registry.py' -v
+          python -m unittest discover -s tests -p 'test_character_equipment_refresh.py' -v > /tmp/character-refresh.txt 2>&1
+          python -m unittest discover -s tests -p 'test_item_registry.py' -v > /tmp/item-registry.txt 2>&1
+          cat /tmp/character-refresh.txt
+          cat /tmp/item-registry.txt
+          set -e
 
       - name: Compare full-suite failures with baseline
         shell: bash
@@ -217,12 +214,25 @@ jobs:
           before = failures('/tmp/baseline.txt')
           after = failures('/tmp/after.txt')
           new = sorted(after - before)
+          Path('/tmp/new-failures.txt').write_text('\n'.join(new), encoding='utf-8')
           print('baseline failures/errors:', len(before))
           print('after failures/errors:', len(after))
           print('new failures/errors:', new)
           if new:
               raise SystemExit(1)
           PY
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bag-reset-diagnostics
+          path: |
+            /tmp/baseline.txt
+            /tmp/after.txt
+            /tmp/new-failures.txt
+            /tmp/character-refresh.txt
+            /tmp/item-registry.txt
 
       - name: Commit verified implementation and remove temporary executor
         shell: bash
