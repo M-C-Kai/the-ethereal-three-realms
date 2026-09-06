@@ -38,11 +38,12 @@ class ArmorAppearanceMappingTests(unittest.TestCase):
             {value: 14000 + value for value in range(31)},
         )
 
-    def test_icon_mapping_covers_30_equippable_armors(self):
+    def test_icon_mapping_covers_30_equippable_armors_with_correct_gender_groups(self):
         expected = {}
-        for offset, base in enumerate((300, 1200, 1300)):
-            for frame in range(10):
-                expected[base + frame] = offset * 10 + frame + 1
+        for frame in range(10):
+            expected[300 + frame] = 1 + frame
+            expected[1300 + frame] = 11 + frame  # 3132424 女装
+            expected[1200 + frame] = 21 + frame  # 3122424 男装
         self.assertEqual(armor_icon_to_property2_mapping(), expected)
         for icon_code, property2 in expected.items():
             self.assertEqual(armor_property2_from_icon(icon_code), property2)
@@ -50,6 +51,16 @@ class ArmorAppearanceMappingTests(unittest.TestCase):
                 preview_appearance_properties(3, 0, {}, icon_code=icon_code),
                 {'2': property2},
             )
+
+    def test_gendered_icon_atlases_are_not_reversed(self):
+        data = json.loads(ARMOR_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
+        groups = {int(row['atlas_image_id']): row for row in data['gendered_icon_groups']}
+        self.assertEqual(groups[3122424]['gender'], 'male')
+        self.assertEqual(groups[3122424]['icon_range'], [1200, 1209])
+        self.assertEqual(groups[3122424]['property2_range'], [21, 30])
+        self.assertEqual(groups[3132424]['gender'], 'female')
+        self.assertEqual(groups[3132424]['icon_range'], [1300, 1309])
+        self.assertEqual(groups[3132424]['property2_range'], [11, 20])
 
     def test_resource_preview_templates_cover_30_equippable_armors(self):
         mapping = armor_resource_preview_template_mapping()
