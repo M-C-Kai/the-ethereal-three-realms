@@ -1,0 +1,2 @@
+ChatGPT GitHub connector write probe.
+Created on 2026-09-06 to verify repository write access.
