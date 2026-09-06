@@ -14,6 +14,7 @@ from pathlib import Path
 
 from item_registry import (
     ItemRegistry,
+    battle_weapon_field2_from_icon,
     default_item_registry,
 )
 from map_registry import (
@@ -1223,6 +1224,37 @@ def equipped_weapon_attack(role: dict[str, object]) -> int:
     if not attributes or type(attributes[0]) is not int:
         return 0
     return max(0, attributes[0])
+
+
+def equipped_weapon_battle_field2(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> int:
+    """Return APK 1048 field[2] for the currently equipped slot-10 weapon.
+
+    Map property7 and battle field[2] use different resource namespaces.
+    The equipment icon is the shared source of truth; the battle value is
+    derived through the user-confirmed icon-group -> battle-family mapping.
+    """
+    if registry is None:
+        registry = default_item_registry()
+    weapon = next(
+        (
+            item
+            for item in role_items(role)
+            if item.get('location') == 'equipped'
+            and is_equipment(item)
+            and item_slot(item, registry) == 10
+        ),
+        None,
+    )
+    if weapon is None:
+        return 0
+    resolved = registry.resolve(weapon)
+    return battle_weapon_field2_from_icon(
+        int(resolved.get('icon_code', 0)),
+        int(resolved.get('quality', 0)),
+    )
 
 
 def combat_stats(role: dict[str, object]) -> CombatStats:
@@ -3750,6 +3782,7 @@ def battle_actor_frame(
     slot: int = 1,
     model_is_battle_base: bool = False,
     appearance: dict[int, int] | None = None,
+    weapon_field2: int = 0,
     current_hp: int = 100,
     max_hp: int = 100,
     trace_id: str = '',
@@ -3757,7 +3790,8 @@ def battle_actor_frame(
     """Build the APK's 1048 actor record used to populate battle slots.
 
     ``main/e.af`` constructs ``work/b/h`` from field 7 (kind), field 9 (id),
-    field 2/0 (model source), field 5 (side/category), and field 8 (battle
+    field 2 (battle weapon image/quality for kind=1), field 0 (model source),
+    field 5 (side/category), and field 8 (battle
     station).  Field 21 is the face/body appearance preset: kind=1 reads it as
     the constructor's fourth argument and ``h.r()`` applies ``y(f(21))`` /
     ``M(f(21))``.  The remaining numeric fields are the zero/default stat
@@ -3775,7 +3809,7 @@ def battle_actor_frame(
     fields: list[Field] = [
         integer(source_model),  # 0: flags/model source
         integer(0),              # 1
-        integer(int(visible_layers.get(7, 0)) if kind == 1 else 0),  # 2: player weapon appearance/property 7
+        integer(max(0, int(weapon_field2)) if kind == 1 else 0),  # 2: battle weapon image*10 + quality
         integer(max(0, current_hp)),  # 3: current hp/status (used by h.d())
         integer(0),              # 4
         integer(side_code),      # 5: side/category
@@ -3854,6 +3888,7 @@ def battle_actor_frames(
             side_code=2,
             slot=1,
             appearance=character_appearance(role, getattr(settings, 'item_registry', None)),
+            weapon_field2=equipped_weapon_battle_field2(role, getattr(settings, 'item_registry', None)),
             current_hp=state.player_hp if state is not None else 100,
             max_hp=state.player_max_hp if state is not None else 100,
             trace_id=trace_id,
@@ -3893,6 +3928,7 @@ def battle_actor_update_frame(
             side_code=2,
             slot=1,
             appearance=character_appearance(role, getattr(settings, 'item_registry', None)),
+            weapon_field2=equipped_weapon_battle_field2(role, getattr(settings, 'item_registry', None)),
             current_hp=state.player_hp,
             max_hp=state.player_max_hp,
             trace_id=state.trace_id,

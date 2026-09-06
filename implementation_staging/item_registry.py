@@ -8,6 +8,52 @@ from typing import Any, Iterable, Sequence
 
 PREVIEW_QUALITY = 1
 PREVIEW_SERIAL_COLLISION_OFFSET = 50_000
+
+# User-confirmed visual mapping between equipment icon groups (21..33) and
+# the APK battle weapon image families.  This is a compatibility mapping
+# derived from the side-by-side resource sheets; it is not claimed to be
+# official server metadata.
+WEAPON_ICON_GROUP_TO_BATTLE_FAMILY = {
+    21: 220,
+    22: 260,
+    23: 271,
+    24: 250,
+    25: 231,
+    26: 280,
+    27: 242,
+    28: 240,
+    29: 241,
+    30: 221,
+    31: 290,
+    32: 270,
+    33: 230,
+}
+
+
+def battle_weapon_image_from_icon(icon_code: int) -> int:
+    """Map one 21xx..33xx weapon icon to its battle image id.
+
+    Each icon group exposes ten variants. Family 271 starts at 27101 rather
+    than 27100. Family 231 has two extra APK images (23110/23111) which are
+    intentionally not mapped because icon group 25 has only ten entries.
+    Unknown groups/variants return zero instead of inventing an appearance.
+    """
+    code = int(icon_code)
+    group = code // 100
+    variant = code % 100
+    family = WEAPON_ICON_GROUP_TO_BATTLE_FAMILY.get(group)
+    if family is None or not 0 <= variant <= 9:
+        return 0
+    return (family * 100) + variant + (1 if family == 271 else 0)
+
+
+def battle_weapon_field2_from_icon(icon_code: int, quality: int) -> int:
+    """Build APK 1048 field[2]: battle image * 10 + quality selector."""
+    image_id = battle_weapon_image_from_icon(icon_code)
+    quality_value = int(quality)
+    if image_id == 0 or not 0 <= quality_value <= 9:
+        return 0
+    return image_id * 10 + quality_value
 # Compatibility-preview pairing only. Not an official icon→appearance mapping.
 PREVIEW_SLOT_APPEARANCE_PROPERTY = {
     1: 20,

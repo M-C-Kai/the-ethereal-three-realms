@@ -69,11 +69,27 @@ image = 30000 + index * 100 + quality
 
 ---
 
-## UNKNOWN
+## COMPATIBILITY VISUAL MAPPING
 
-icon group `21..33` 到 battle `weapon_code` 的**完整映射仍未恢复**。
+根据本目录两张 contact sheet 的人工外观核对，兼容服采用以下 icon group → battle weapon family 映射：
 
-本目录两张 contact sheet 只是各自按组/族罗列实际图片，**禁止**按行号或视觉相似做左右配对。
+```text
+21 -> 220
+22 -> 260
+23 -> 271
+24 -> 250
+25 -> 231
+26 -> 280
+27 -> 242
+28 -> 240
+29 -> 241
+30 -> 221
+31 -> 290
+32 -> 270
+33 -> 230
+```
+
+这是用户确认的**视觉兼容映射**，用于让装备图标与战斗武器外观对齐；不是从原服务器配置中恢复出的官方映射。代码以 `item_registry.WEAPON_ICON_GROUP_TO_BATTLE_FAMILY` 为单一真源。每个 icon group 的 0..9 列对应该 battle family 的前十个实际 image；族 271 特殊为 `27101..27110`，族 231 仅取 `23100..23109`，额外的 `23110/23111` 不映射。
 
 ---
 
