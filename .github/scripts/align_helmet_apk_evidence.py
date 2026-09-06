@@ -1,0 +1,178 @@
+from pathlib import Path
+import json
+
+ROOT = Path('implementation_staging')
+APK_SHA256 = '34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5'
+UNRESOLVED = list(range(100, 110))
+ICON_FRAMES = {str(code): code - 100 for code in UNRESOLVED}
+ROLE_REFS = [
+    'assets/res/role/100000.dat',
+    'assets/res/role/101000.dat',
+    'assets/res/role/102000.dat',
+    'assets/res/role/104000.dat',
+    'assets/res/role/105000.dat',
+    'assets/res/role/110000.dat',
+    'assets/res/role/120000.dat',
+    'assets/res/role/130000.dat',
+    'assets/res/role/140000.dat',
+]
+
+mapping = {
+    'version': 1,
+    'kind': 'helmet_appearance_mapping',
+    'status': 'unresolved_mapping',
+    'source': 'direct extraction from piaomiao_local_login.apk + client smali evidence',
+    'apk_sha256': APK_SHA256,
+    'description': (
+        'APK proves the helmet inventory icon strip and the character property20 resource rule, '
+        'but no icon_code -> property20 relation was recovered. No pair is guessed.'
+    ),
+    'property': 20,
+    'image_base': 21000,
+    'icon_resource': {
+        'image_id': 3012424,
+        'width': 240,
+        'height': 24,
+        'frame_width': 24,
+        'frame_height': 24,
+        'icon_to_frame': ICON_FRAMES,
+        'client_rule': (
+            'a/c/x.f(icon_code): frame=icon_code%100; '
+            'resource=3000000+((icon_code%10000)//100)*10000+2424'
+        ),
+    },
+    'appearance_resource': {
+        'client_rule': 'pmsj/work/b/v.F(property20): image_id=21000+property20; 0 clears layer10',
+        'candidate_property20_values': [3],
+        'candidate_image_ids': [21003],
+        'candidate_dimensions': {'21003': [166, 101]},
+        'role_dat_references': ROLE_REFS,
+        'note': (
+            'images.o contains only image 21003 in the 21000..21999 range. '
+            'This proves one packaged head-layer resource, not which inventory helmet icon uses it.'
+        ),
+    },
+    'notes': [
+        'icon_code 100..109 are the ten frames of APK image 3012424.',
+        'property20=N selects character layer10 image 21000+N.',
+        'The uploaded APK exposes only 21003 as a 21xxx image resource.',
+        'No client table, formula, or saved original-server evidence links any icon 100..109 to property20=3.',
+        'Other helmet appearance resources may have been supplied dynamically by the original resource service and are not packaged in this APK.',
+        'The old compatibility pair icon 109 -> property20 3 was local data, not APK evidence, and is removed.',
+        'Unknown or unresolved helmet icons resolve to 0/no added helmet layer.',
+    ],
+    'candidate_property20_values': [3],
+    'candidate_image_ids': [21003],
+    'icon_to_property20': {},
+    'unresolved_icon_codes': UNRESOLVED,
+}
+(ROOT / 'data/catalog/helmet_appearance_mapping.json').write_text(
+    json.dumps(mapping, ensure_ascii=False, indent=2) + '\n',
+    encoding='utf-8',
+)
+
+# Remove the old local compatibility assumption from the actual item catalog.
+items_path = ROOT / 'data/catalog/items.json'
+items_payload = json.loads(items_path.read_text(encoding='utf-8'))
+removed = []
+for item in items_payload['items']:
+    if int(item.get('equipment_slot', 0)) != 1:
+        continue
+    icon_code = int(item.get('icon_code', 0))
+    if icon_code not in UNRESOLVED:
+        continue
+    props = item.get('appearance_properties')
+    if isinstance(props, dict) and '20' in props:
+        removed.append((int(item['template_id']), icon_code, int(props['20'])))
+        props.pop('20', None)
+        if not props:
+            item.pop('appearance_properties', None)
+items_path.write_text(
+    json.dumps(items_payload, ensure_ascii=False, indent=2) + '\n',
+    encoding='utf-8',
+)
+print('removed unverified helmet appearance values:', removed)
+
+# Persist the direct APK resource audit separately from runtime mapping data.
+audit_dir = ROOT / 'references/helmet-appearance-audit'
+audit_dir.mkdir(parents=True, exist_ok=True)
+audit_manifest = {
+    'version': 1,
+    'apk_sha256': APK_SHA256,
+    'extracted_image_count': 1197,
+    'equipment_icon_strip': {
+        'image_id': 3012424,
+        'dimensions': [240, 24],
+        'frame_size': [24, 24],
+        'icon_to_frame': ICON_FRAMES,
+    },
+    'property20_images_in_apk': [
+        {'property20': 3, 'image_id': 21003, 'dimensions': [166, 101]}
+    ],
+    'role_dat_references_to_21003': ROLE_REFS,
+    'confirmed_icon_to_property20': {},
+    'status': 'no_direct_mapping_recovered',
+}
+(audit_dir / 'manifest.json').write_text(
+    json.dumps(audit_manifest, ensure_ascii=False, indent=2) + '\n',
+    encoding='utf-8',
+)
+readme_lines = [
+    '# 头盔外观 APK 资源审计',
+    '',
+    '本目录记录直接从 `piaomiao_local_login.apk` 提取并复核的头盔资源证据。',
+    '',
+    '## 已确认',
+    '',
+    '- 装备栏头盔图标 `0100..0109` 来自 APK 图片资源 `3012424`（240x24），每格 24x24，frame 为 `icon_code % 100`。',
+    '- 客户端 `pmsj/work/b/v.F(I)` 对人物 property 20 的处理是：`image_id = 21000 + property20`；0 清空 layer10。',
+    '- APK 的 `images.o` 在 `21000..21999` 范围内只索引到 `21003`（166x101），所以当前 APK 内唯一可用的非零 property20 候选是 3。',
+    '- `21003` 被 9 个基础 role DAT 引用：100000/101000/102000/104000/105000/110000/120000/130000/140000。',
+    '',
+    '## 未恢复',
+    '',
+    'APK 客户端没有恢复出 `icon_code -> property20` 的装备模板表、公式或其他直接关联。',
+    '因此不能把 `0100..0109` 中任意一项武断指定为 `property20=3`，也不能按序号映射到并不存在的 `21000..21009`。',
+    '',
+    '其他头盔人物图层可能由原服资源服务动态下发，并未打包进当前 APK。',
+    '旧兼容数据中的 `0109 -> property20=3` 不是 APK 官方映射，已从运行数据移除。',
+    '后续拿到原服务端装备模板、真实抓包或动态资源包后，只更新 `data/catalog/helmet_appearance_mapping.json` 即可。',
+    '',
+]
+(audit_dir / 'README.md').write_text('\n'.join(readme_lines), encoding='utf-8')
+
+# Update the stale regression that encoded the removed compatibility assumption.
+test_path = ROOT / 'tests/test_item_registry.py'
+test_text = test_path.read_text(encoding='utf-8')
+old_name = '    def test_helmet_appearance_applied_from_registry(self):'
+new_name = '    def test_unresolved_helmet_does_not_apply_unverified_property20(self):'
+old_assert = '        self.assertEqual(appearance.get(20), 3)'
+new_assert = '        self.assertEqual(appearance.get(20), 0)'
+if old_name not in test_text or old_assert not in test_text:
+    raise SystemExit('stale helmet registry test anchor not found')
+test_text = test_text.replace(old_name, new_name, 1).replace(old_assert, new_assert, 1)
+test_path.write_text(test_text, encoding='utf-8')
+
+# Add a regression that locks the direct APK resource facts without inventing a mapping.
+apk_test = ROOT / 'tests/test_helmet_apk_resource_evidence.py'
+apk_test.write_text(
+    "import json\n"
+    "import unittest\n"
+    "from pathlib import Path\n\n"
+    "ROOT = Path(__file__).resolve().parents[1]\n"
+    "MAPPING = ROOT / 'data/catalog/helmet_appearance_mapping.json'\n"
+    "AUDIT = ROOT / 'references/helmet-appearance-audit/manifest.json'\n\n"
+    "class HelmetApkResourceEvidenceTests(unittest.TestCase):\n"
+    "    def test_real_apk_icon_strip_is_recorded(self):\n"
+    "        data = json.loads(MAPPING.read_text(encoding='utf-8'))\n"
+    "        self.assertEqual(data['apk_sha256'], '34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5')\n"
+    "        self.assertEqual(data['icon_resource']['image_id'], 3012424)\n"
+    "        self.assertEqual(data['icon_resource']['icon_to_frame'], {str(code): code - 100 for code in range(100, 110)})\n\n"
+    "    def test_only_packaged_property20_candidate_is_21003(self):\n"
+    "        data = json.loads(AUDIT.read_text(encoding='utf-8'))\n"
+    "        self.assertEqual(data['property20_images_in_apk'], [{'property20': 3, 'image_id': 21003, 'dimensions': [166, 101]}])\n"
+    "        self.assertEqual(data['confirmed_icon_to_property20'], {})\n\n"
+    "if __name__ == '__main__':\n"
+    "    unittest.main()\n",
+    encoding='utf-8',
+)
