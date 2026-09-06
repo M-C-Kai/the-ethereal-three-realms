@@ -110,10 +110,10 @@ def dynamic_load_map_registry(payload, npc_catalog=None, appearance_catalog=None
     )
 
 
-# Patch only the two compatibility seams required by server-delivered maps.
-# Existing dispatch, battle, NPC, inventory and persistence code stays in server.py.
-_server.map_enter_frames = dynamic_map_enter_frames
-_server.load_map_registry = dynamic_load_map_registry
+def install_dynamic_map_support() -> None:
+    """Install launcher-only hooks without polluting modules that merely import us."""
+    _server.map_enter_frames = dynamic_map_enter_frames
+    _server.load_map_registry = dynamic_load_map_registry
 
 
 def main() -> None:
@@ -128,6 +128,7 @@ def main() -> None:
             built.map_o_bytes,
         )
     LOG.info('DYNAMIC_MAP_SCAN count=%d', len(built_maps))
+    install_dynamic_map_support()
     _server.main()
 
 
