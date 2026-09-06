@@ -1,4 +1,3 @@
-\
 """Regression coverage for the APK six-field 1143/action-5 direct-use path."""
 from __future__ import annotations
 
