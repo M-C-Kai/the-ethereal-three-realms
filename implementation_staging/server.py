@@ -18,6 +18,7 @@ from item_registry import (
     battle_weapon_field2_from_icon,
     default_item_registry,
     deprecated_armor_template_ids,
+    deprecated_mount_template_ids,
     deprecated_unsupported_equipment_template_ids,
 )
 from map_registry import (
@@ -1743,12 +1744,15 @@ def ensure_equipment_resource_preview_items(
         role['bag_capacity'] = new_capacity
         changed = True
     items = role_items(role)
+    deprecated_mounts = deprecated_mount_template_ids()
     deprecated_templates = (
         deprecated_armor_template_ids()
         | deprecated_unsupported_equipment_template_ids()
+        | deprecated_mounts
     )
     kept_items: list[dict[str, object]] = []
     removed_deprecated = False
+    removed_deprecated_mount = False
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -1758,11 +1762,16 @@ def ensure_equipment_resource_preview_items(
             template_id = 0
         if template_id in deprecated_templates:
             removed_deprecated = True
+            if template_id in deprecated_mounts:
+                removed_deprecated_mount = True
             continue
         kept_items.append(item)
     if removed_deprecated:
         role['items'] = kept_items
         items = role_items(role)
+        changed = True
+    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:
+        role['mount_model'] = 0
         changed = True
     present = {
         int(item.get('template_id', 0))

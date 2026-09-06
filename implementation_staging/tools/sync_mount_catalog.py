@@ -91,40 +91,8 @@ def projected_documents(catalog: dict, items_doc: dict, starter_doc: dict) -> tu
             and int(row.get('template_id', 0)) in old_mount_ids
         )
     ]
-    reserved_offsets = {
-        int(row['instance_offset'])
-        for row in base_starter
-        if isinstance(row, dict)
-    }
-    named = catalog.get('named_templates', {})
-    image_by_template = {
-        int(meta['template_id']): int(image_id)
-        for image_id, meta in named.items()
-        if isinstance(meta, dict) and 'template_id' in meta
-    }
-    next_offset = int(catalog['item_projection']['starter_offset_start'])
-    starter_mounts = []
-    for row in mount_rows:
-        template_id = int(row['template_id'])
-        image_id = image_by_template.get(template_id)
-        known = named.get(str(image_id), {}) if image_id is not None else {}
-        if 'starter_offset' in known:
-            offset = int(known['starter_offset'])
-            if offset in reserved_offsets:
-                raise ValueError(f'named mount starter offset collides: {offset}')
-        else:
-            while next_offset in reserved_offsets:
-                next_offset += 1
-            offset = next_offset
-            next_offset += 1
-        reserved_offsets.add(offset)
-        starter_mounts.append({
-            'template_id': template_id,
-            'instance_offset': offset,
-            'quantity': 1,
-            'location': 'bag',
-        })
-    projected_starter['items'] = base_starter + starter_mounts
+    # Riding appearances are atlas/catalog resources, not default ownership.
+    projected_starter['items'] = base_starter
     return projected_items, projected_starter
 
 
@@ -154,7 +122,7 @@ def main() -> None:
 
     ITEMS.write_text(expected_items, encoding='utf-8')
     STARTER.write_text(expected_starter, encoding='utf-8')
-    print(f'synced {catalog["count"]} mounts into items/starter projections')
+    print(f'synced {catalog["count"]} mount item definitions; starter grants=0')
 
 
 if __name__ == '__main__':

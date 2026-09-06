@@ -54,15 +54,15 @@ class MountCatalogTests(unittest.TestCase):
                 self.assertEqual(definition.equipment_slot, 17)
                 self.assertEqual(definition.mount_model, ride_code)
 
-    def test_new_role_receives_all_54_mounts(self):
+    def test_new_role_receives_no_mounts_by_default(self):
         role = default_role(Settings())
         mount_items = []
         for item in role['items']:
             definition = self.registry.resolve(item)
             if definition.get('kind') == 'mount':
                 mount_items.append(definition)
-        self.assertEqual(len(mount_items), 54)
-        self.assertEqual(len({int(item['mount_model']) for item in mount_items}), 54)
+        self.assertEqual(mount_items, [])
+        self.assertEqual(int(role.get('mount_model', 0)), 0)
 
     def test_mount_update_writes_ride_code_to_character_property_22(self):
         role = {'id': 10001, 'mount_model': 1004}
