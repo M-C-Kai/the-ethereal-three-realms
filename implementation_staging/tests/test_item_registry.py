@@ -358,7 +358,7 @@ class ItemFrameReadsFromRegistryTests(unittest.TestCase):
 
 
 class CharacterAppearanceFromRegistryTests(unittest.TestCase):
-    def test_helmet_appearance_applied_from_registry(self):
+    def test_unresolved_helmet_does_not_apply_unverified_property20(self):
         settings = Settings()
         role = default_role(settings)
         helmet = next(
@@ -367,7 +367,7 @@ class CharacterAppearanceFromRegistryTests(unittest.TestCase):
         )
         helmet['location'] = 'equipped'
         appearance = character_appearance(role, settings.item_registry)
-        self.assertEqual(appearance.get(20), 3)
+        self.assertEqual(appearance.get(20), 0)
 
 
 class RegressionTests(unittest.TestCase):

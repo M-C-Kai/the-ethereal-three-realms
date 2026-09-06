@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "apk_sha256": "34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5",
+  "extracted_image_count": 1197,
+  "equipment_icon_strip": {
+    "image_id": 3012424,
+    "dimensions": [
+      240,
+      24
+    ],
+    "frame_size": [
+      24,
+      24
+    ],
+    "icon_to_frame": {
+      "100": 0,
+      "101": 1,
+      "102": 2,
+      "103": 3,
+      "104": 4,
+      "105": 5,
+      "106": 6,
+      "107": 7,
+      "108": 8,
+      "109": 9
+    }
+  },
+  "property20_images_in_apk": [
+    {
+      "property20": 3,
+      "image_id": 21003,
+      "dimensions": [
+        166,
+        101
+      ]
+    }
+  ],
+  "role_dat_references_to_21003": [
+    "assets/res/role/100000.dat",
+    "assets/res/role/101000.dat",
+    "assets/res/role/102000.dat",
+    "assets/res/role/104000.dat",
+    "assets/res/role/105000.dat",
+    "assets/res/role/110000.dat",
+    "assets/res/role/120000.dat",
+    "assets/res/role/130000.dat",
+    "assets/res/role/140000.dat"
+  ],
+  "confirmed_icon_to_property20": {},
+  "status": "no_direct_mapping_recovered"
+}

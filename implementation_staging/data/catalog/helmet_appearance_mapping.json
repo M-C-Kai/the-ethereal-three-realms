@@ -2,16 +2,66 @@
   "version": 1,
   "kind": "helmet_appearance_mapping",
   "status": "unresolved_mapping",
-  "source": "APK equipment icon resources + character appearance property20 audit + EQUIPMENT_TEMPLATE_EVIDENCE.md",
-  "description": "No icon_code -> property20 pair is currently proven by saved APK evidence. The client property20 resource rule is known, but icon association remains unresolved.",
+  "source": "direct extraction from piaomiao_local_login.apk + client smali evidence",
+  "apk_sha256": "34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5",
+  "description": "APK proves the helmet inventory icon strip and the character property20 resource rule, but no icon_code -> property20 relation was recovered. No pair is guessed.",
   "property": 20,
   "image_base": 21000,
+  "icon_resource": {
+    "image_id": 3012424,
+    "width": 240,
+    "height": 24,
+    "frame_width": 24,
+    "frame_height": 24,
+    "icon_to_frame": {
+      "100": 0,
+      "101": 1,
+      "102": 2,
+      "103": 3,
+      "104": 4,
+      "105": 5,
+      "106": 6,
+      "107": 7,
+      "108": 8,
+      "109": 9
+    },
+    "client_rule": "a/c/x.f(icon_code): frame=icon_code%100; resource=3000000+((icon_code%10000)//100)*10000+2424"
+  },
+  "appearance_resource": {
+    "client_rule": "pmsj/work/b/v.F(property20): image_id=21000+property20; 0 clears layer10",
+    "candidate_property20_values": [
+      3
+    ],
+    "candidate_image_ids": [
+      21003
+    ],
+    "candidate_dimensions": {
+      "21003": [
+        166,
+        101
+      ]
+    },
+    "role_dat_references": [
+      "assets/res/role/100000.dat",
+      "assets/res/role/101000.dat",
+      "assets/res/role/102000.dat",
+      "assets/res/role/104000.dat",
+      "assets/res/role/105000.dat",
+      "assets/res/role/110000.dat",
+      "assets/res/role/120000.dat",
+      "assets/res/role/130000.dat",
+      "assets/res/role/140000.dat"
+    ],
+    "note": "images.o contains only image 21003 in the 21000..21999 range. This proves one packaged head-layer resource, not which inventory helmet icon uses it."
+  },
   "notes": [
-    "Client rule confirmed: property20=N selects character layer image 21000+N.",
-    "Current appearance audit recovered only image 21003 as a property20 candidate.",
-    "The compatibility item 青纹盔 uses icon_code 109 and property20=3, but repository evidence explicitly says 青纹套装 is local compatibility data and must not be treated as an official icon-to-appearance mapping.",
-    "Therefore icon_code 100..109 are all unresolved until direct APK/resource or original-server evidence establishes a pair.",
-    "Unknown or unresolved icon_code values resolve to 0/no added helmet layer."
+    "icon_code 100..109 are the ten frames of APK image 3012424.",
+    "property20=N selects character layer10 image 21000+N.",
+    "The uploaded APK exposes only 21003 as a 21xxx image resource.",
+    "No client table, formula, or saved original-server evidence links any icon 100..109 to property20=3.",
+    "Other helmet appearance resources may have been supplied dynamically by the original resource service and are not packaged in this APK.",
+    "The old compatibility pair icon 109 -> property20 3 was local data, not APK evidence, and is removed.",
+    "Unknown or unresolved helmet icons resolve to 0/no added helmet layer."
   ],
   "candidate_property20_values": [
     3
