@@ -1,0 +1,92 @@
+name: Confirm helmet 0102 appearance
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/confirm-helmet-0102.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply catalog-backed helmet mapping
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('implementation_staging')
+          mapping_path = root / 'data/catalog/helmet_appearance_mapping.json'
+          data = json.loads(mapping_path.read_text(encoding='utf-8'))
+          data['status'] = 'compatibility_mapping'
+          data['source'] = 'direct APK extraction + visual match + user-confirmed compatibility rule'
+          data['description'] = (
+              'The APK packages only one nonzero helmet character layer (property20=3 / image 21003). '
+              'For compatibility, icon 0102 is mapped to that layer; all other helmet icons 0100..0109 '
+              'are explicitly treated as having no visible character helmet layer.'
+          )
+          data['icon_to_property20'] = {'102': 3}
+          data['no_appearance_icon_codes'] = [100, 101, 103, 104, 105, 106, 107, 108, 109]
+          data['unresolved_icon_codes'] = []
+          data['mapping_decision'] = {
+              'icon_code': 102,
+              'property20': 3,
+              'image_id': 21003,
+              'evidence_level': 'compatibility_confirmed',
+              'note': (
+                  'APK does not contain an official icon->property20 table. The relation is retained as a '
+                  'compatibility rule because 21003 is the only packaged nonzero helmet layer and visually '
+                  'matches icon 0102; the user confirmed 0102 is the only helmet set expected to have appearance.'
+              ),
+          }
+          notes = [
+              'icon_code 100..109 are the ten frames of APK image 3012424.',
+              'property20=N selects character layer10 image 21000+N.',
+              'The uploaded APK exposes only 21003 as a 21xxx image resource.',
+              'The APK itself does not contain an official icon_code -> property20 relation table.',
+              'Compatibility decision: icon 0102 uses property20=3 / image 21003.',
+              'Compatibility decision: icon 0100,0101,0103..0109 intentionally have no visible helmet layer.',
+              'Runtime reads this catalog only; unknown icon codes still resolve to 0.'
+          ]
+          data['notes'] = notes
+          mapping_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          test_path = root / 'tests/test_helmet_appearance_mapping.py'
+          test_path.write_text('''import json\nimport sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n\nfrom item_registry import (\n    HELMET_APPEARANCE_MAPPING_FILE,\n    helmet_icon_to_property20_mapping,\n    helmet_property20_from_icon,\n)\n\n\nclass HelmetAppearanceMappingTests(unittest.TestCase):\n    def test_catalog_records_0102_as_only_visible_helmet(self):\n        payload = json.loads(HELMET_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))\n        self.assertEqual(payload['property'], 20)\n        self.assertEqual(payload['image_base'], 21000)\n        self.assertEqual(payload['candidate_property20_values'], [3])\n        self.assertEqual(payload['candidate_image_ids'], [21003])\n        self.assertEqual(payload['icon_to_property20'], {'102': 3})\n        self.assertEqual(payload['no_appearance_icon_codes'], [100, 101, 103, 104, 105, 106, 107, 108, 109])\n        self.assertEqual(payload['unresolved_icon_codes'], [])\n\n    def test_runtime_reads_only_catalog_mapping(self):\n        self.assertEqual(helmet_icon_to_property20_mapping(), {102: 3})\n        self.assertEqual(helmet_property20_from_icon(102), 3)\n        for icon_code in [100, 101, 103, 104, 105, 106, 107, 108, 109, 9999]:\n            self.assertEqual(helmet_property20_from_icon(icon_code), 0, icon_code)\n\n    def test_preview_catalog_applies_only_0102_helmet_layer(self):\n        root = Path(__file__).resolve().parents[1]\n        preview = json.loads((root / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8'))['items']\n        helmets = {int(item['icon_code']): item['appearance_properties'] for item in preview if int(item.get('equipment_slot', 0)) == 1}\n        self.assertEqual(sorted(helmets), list(range(100, 110)))\n        self.assertEqual(helmets[102], {'20': 3})\n        for icon_code in [100, 101, 103, 104, 105, 106, 107, 108, 109]:\n            self.assertEqual(helmets[icon_code], {}, icon_code)\n\n\nif __name__ == '__main__':\n    unittest.main()\n''', encoding='utf-8')
+
+          audit_path = root / 'references/helmet-appearance-audit/manifest.json'
+          audit = json.loads(audit_path.read_text(encoding='utf-8'))
+          audit['compatibility_icon_to_property20'] = {'102': 3}
+          audit['no_appearance_icon_codes'] = [100, 101, 103, 104, 105, 106, 107, 108, 109]
+          audit['status'] = 'apk_resources_verified_compatibility_mapping_applied'
+          audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Regenerate preview catalog
+        working-directory: implementation_staging
+        env:
+          PYTHONPATH: .
+        run: python tools/build_equipment_resource_preview_items.py
+
+      - name: Run affected tests
+        working-directory: implementation_staging
+        run: |
+          python -m unittest tests.test_helmet_appearance_mapping tests.test_helmet_apk_resource_evidence tests.test_item_registry
+
+      - name: Commit verified changes
+        run: |
+          rm -f .github/workflows/confirm-helmet-0102.yml
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: map the only visible helmet appearance to 0102'
+          git push origin HEAD:master
