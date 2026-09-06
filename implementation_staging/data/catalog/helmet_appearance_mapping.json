@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "kind": "helmet_appearance_mapping",
+  "status": "evidence_backed_partial_mapping",
+  "source": "APK equipment icon resources + character appearance property20 audit",
+  "description": "Compatibility-server mapping from helmet icon_code to character appearance property 20. Only evidence-backed pairs are mapped; unresolved icons are never guessed.",
+  "property": 20,
+  "image_base": 21000,
+  "notes": [
+    "property20=N selects character layer image 21000+N.",
+    "icon_code 109 is the currently confirmed pair: property20=3 -> image 21003.",
+    "icon_code 100..108 remain unresolved because the current APK appearance audit recovered no additional property20 candidates.",
+    "Unknown or unresolved icon_code values resolve to 0/no added helmet layer."
+  ],
+  "icon_to_property20": {
+    "109": 3
+  },
+  "unresolved_icon_codes": [
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108
+  ]
+}

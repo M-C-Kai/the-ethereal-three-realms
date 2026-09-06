@@ -10,7 +10,7 @@
     "not_official_equipment_template": true,
     "appearance_pairing": "confirmed_visual_weapon_family_mapping",
     "appearance_not_official_icon_mapping": true,
-    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。防具 appearance_properties 引用 appearance-layer-audit 人物图层候选。武器 property7 使用用户按 APK 资源图确认的 icon group→weapon family 映射；地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。"
+    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。头盔 property20 使用 helmet_appearance_mapping.json 的证据映射，未解析图标不猜。其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。武器 property7 使用 weapon_appearance_mapping.json 的证据映射；地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。"
   },
   "items": [
     {
@@ -32,9 +32,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001011,
@@ -55,9 +53,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001021,
@@ -78,9 +74,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001031,
@@ -101,9 +95,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001041,
@@ -124,9 +116,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001051,
@@ -147,9 +137,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001061,
@@ -170,9 +158,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001071,
@@ -193,9 +179,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001081,
@@ -216,9 +200,7 @@
         0,
         0
       ],
-      "appearance_properties": {
-        "20": 3
-      }
+      "appearance_properties": {}
     },
     {
       "template_id": 10001091,

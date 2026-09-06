@@ -13,6 +13,9 @@ PREVIEW_SERIAL_COLLISION_OFFSET = 50_000
 WEAPON_APPEARANCE_MAPPING_FILE = (
     Path(__file__).resolve().parent / 'data' / 'catalog' / 'weapon_appearance_mapping.json'
 )
+HELMET_APPEARANCE_MAPPING_FILE = (
+    Path(__file__).resolve().parent / 'data' / 'catalog' / 'helmet_appearance_mapping.json'
+)
 
 
 @lru_cache(maxsize=1)
@@ -47,6 +50,39 @@ def weapon_icon_to_image_mapping() -> dict[int, int]:
     return dict(_weapon_icon_to_image_mapping())
 
 
+@lru_cache(maxsize=1)
+def _helmet_icon_to_property20_mapping() -> dict[int, int]:
+    """Load the evidence-backed helmet icon -> property20 mapping catalog."""
+    data = json.loads(HELMET_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
+    if not isinstance(data, dict) or int(data.get('version', 0)) != 1:
+        raise ValueError(f'invalid helmet appearance mapping catalog: {HELMET_APPEARANCE_MAPPING_FILE}')
+    if int(data.get('property', 0)) != 20 or int(data.get('image_base', 0)) != 21000:
+        raise ValueError(f'invalid helmet appearance property metadata: {HELMET_APPEARANCE_MAPPING_FILE}')
+    raw_mapping = data.get('icon_to_property20')
+    if not isinstance(raw_mapping, dict):
+        raise ValueError(f'helmet appearance mapping must be a dict: {HELMET_APPEARANCE_MAPPING_FILE}')
+    mapping: dict[int, int] = {}
+    for raw_icon, raw_value in raw_mapping.items():
+        icon_code = int(raw_icon)
+        property_value = int(raw_value)
+        if icon_code <= 0 or property_value <= 0:
+            raise ValueError(f'invalid helmet appearance pair {raw_icon!r}->{raw_value!r}')
+        if icon_code in mapping:
+            raise ValueError(f'duplicate helmet icon_code after normalization: {icon_code}')
+        mapping[icon_code] = property_value
+    return mapping
+
+
+def helmet_icon_to_property20_mapping() -> dict[int, int]:
+    """Return a copy of the catalog-backed helmet appearance mapping."""
+    return dict(_helmet_icon_to_property20_mapping())
+
+
+def helmet_property20_from_icon(icon_code: int) -> int:
+    """Resolve helmet property20 from the catalog; unresolved icons are not guessed."""
+    return _helmet_icon_to_property20_mapping().get(int(icon_code), 0)
+
+
 def battle_weapon_image_from_icon(icon_code: int) -> int:
     """Resolve one weapon image from the catalog; unknown icons are not guessed."""
     return _weapon_icon_to_image_mapping().get(int(icon_code), 0)
@@ -61,7 +97,6 @@ def battle_weapon_field2_from_icon(icon_code: int, quality: int) -> int:
     return image_id * 10 + quality_value
 # Compatibility-preview pairing only. Not an official icon→appearance mapping.
 PREVIEW_SLOT_APPEARANCE_PROPERTY = {
-    1: 20,
     2: 16,
     3: 15,
     5: 14,
@@ -160,6 +195,9 @@ def preview_appearance_properties(
     This is a compatibility preview pairing, not an official equipment mapping.
     """
     slot = int(equipment_slot)
+    if slot == 1:
+        value = helmet_property20_from_icon(icon_code)
+        return {'20': value} if value > 0 else {}
     if slot == 10:
         return {
             '7': preview_weapon_property7(icon_code)
