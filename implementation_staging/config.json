@@ -26,10 +26,11 @@
         "direction": 0
       },
       "npcs": [
-        {"id": 1900002, "name": "孙思邈", "label": "药王", "x": 50, "y": 64},
-        {"id": 1900003, "name": "接引真人", "label": "接引", "x": 34, "y": 50},
-        {"id": 1900004, "name": "赵公明", "label": "赵公明", "x": 11, "y": 21}
+        {"id": 1900002, "name": "孙思邈", "label": "药王", "appearance_key": "npc_95750", "x": 50, "y": 64},
+        {"id": 1900003, "name": "接引真人", "label": "接引", "appearance_key": "npc_96010", "x": 34, "y": 50},
+        {"id": 1900004, "name": "赵公明", "label": "赵公明", "appearance_key": "npc_95520", "x": 11, "y": 21}
       ],
+      "npc_appearance_gallery": true,
       "portals": [
         {
           "id": 580001,
