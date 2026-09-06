@@ -9,6 +9,20 @@
     "images_index": "assets/res/images/images.o",
     "packed_image": "assets/res/images/png{container}.p"
   },
+  "item_projection": {
+    "template_base": 170900000,
+    "equipment_slot": 17,
+    "icon_code": 6109,
+    "sort_group": 170,
+    "quality": 0,
+    "max_quantity": 1,
+    "price": 0,
+    "level_required": 1,
+    "equipment_attributes": [0, 0, 0, 0],
+    "starter_offset_start": 20,
+    "unnamed_name": "骑乘资源 {image_id}",
+    "description": "APK 骑乘资源 {image_id}。_属性22骑乘码={ride_code}，客户端骑乘人物模型={role_model}。装备后骑乘，卸下后下坐骑。"
+  },
   "rules": {
     "role_model": "101000 + ((ride_code % 10000) // 1000) * 1000",
     "primary_image": "image_base + (ride_code % 10000)"
@@ -22,12 +36,13 @@
     {"role_model": 106000, "image_ids": [45001, 45002]}
   ],
   "named_templates": {
-    "41004": {"template_id": 170410004, "name": "辟邪", "ride_code": 1004, "role_model": 102000}
+    "41004": {"template_id": 170410004, "starter_offset": 16, "name": "辟邪", "ride_code": 1004, "role_model": 102000}
   },
   "notes": [
     "character property 22 stores the ride code, not the 101000..106000 role-model id",
     "ride_code = image_id - image_base for the verified primary riding layer",
     "411xx resources are rider/saddle interface layers and are not counted as separate mounts",
-    "atlas generators must derive the primary image slot and representative animation group from each role DAT instead of hardcoding them"
+    "atlas generators must derive the primary image slot and representative animation group from each role DAT instead of hardcoding them",
+    "items.json and starter_inventory.json mount rows are generated projections of this catalog and are not independent sources of truth"
   ]
 }
