@@ -1,0 +1,453 @@
+name: Fix map weapon appearance mapping
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/fix-map-weapon-appearance.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Unify map and battle weapon encoding
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path('implementation_staging')
+
+          # item_registry.py: map property7 must use the same verified weapon encoding as battle field2.
+          path = root / 'item_registry.py'
+          text = path.read_text(encoding='utf-8')
+          old = '''def preview_weapon_property7(
+              icon_code: int,
+              preview_index_in_slot: int,
+              candidates: Sequence[dict[str, Any]],
+          ) -> int:
+              """Compatibility preview pairing for map-character property 7.
+
+              low4 comes from APK-confirmed resource candidates.
+              The high digits use icon_group = icon_code // 100 as local preview construction.
+              This is not an official icon_code → property7 mapping.
+              """
+              if not candidates:
+                  raise ItemCatalogError('weapon preview requires confirmed property7 candidates')
+              candidate = candidates[int(preview_index_in_slot) % len(candidates)]
+              icon_group = int(icon_code) // 100
+              low4 = int(candidate['property7_low4_candidate'])
+              return icon_group * 10_000 + low4
+          '''
+          new = '''def preview_weapon_property7(
+              icon_code: int,
+              quality: int = PREVIEW_QUALITY,
+          ) -> int:
+              """Return map-character property 7 for one preview weapon.
+
+              APK ``v.r()`` sends character property 7 to ``v.e(I)``.  That
+              method uses the same complete weapon encoding as battle 1048
+              field[2]: value / 10 is the weapon image and value % 10 is the
+              quality overlay selector.  The icon-group -> battle-family table
+              is therefore also the map weapon appearance mapping.
+              """
+              value = battle_weapon_field2_from_icon(icon_code, quality)
+              if value == 0:
+                  raise ItemCatalogError(f'unknown weapon appearance icon_code={icon_code}')
+              return value
+          '''
+          if old not in text:
+              raise SystemExit('preview_weapon_property7 old block not found')
+          text = text.replace(old, new, 1)
+
+          old_call = '''            '7': preview_weapon_property7(
+                          icon_code,
+                          preview_index_in_slot,
+                          weapon_candidates or (),
+                      )
+          '''
+          new_call = '''            '7': preview_weapon_property7(icon_code)
+          '''
+          if old_call not in text:
+              raise SystemExit('preview property7 call block not found')
+          text = text.replace(old_call, new_call, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # Generator: stop loading / cycling the obsolete property7 candidate list.
+          path = root / 'tools' / 'build_equipment_resource_preview_items.py'
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('''    confirmed_weapon_preview_candidates,\n''', '')
+          text = text.replace('''WEAPON_CANDIDATES_FILE = (\n    ROOT / 'references' / 'weapon-appearance-audit' / 'property7_candidates.json'\n)\n''', '')
+          old_load = '''    weapon_candidates = confirmed_weapon_preview_candidates(
+                  json.loads(WEAPON_CANDIDATES_FILE.read_text(encoding='utf-8'))
+              )
+              if not weapon_candidates:
+                  raise SystemExit('no confirmed weapon appearance candidates')
+          '''
+          if old_load not in text:
+              raise SystemExit('generator candidate load block not found')
+          text = text.replace(old_load, '', 1)
+          text = text.replace('''                weapon_candidates=weapon_candidates,\n''', '')
+          old_meta = '''                '武器 property7 低4位循环配对 weapon-appearance-audit 中 69 个 APK-confirmed 候选；'
+                          '高位使用 icon_group=icon_code//100，仅为 compatibility preview pairing，'
+                          '不是官方 icon_code→property7 映射。'
+          '''
+          new_meta = '''                '武器 property7 使用用户按 APK 资源图确认的 icon group→weapon family 映射；'
+                          'property7 与战斗 1048 field[2] 使用同一完整编码（image*10+quality）。'
+          '''
+          if old_meta not in text:
+              raise SystemExit('generator metadata block not found')
+          text = text.replace(old_meta, new_meta, 1)
+          text = text.replace("'appearance_pairing': 'compatibility_preview_pairing',", "'appearance_pairing': 'confirmed_visual_weapon_family_mapping',")
+          text = text.replace("'appearance_not_official_icon_mapping': True,", "'appearance_not_official_icon_mapping': True,")
+          path.write_text(text, encoding='utf-8')
+
+          # Official starter weapon uses icon 2701. User-confirmed group 27 -> family 242,
+          # image 24201, quality 1 => complete map/battle weapon code 242011.
+          path = root / 'data' / 'catalog' / 'items.json'
+          text = path.read_text(encoding='utf-8')
+          old_item = '''      "icon_code": 2701,
+                "quality": 1,
+                "sort_group": 100,
+                "sort_order": 10,
+                "equipment_attributes": [3, 0, 0, 0],
+                "appearance_properties": {
+                  "7": 270001
+                }
+          '''
+          new_item = '''      "icon_code": 2701,
+                "quality": 1,
+                "sort_group": 100,
+                "sort_order": 10,
+                "equipment_attributes": [3, 0, 0, 0],
+                "appearance_properties": {
+                  "7": 242011
+                }
+          '''
+          if old_item not in text:
+              raise SystemExit('starter weapon appearance block not found')
+          text = text.replace(old_item, new_item, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # Server helper becomes a direct assertion of the shared source of truth.
+          path = root / 'server.py'
+          text = path.read_text(encoding='utf-8')
+          old_helper = '''def equipped_weapon_battle_field2(
+              role: dict[str, object],
+              registry: ItemRegistry | None = None,
+          ) -> int:
+              """Return APK 1048 field[2] for the currently equipped slot-10 weapon.
+
+              Map property7 and battle field[2] use different resource namespaces.
+              The equipment icon is the shared source of truth; the battle value is
+              derived through the user-confirmed icon-group -> battle-family mapping.
+              """
+              if registry is None:
+                  registry = default_item_registry()
+              weapon = next(
+                  (
+                      item
+                      for item in role_items(role)
+                      if item.get('location') == 'equipped'
+                      and is_equipment(item)
+                      and item_slot(item, registry) == 10
+                  ),
+                  None,
+              )
+              if weapon is None:
+                  return 0
+              resolved = registry.resolve(weapon)
+              return battle_weapon_field2_from_icon(
+                  int(resolved.get('icon_code', 0)),
+                  int(resolved.get('quality', 0)),
+              )
+          '''
+          new_helper = '''def equipped_weapon_battle_field2(
+              role: dict[str, object],
+              registry: ItemRegistry | None = None,
+          ) -> int:
+              """Return the equipped weapon code shared by map property7 and 1048 field[2]."""
+              return int(character_appearance(role, registry).get(7, 0))
+          '''
+          if old_helper not in text:
+              raise SystemExit('server weapon helper old block not found')
+          text = text.replace(old_helper, new_helper, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # Correct the protocol lock: property 7 is v.e(I), while G(I) is property 22.
+          path = root / 'PROTOCOL_LOCK.md'
+          text = path.read_text(encoding='utf-8')
+          marker = '\n\n## 战斗武器外观一致性\n'
+          if marker not in text:
+              raise SystemExit('protocol lock weapon marker not found')
+          prefix = text.split(marker, 1)[0]
+          section = '''
+
+          ## 地图/战斗武器外观统一
+
+          APK `pmsj/work/b/v.r()` 明确把人物属性 `7` 交给 `v.e(I)`，而属性 `22` 才交给 `v.G(I)`。因此旧审计把 `H/I/G` 的 `40000` 资源路径归到 property7 是误判。
+
+          `v.e(I)` 对地图人物 property7 的解析与战斗武器完整编码一致：`property7 / 10` 是武器 image，`property7 % 10` 是品质覆盖层；当品质非 0 时，`property7 / 1000` 与固定 family 数组 `[241,220,290,231,280,250,270,271,242,240,260,221,230]` 比较，并选择 `30000 + family_index*100 + quality` 覆盖图。战斗 `1048 field[2]` 使用相同完整武器编码。
+
+          兼容服因此以装备 `icon_code` 为单一来源，并使用用户根据 APK 资源图确认的映射：`21→220, 22→260, 23→271, 24→250, 25→231, 26→280, 27→242, 28→240, 29→241, 30→221, 31→290, 32→270, 33→230`。族 271 的十个映射 image 为 `27101..27110`；族 231 只使用与 icon 25 组十列对应的 `23100..23109`，不自动占用额外 `23110/23111`。
+
+          对同一已装备武器必须满足：`character_appearance(role)[7] == 1048 field[2] == battle_weapon_field2_from_icon(icon_code, quality)`。卸下武器后三者均为 `0`。
+          '''
+          path.write_text(prefix + section, encoding='utf-8')
+
+          # Correct the legacy map-weapon audit README without deleting its archived evidence.
+          path = root / 'references' / 'weapon-appearance-audit' / 'README.md'
+          text = path.read_text(encoding='utf-8')
+          text = '''# 武器外观资源审计（历史 property7 误判修正）
+
+          本目录保留从 APK 提取的 `100000..110000` role DAT、`40000..49999` 图片 ID 与候选表，作为可复核历史资料；但这些候选**不再用于人物 property7 武器映射**。
+
+          ## CONFIRMED：人物 property7 的真实路径
+
+          `pmsj/work/b/v.r()` 中：
+
+          ```text
+          property 7  -> v.e(I)
+          property 22 -> v.G(I)
+          ```
+
+          因此旧版把 `H(I)/I(I)/G(I)` 的 `40000 + suffix` 路径解释成 property7 是误判；该路径实际由 property22 调用，不能继续拿 `property7_candidates.json` 给武器循环配对。
+
+          `v.e(I)` 对 property7 的解析：
+
+          ```text
+          weapon_image = property7 / 10
+          quality      = property7 % 10
+          weapon_family = property7 / 1000   # quality != 0 时用于覆盖层匹配
+          ```
+
+          family 固定数组：
+
+          ```text
+          [241, 220, 290, 231, 280, 250, 270, 271, 242, 240, 260, 221, 230]
+          ```
+
+          品质覆盖 image：`30000 + family_index * 100 + quality`。
+
+          因此地图人物 property7 与战斗 `1048 field[2]` 使用同一完整武器编码。兼容服当前使用用户根据资源 contact sheet 确认的 icon group→family 映射，代码单一真源为 `item_registry.WEAPON_ICON_GROUP_TO_BATTLE_FAMILY`。
+
+          ## LEGACY ARCHIVE
+
+          `property7_candidates.json`、`weapon_image_ids.json`、`role_manifest.json` 与 `role/*.dat` 继续保留，因为它们真实记录了 APK 中存在的 DAT/图片关系；只是此前对“这些资源属于 property7 武器路径”的解释错误。任何新代码都不得再用 69 个候选循环生成 slot10 武器 appearance。
+          '''
+          # Strip workflow indentation from the Markdown replacement.
+          text = '\n'.join(line[10:] if line.startswith('          ') else line for line in text.splitlines()) + '\n'
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Regenerate equipment preview catalog
+        working-directory: implementation_staging
+        run: PYTHONPATH=. python tools/build_equipment_resource_preview_items.py
+
+      - name: Rewrite weapon appearance regressions
+        shell: bash
+        run: |
+          cat > implementation_staging/tests/test_weapon_appearance_consistency.py <<'PY'
+          import json
+          import sys
+          import unittest
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+          from item_registry import (
+              WEAPON_ICON_GROUP_TO_BATTLE_FAMILY,
+              battle_weapon_field2_from_icon,
+              battle_weapon_image_from_icon,
+              default_item_registry,
+          )
+          from protocol import decode_frame, field_values
+          from server import (
+              Settings,
+              battle_actor_frames,
+              character_appearance,
+              equipped_weapon_battle_field2,
+          )
+
+          EXPECTED_FAMILIES = {
+              21: 220, 22: 260, 23: 271, 24: 250, 25: 231, 26: 280,
+              27: 242, 28: 240, 29: 241, 30: 221, 31: 290, 32: 270, 33: 230,
+          }
+
+
+          class WeaponAppearanceConsistencyTests(unittest.TestCase):
+              def test_user_confirmed_icon_group_to_weapon_family_mapping(self):
+                  self.assertEqual(WEAPON_ICON_GROUP_TO_BATTLE_FAMILY, EXPECTED_FAMILIES)
+
+              def test_all_130_preview_weapons_use_same_map_and_battle_code(self):
+                  root = Path(__file__).resolve().parents[1]
+                  preview = json.loads(
+                      (root / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8')
+                  )
+                  manifest = json.loads(
+                      (root / 'references/battle-weapon-appearance-audit/manifest.json').read_text(encoding='utf-8')
+                  )
+                  weapons = [row for row in preview['items'] if int(row.get('equipment_slot', 0)) == 10]
+                  self.assertEqual(len(weapons), 130)
+                  for row in weapons:
+                      icon = int(row['icon_code'])
+                      quality = int(row['quality'])
+                      property7 = int(row['appearance_properties']['7'])
+                      expected = battle_weapon_field2_from_icon(icon, quality)
+                      self.assertEqual(property7, expected, icon)
+                      image = property7 // 10
+                      family = WEAPON_ICON_GROUP_TO_BATTLE_FAMILY[icon // 100]
+                      allowed = [int(v) for v in manifest['battle_weapon_families'][str(family)]]
+                      if family == 231:
+                          allowed = allowed[:10]
+                      self.assertIn(image, allowed, icon)
+
+              def test_special_rows_are_locked(self):
+                  self.assertEqual(battle_weapon_image_from_icon(2300), 27101)
+                  self.assertEqual(battle_weapon_image_from_icon(2309), 27110)
+                  self.assertEqual(battle_weapon_field2_from_icon(2300, 1), 271011)
+                  self.assertEqual(battle_weapon_field2_from_icon(2509, 1), 231091)
+                  self.assertEqual(battle_weapon_field2_from_icon(2701, 1), 242011)
+
+              def test_starter_weapon_map_and_battle_appearance_match(self):
+                  settings = Settings()
+                  role = {
+                      'id': 10001,
+                      'name': '测试角色',
+                      'model': 19,
+                      'items': [{
+                          'id': 1,
+                          'template_id': 100001001,
+                          'quantity': 1,
+                          'location': 'equipped',
+                      }],
+                  }
+                  map_property7 = character_appearance(role, settings.item_registry)[7]
+                  self.assertEqual(map_property7, 242011)
+                  self.assertEqual(equipped_weapon_battle_field2(role, settings.item_registry), map_property7)
+                  frame = battle_actor_frames(role, settings)[0]
+                  message_id, fields = decode_frame(frame)
+                  self.assertEqual(message_id, 1048)
+                  self.assertEqual(field_values(fields)[2], map_property7)
+
+              def test_preview_weapon_map_and_battle_appearance_match(self):
+                  root = Path(__file__).resolve().parents[1]
+                  preview = json.loads(
+                      (root / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8')
+                  )
+                  item = next(
+                      row for row in preview['items']
+                      if int(row.get('equipment_slot', 0)) == 10 and int(row.get('icon_code', 0)) == 3200
+                  )
+                  registry = default_item_registry()
+                  role = {
+                      'id': 10001, 'name': '测试角色', 'model': 19,
+                      'items': [{'id': 1, 'template_id': int(item['template_id']), 'quantity': 1, 'location': 'equipped'}],
+                  }
+                  map_property7 = character_appearance(role, registry)[7]
+                  self.assertEqual(map_property7, 270001)
+                  self.assertEqual(equipped_weapon_battle_field2(role, registry), map_property7)
+                  frame = battle_actor_frames(role, Settings(item_registry=registry))[0]
+                  _, fields = decode_frame(frame)
+                  self.assertEqual(field_values(fields)[2], map_property7)
+
+              def test_no_equipped_weapon_sends_zero(self):
+                  registry = default_item_registry()
+                  role = {'id': 10001, 'name': '测试角色', 'model': 19, 'items': []}
+                  self.assertEqual(character_appearance(role, registry)[7], 0)
+                  self.assertEqual(equipped_weapon_battle_field2(role, registry), 0)
+
+
+          if __name__ == '__main__':
+              unittest.main()
+          PY
+
+      - name: Update item registry weapon assertions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('implementation_staging/tests/test_item_registry.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('''    confirmed_weapon_preview_candidates,\n''', '''    battle_weapon_field2_from_icon,\n''')
+          old_load = '''        weapon_payload = json.loads(
+                      (root / 'references' / 'weapon-appearance-audit' / 'property7_candidates.json').read_text(encoding='utf-8')
+                  )
+                  weapon_candidates = confirmed_weapon_preview_candidates(weapon_payload)
+                  role_manifest = json.loads(
+                      (root / 'references' / 'weapon-appearance-audit' / 'role_manifest.json').read_text(encoding='utf-8')
+                  )
+                  weapon_images = json.loads(
+                      (root / 'references' / 'weapon-appearance-audit' / 'weapon_image_ids.json').read_text(encoding='utf-8')
+                  )
+                  existing_role_dats = {int(role['role_id']) for role in role_manifest['roles']}
+                  existing_weapon_images = set(int(image_id) for image_id in weapon_images['image_ids'])
+                  low4_values = {int(row['property7_low4_candidate']) for row in weapon_candidates}
+          '''
+          if old_load not in text:
+              raise SystemExit('test_item_registry legacy weapon payload block not found')
+          text = text.replace(old_load, '', 1)
+          text = text.replace('''                    weapon_candidates=weapon_candidates,\n''', '')
+          old_slot = '''            if slot == 10:
+                          self.assertEqual(len(slot_items), 130)
+                          used_low4 = set()
+                          for item in slot_items:
+                              self.assertIn('7', item['appearance_properties'])
+                              property7 = int(item['appearance_properties']['7'])
+                              self.assertIn(property7 % 10000, low4_values)
+                              self.assertEqual(property7 // 10000, int(item['icon_code']) // 100)
+                              suffix = property7 % 10000
+                              role_dat = 100000 + ((suffix // 1000) + 1) * 1000
+                              weapon_image = 40000 + suffix
+                              self.assertIn(role_dat, existing_role_dats)
+                              self.assertIn(weapon_image, existing_weapon_images)
+                              used_low4.add(suffix)
+                          self.assertTrue(used_low4 <= low4_values)
+          '''
+          new_slot = '''            if slot == 10:
+                          self.assertEqual(len(slot_items), 130)
+                          for item in slot_items:
+                              self.assertIn('7', item['appearance_properties'])
+                              expected_weapon_code = battle_weapon_field2_from_icon(
+                                  int(item['icon_code']), int(item['quality'])
+                              )
+                              self.assertGreater(expected_weapon_code, 0)
+                              self.assertEqual(
+                                  int(item['appearance_properties']['7']),
+                                  expected_weapon_code,
+                              )
+          '''
+          if old_slot not in text:
+              raise SystemExit('test_item_registry legacy slot10 block not found')
+          text = text.replace(old_slot, new_slot, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Run focused weapon appearance regression
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_weapon_appearance_consistency.py' -v
+
+      - name: Run item registry regression
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_item_registry.py' -v
+
+      - name: Run battle actor protocol regressions
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_battle_actor_protocol.py' -v
+
+      - name: Commit verified fix and remove workflow
+        shell: bash
+        run: |
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git rm .github/workflows/fix-map-weapon-appearance.yml
+          git add implementation_staging
+          git commit -m 'fix: unify equipped weapon appearance on map and battle'
+          git push origin master
