@@ -1,0 +1,48 @@
+name: Apply armor resource catalog
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/apply-armor-resource-catalog.yml'
+      - '.github/scripts/apply_armor_resource_catalog.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply catalog-backed armor resource rules
+        run: python .github/scripts/apply_armor_resource_catalog.py
+
+      - name: Regenerate preview catalog
+        env:
+          PYTHONPATH: .
+        working-directory: implementation_staging
+        run: python tools/build_equipment_resource_preview_items.py
+
+      - name: Run affected tests
+        working-directory: implementation_staging
+        run: |
+          python -m unittest tests.test_armor_appearance_mapping tests.test_item_registry tests.test_helmet_appearance_mapping
+
+      - name: Commit verified changes
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-armor-resource-catalog.yml
+          rm -f .github/scripts/apply_armor_resource_catalog.py
+          rmdir .github/scripts 2>/dev/null || true
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: catalog APK armor resource family'
+          git fetch origin master
+          git rebase origin/master
+          git push origin HEAD:master
