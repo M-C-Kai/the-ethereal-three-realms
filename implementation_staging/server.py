@@ -14,6 +14,7 @@ from pathlib import Path
 
 from item_registry import (
     ItemRegistry,
+    armor_property2_from_icon,
     battle_weapon_field2_from_icon,
     default_item_registry,
 )
@@ -1576,10 +1577,11 @@ PNG_QUERY_MAIN_CACHE = 0
 PNG_QUERY_ROLE_CACHE = 2
 
 # The player sprite is composed from independently replaceable image layers.
-# Property 7 selects the weapon family; properties 14..20 select trousers,
-# armour, shoulders, wrists, boots, cape and helmet respectively. Zero is the
-# unequipped state (property 14 resolves zero to the bundled base trousers).
+# Property 2 is the armor/body layer and resolves to image 14000..14030.
+# Property 7 is the weapon; properties 14..20 are other independent overlays.
+# Slot-3 armor must never be routed through legacy property15.
 BASE_CHARACTER_APPEARANCE = {
+    2: 0,   # 铠甲主体：property2 -> image 14000..14030
     7: 0,
     14: 0,
     15: 0,
@@ -2626,11 +2628,20 @@ def character_appearance(
         if item.get('location') != 'equipped' or not is_equipment(item):
             continue
         resolved = registry.resolve(item) if registry is not None else item
+        slot = int(resolved.get('equipment_slot', 0))
+        if slot == 3:
+            # 铠甲只从 armor_appearance_mapping.json 取 property2；未知映射不猜。
+            armor_value = armor_property2_from_icon(int(resolved.get('icon_code', 0)))
+            if armor_value is not None:
+                properties[2] = int(armor_value)
         appearance = resolved.get('appearance_properties', {})
         if not isinstance(appearance, dict):
             continue
         for property_index, value in appearance.items():
             index = int(property_index)
+            if slot == 3 and index in {2, 15}:
+                # 旧铠甲 property15 以及模板内硬编码 property2 都不得覆盖资料库。
+                continue
             if index in BASE_CHARACTER_APPEARANCE:
                 properties[index] = int(value)
     return properties
