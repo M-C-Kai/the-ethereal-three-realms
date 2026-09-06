@@ -1,0 +1,71 @@
+name: Apply inventory cleanup v3
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/apply-inventory-cleanup-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply inventory cleanup v3
+        run: python .github/scripts/apply_inventory_cleanup_v3.py
+      - name: Regenerate preview catalog
+        working-directory: implementation_staging
+        env:
+          PYTHONPATH: .
+        run: python tools/build_equipment_resource_preview_items.py
+      - name: Run focused regressions
+        working-directory: implementation_staging
+        run: >-
+          python -m unittest
+          tests.test_inventory_cleanup_v3
+          tests.test_armor_inventory_migration
+          tests.test_armor_appearance_mapping
+          tests.test_armor_downlink
+          tests.test_item_registry
+          tests.test_weapon_appearance_consistency
+          tests.test_helmet_appearance_mapping
+      - name: Verify inventory cleanup shape
+        working-directory: implementation_staging
+        env:
+          PYTHONPATH: .
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from item_registry import deprecated_unsupported_equipment_template_ids
+
+          preview = json.loads(Path('data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8'))
+          items = preview['items']
+          assert len(items) == 243, len(items)
+          assert all(int(item['equipment_slot']) not in {12, 13, 14} for item in items)
+
+          starter = json.loads(Path('data/catalog/starter_inventory.json').read_text(encoding='utf-8'))
+          starter_ids = {int(row['template_id']) for row in starter['items']}
+          assert {120001001, 130001001, 140001001}.isdisjoint(starter_ids)
+          assert len(deprecated_unsupported_equipment_template_ids()) == 33
+          print('inventory cleanup v3 verified')
+          PY
+      - name: Commit verified cleanup and remove temporary files
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-inventory-cleanup-v3.yml
+          rm -f .github/scripts/apply_inventory_cleanup_v3.py
+          rmdir .github/scripts 2>/dev/null || true
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: expand bag and remove unverified equipment'
+          git fetch origin master
+          git rebase origin/master
+          git push origin HEAD:master
