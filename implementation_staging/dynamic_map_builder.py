@@ -77,7 +77,13 @@ def _load_object(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _validate_identity(payload: dict[str, Any], package: DynamicMapPackage, *, expected_format: str, path: Path) -> None:
+def _validate_identity(
+    payload: dict[str, Any],
+    package: DynamicMapPackage,
+    *,
+    expected_format: str,
+    path: Path,
+) -> None:
     if payload.get('format') != expected_format:
         raise ValueError(f'{path} format must be {expected_format!r}')
     try:
@@ -167,7 +173,9 @@ def materialize_all_dynamic_maps(root: Path | None = None) -> list[MaterializedD
     return [materialize_dynamic_map(package) for package in discover_dynamic_maps(root)]
 
 
-def _registry_definition(package: DynamicMapPackage) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _registry_definition(
+    package: DynamicMapPackage,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     payload = _load_object(package.map_spec_path)
     _validate_identity(
         payload,
@@ -187,6 +195,8 @@ def _registry_definition(package: DynamicMapPackage) -> tuple[dict[str, Any], li
     inbound = registry.get('inbound_portals', [])
     if not isinstance(inbound, list):
         raise ValueError(f'{package.map_spec_path} registry inbound_portals must be a list')
+    if any(not isinstance(item, dict) for item in inbound):
+        raise ValueError(f'{package.map_spec_path} registry inbound_portals entries must be objects')
 
     definition = {
         key: copy.deepcopy(value)
@@ -239,8 +249,7 @@ def merge_dynamic_maps_into_registry_payload(
                 raise ValueError(
                     f'dynamic map {package.map_id} inbound portal requires source_map_id'
                 ) from exc
-            pending_inbound.append((package.map_id, portal, definition))
-            pending_inbound[-1] = (source_map_id, portal, definition)
+            pending_inbound.append((source_map_id, portal, definition))
 
     for source_map_id, portal, target_definition in pending_inbound:
         source = maps.get(str(source_map_id))
