@@ -320,3 +320,12 @@ APK 与 `pmsj/work/b/v.smali` 已确认：
 铠甲装备槽固定为 `3`。APK `pmsj/work/b/v.smali` 已确认铠甲主体使用人物属性 `2`，客户端写入人物 layer3，并按 `image_id = 14000 + property2` 选择 `0014000_71x32.png` 到 `0014030_71x32.png`。
 
 服务端运行时只允许从 `data/catalog/armor_appearance_mapping.json` 读取 `icon_code -> property2`。槽3装备中遗留的 `appearance_properties["15"]` 必须忽略；即使旧模板或旧缓存仍含该字段，也不得再次下发为铠甲。完整人物外观快照必须包含 `property2`，同时 `property15=0` 可清除历史错误铠甲覆盖层。没有确认的 icon 映射时只保持默认 `property2=0`，不得循环、按尾号或按颜色猜测。
+
+
+## 铠甲背包资源迁移 v2
+
+旧版本曾自动向每个角色背包发放槽3的 `0300..0309` 十个兼容预览铠甲，并额外通过 `starter_inventory.json` 发放本地构造的 `30001001/青纹铠甲`。这些物品建立在错误的铠甲外观路径上，现全部列为废弃模板。角色加载时必须从持久化 `items` 中删除这 11 个模板实例，即使其中某件处于已装备状态也要删除。
+
+替代下发为 APK 已确认的 31 个铠甲主体资源：`property2=0..30`，对应 `14000..14030`。兼容预览模板 ID 固定按 `30000000 + image_id*10 + 1` 生成，运行时通过 `armor_appearance_mapping.json/resource_preview/template_to_property2` 读取，不从背包图标推断外观。为了让 APK 背包可显示，这 31 个预览暂统一使用图标 `0300` 作为“铠甲类别占位图标”；这不是官方 `icon_code -> property2` 映射。
+
+`equipment_resource_preview_version` 升为 `2`。旧角色下一次加载时会删除旧铠甲并幂等补发 31 个新铠甲资源预览；新角色直接收到新预览，不再收到 `30001001`。

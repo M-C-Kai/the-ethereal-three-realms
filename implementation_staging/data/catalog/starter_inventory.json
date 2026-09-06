@@ -8,12 +8,6 @@
       "location": "bag"
     },
     {
-      "template_id": 30001001,
-      "instance_offset": 2,
-      "quantity": 1,
-      "location": "bag"
-    },
-    {
       "template_id": 260000001,
       "instance_offset": 3,
       "quantity": 10,

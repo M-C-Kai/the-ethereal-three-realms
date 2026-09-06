@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from item_registry import (
+    ARMOR_APPEARANCE_MAPPING_FILE,
     SLOT_FAMILY_LABELS,
     preview_appearance_properties,
     synthetic_preview_template_id,
@@ -28,12 +29,16 @@ DESCRIPTION = (
 
 def main() -> None:
     resources = json.loads(RESOURCES_FILE.read_text(encoding='utf-8'))['resources']
+    armor_catalog = json.loads(ARMOR_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
     official_items = json.loads(ITEMS_FILE.read_text(encoding='utf-8'))['items']
     manifest = json.loads(MANIFEST_FILE.read_text(encoding='utf-8'))
     reserved = {int(item['template_id']) for item in official_items}
     preview_items = []
     used = set(reserved)
     for index, resource in enumerate(resources, start=1):
+        if int(resource['equipment_slot']) == 3:
+            # Old 0300..0309 icon-only armor previews are deprecated.
+            continue
         template_id = synthetic_preview_template_id(
             resource['equipment_slot'],
             resource['resource_group'],
@@ -62,12 +67,51 @@ def main() -> None:
             'equipment_attributes': [0, 0, 0, 0],
             'appearance_properties': {},
         })
+    armor_preview = armor_catalog['resource_preview']
+    generic_armor_icon = int(armor_preview['generic_icon_code'])
+    template_to_property2 = {
+        int(template_id): int(value)
+        for template_id, value in armor_preview['template_to_property2'].items()
+    }
+    for template_id, property2 in sorted(template_to_property2.items(), key=lambda row: row[1]):
+        image_id = 14000 + property2
+        preview_items.append({
+            'template_id': template_id,
+            'kind': 'equipment',
+            'name': f'APK铠甲资源-{image_id}',
+            'description': (
+                f'APK确认人物铠甲主体资源 {image_id} / property2={property2}。'
+                '背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。'
+            ),
+            'max_quantity': 1,
+            'equipment_slot': 3,
+            'price': 0,
+            'level_required': 1,
+            'icon_code': generic_armor_icon,
+            'quality': 1,
+            'sort_group': 100,
+            'sort_order': 0,
+            'equipment_attributes': [0, 0, 0, 0],
+            'appearance_properties': {'2': property2},
+        })
+
+    preview_items.sort(key=lambda item: (
+        int(item['equipment_slot']),
+        int(item['appearance_properties'].get('2', 999)) if int(item['equipment_slot']) == 3 else int(item['sort_order']),
+        int(item['template_id']),
+    ))
+    for sort_order, item in enumerate(preview_items, start=1):
+        item['sort_order'] = sort_order
+
     by_slot: dict[int, list[dict]] = {}
     for item in preview_items:
         by_slot.setdefault(int(item['equipment_slot']), []).append(item)
     for slot, slot_items in by_slot.items():
         slot_items.sort(key=lambda item: int(item['sort_order']))
         for preview_index, item in enumerate(slot_items):
+            if slot == 3:
+                # Dedicated armor previews already carry the confirmed property2.
+                continue
             item['appearance_properties'] = preview_appearance_properties(
                 slot,
                 preview_index,
@@ -90,7 +134,7 @@ def main() -> None:
                 'APK装备资源预览项。仅 icon_code/资源分组来自 APK；'
                 'template_id、名称、等级、属性均为本地预览构造，不代表官方装备。'
                 '头盔 property20 只读取 helmet_appearance_mapping.json；未解析图标不猜。'
-                '铠甲只读取 armor_appearance_mapping.json，并使用 property2 / 14000..14030；严禁再使用 property15。'
+                '铠甲旧0300..0309预览已废弃；现在下发31个14000..14030资源预览，槽3只使用property2。'
                 '其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。'
                 '武器 property7 使用 weapon_appearance_mapping.json 的证据映射；'
                 '地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。'

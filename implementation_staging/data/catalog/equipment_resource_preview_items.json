@@ -10,7 +10,7 @@
     "not_official_equipment_template": true,
     "appearance_pairing": "confirmed_visual_weapon_family_mapping",
     "appearance_not_official_icon_mapping": true,
-    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。头盔 property20 只读取 helmet_appearance_mapping.json；未解析图标不猜。铠甲只读取 armor_appearance_mapping.json，并使用 property2 / 14000..14030；严禁再使用 property15。其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。武器 property7 使用 weapon_appearance_mapping.json 的证据映射；地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。"
+    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。头盔 property20 只读取 helmet_appearance_mapping.json；未解析图标不猜。铠甲旧0300..0309预览已废弃；现在下发31个14000..14030资源预览，槽3只使用property2。其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。武器 property7 使用 weapon_appearance_mapping.json 的证据映射；地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。"
   },
   "items": [
     {
@@ -456,10 +456,10 @@
       }
     },
     {
-      "template_id": 30003001,
+      "template_id": 30140001,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0300",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14000",
+      "description": "APK确认人物铠甲主体资源 14000 / property2=0。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
@@ -474,18 +474,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 0
+      }
     },
     {
-      "template_id": 30003011,
+      "template_id": 30140011,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0301",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14001",
+      "description": "APK确认人物铠甲主体资源 14001 / property2=1。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 301,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 22,
@@ -495,18 +497,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 1
+      }
     },
     {
-      "template_id": 30003021,
+      "template_id": 30140021,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0302",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14002",
+      "description": "APK确认人物铠甲主体资源 14002 / property2=2。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 302,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 23,
@@ -516,18 +520,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 2
+      }
     },
     {
-      "template_id": 30003031,
+      "template_id": 30140031,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0303",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14003",
+      "description": "APK确认人物铠甲主体资源 14003 / property2=3。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 303,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 24,
@@ -537,18 +543,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 3
+      }
     },
     {
-      "template_id": 30003041,
+      "template_id": 30140041,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0304",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14004",
+      "description": "APK确认人物铠甲主体资源 14004 / property2=4。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 304,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 25,
@@ -558,18 +566,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 4
+      }
     },
     {
-      "template_id": 30003051,
+      "template_id": 30140051,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0305",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14005",
+      "description": "APK确认人物铠甲主体资源 14005 / property2=5。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 305,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 26,
@@ -579,18 +589,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 5
+      }
     },
     {
-      "template_id": 30003061,
+      "template_id": 30140061,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0306",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14006",
+      "description": "APK确认人物铠甲主体资源 14006 / property2=6。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 306,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 27,
@@ -600,18 +612,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 6
+      }
     },
     {
-      "template_id": 30003071,
+      "template_id": 30140071,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0307",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14007",
+      "description": "APK确认人物铠甲主体资源 14007 / property2=7。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 307,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 28,
@@ -621,18 +635,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 7
+      }
     },
     {
-      "template_id": 30003081,
+      "template_id": 30140081,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0308",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14008",
+      "description": "APK确认人物铠甲主体资源 14008 / property2=8。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 308,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 29,
@@ -642,18 +658,20 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 8
+      }
     },
     {
-      "template_id": 30003091,
+      "template_id": 30140091,
       "kind": "equipment",
-      "name": "APK资源预览-铠甲-0309",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "name": "APK铠甲资源-14009",
+      "description": "APK确认人物铠甲主体资源 14009 / property2=9。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
       "max_quantity": 1,
       "equipment_slot": 3,
       "price": 0,
       "level_required": 1,
-      "icon_code": 309,
+      "icon_code": 300,
       "quality": 1,
       "sort_group": 100,
       "sort_order": 30,
@@ -663,7 +681,492 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "2": 9
+      }
+    },
+    {
+      "template_id": 30140101,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14010",
+      "description": "APK确认人物铠甲主体资源 14010 / property2=10。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 31,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 10
+      }
+    },
+    {
+      "template_id": 30140111,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14011",
+      "description": "APK确认人物铠甲主体资源 14011 / property2=11。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 32,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 11
+      }
+    },
+    {
+      "template_id": 30140121,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14012",
+      "description": "APK确认人物铠甲主体资源 14012 / property2=12。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 33,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 12
+      }
+    },
+    {
+      "template_id": 30140131,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14013",
+      "description": "APK确认人物铠甲主体资源 14013 / property2=13。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 34,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 13
+      }
+    },
+    {
+      "template_id": 30140141,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14014",
+      "description": "APK确认人物铠甲主体资源 14014 / property2=14。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 35,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 14
+      }
+    },
+    {
+      "template_id": 30140151,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14015",
+      "description": "APK确认人物铠甲主体资源 14015 / property2=15。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 36,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 15
+      }
+    },
+    {
+      "template_id": 30140161,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14016",
+      "description": "APK确认人物铠甲主体资源 14016 / property2=16。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 37,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 16
+      }
+    },
+    {
+      "template_id": 30140171,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14017",
+      "description": "APK确认人物铠甲主体资源 14017 / property2=17。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 38,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 17
+      }
+    },
+    {
+      "template_id": 30140181,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14018",
+      "description": "APK确认人物铠甲主体资源 14018 / property2=18。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 39,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 18
+      }
+    },
+    {
+      "template_id": 30140191,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14019",
+      "description": "APK确认人物铠甲主体资源 14019 / property2=19。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 40,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 19
+      }
+    },
+    {
+      "template_id": 30140201,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14020",
+      "description": "APK确认人物铠甲主体资源 14020 / property2=20。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 41,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 20
+      }
+    },
+    {
+      "template_id": 30140211,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14021",
+      "description": "APK确认人物铠甲主体资源 14021 / property2=21。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 42,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 21
+      }
+    },
+    {
+      "template_id": 30140221,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14022",
+      "description": "APK确认人物铠甲主体资源 14022 / property2=22。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 43,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 22
+      }
+    },
+    {
+      "template_id": 30140231,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14023",
+      "description": "APK确认人物铠甲主体资源 14023 / property2=23。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 44,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 23
+      }
+    },
+    {
+      "template_id": 30140241,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14024",
+      "description": "APK确认人物铠甲主体资源 14024 / property2=24。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 45,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 24
+      }
+    },
+    {
+      "template_id": 30140251,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14025",
+      "description": "APK确认人物铠甲主体资源 14025 / property2=25。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 46,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 25
+      }
+    },
+    {
+      "template_id": 30140261,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14026",
+      "description": "APK确认人物铠甲主体资源 14026 / property2=26。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 47,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 26
+      }
+    },
+    {
+      "template_id": 30140271,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14027",
+      "description": "APK确认人物铠甲主体资源 14027 / property2=27。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 48,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 27
+      }
+    },
+    {
+      "template_id": 30140281,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14028",
+      "description": "APK确认人物铠甲主体资源 14028 / property2=28。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 49,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 28
+      }
+    },
+    {
+      "template_id": 30140291,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14029",
+      "description": "APK确认人物铠甲主体资源 14029 / property2=29。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 50,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 29
+      }
+    },
+    {
+      "template_id": 30140301,
+      "kind": "equipment",
+      "name": "APK铠甲资源-14030",
+      "description": "APK确认人物铠甲主体资源 14030 / property2=30。背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。",
+      "max_quantity": 1,
+      "equipment_slot": 3,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 51,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {
+        "2": 30
+      }
     },
     {
       "template_id": 40004001,
@@ -677,7 +1180,7 @@
       "icon_code": 400,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 31,
+      "sort_order": 52,
       "equipment_attributes": [
         0,
         0,
@@ -698,7 +1201,7 @@
       "icon_code": 401,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 32,
+      "sort_order": 53,
       "equipment_attributes": [
         0,
         0,
@@ -719,7 +1222,7 @@
       "icon_code": 402,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 33,
+      "sort_order": 54,
       "equipment_attributes": [
         0,
         0,
@@ -740,7 +1243,7 @@
       "icon_code": 403,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 34,
+      "sort_order": 55,
       "equipment_attributes": [
         0,
         0,
@@ -761,7 +1264,7 @@
       "icon_code": 404,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 35,
+      "sort_order": 56,
       "equipment_attributes": [
         0,
         0,
@@ -782,7 +1285,7 @@
       "icon_code": 405,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 36,
+      "sort_order": 57,
       "equipment_attributes": [
         0,
         0,
@@ -803,7 +1306,7 @@
       "icon_code": 406,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 37,
+      "sort_order": 58,
       "equipment_attributes": [
         0,
         0,
@@ -824,7 +1327,7 @@
       "icon_code": 407,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 38,
+      "sort_order": 59,
       "equipment_attributes": [
         0,
         0,
@@ -845,7 +1348,7 @@
       "icon_code": 408,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 39,
+      "sort_order": 60,
       "equipment_attributes": [
         0,
         0,
@@ -866,7 +1369,7 @@
       "icon_code": 409,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 40,
+      "sort_order": 61,
       "equipment_attributes": [
         0,
         0,
@@ -887,7 +1390,7 @@
       "icon_code": 500,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 41,
+      "sort_order": 62,
       "equipment_attributes": [
         0,
         0,
@@ -910,7 +1413,7 @@
       "icon_code": 501,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 42,
+      "sort_order": 63,
       "equipment_attributes": [
         0,
         0,
@@ -933,7 +1436,7 @@
       "icon_code": 502,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 43,
+      "sort_order": 64,
       "equipment_attributes": [
         0,
         0,
@@ -956,7 +1459,7 @@
       "icon_code": 503,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 44,
+      "sort_order": 65,
       "equipment_attributes": [
         0,
         0,
@@ -979,7 +1482,7 @@
       "icon_code": 504,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 45,
+      "sort_order": 66,
       "equipment_attributes": [
         0,
         0,
@@ -1002,7 +1505,7 @@
       "icon_code": 505,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 46,
+      "sort_order": 67,
       "equipment_attributes": [
         0,
         0,
@@ -1025,7 +1528,7 @@
       "icon_code": 506,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 47,
+      "sort_order": 68,
       "equipment_attributes": [
         0,
         0,
@@ -1048,7 +1551,7 @@
       "icon_code": 507,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 48,
+      "sort_order": 69,
       "equipment_attributes": [
         0,
         0,
@@ -1071,7 +1574,7 @@
       "icon_code": 508,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 49,
+      "sort_order": 70,
       "equipment_attributes": [
         0,
         0,
@@ -1094,7 +1597,7 @@
       "icon_code": 509,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 50,
+      "sort_order": 71,
       "equipment_attributes": [
         0,
         0,
@@ -1117,7 +1620,7 @@
       "icon_code": 600,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 51,
+      "sort_order": 72,
       "equipment_attributes": [
         0,
         0,
@@ -1138,7 +1641,7 @@
       "icon_code": 601,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 52,
+      "sort_order": 73,
       "equipment_attributes": [
         0,
         0,
@@ -1159,7 +1662,7 @@
       "icon_code": 602,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 53,
+      "sort_order": 74,
       "equipment_attributes": [
         0,
         0,
@@ -1180,7 +1683,7 @@
       "icon_code": 603,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 54,
+      "sort_order": 75,
       "equipment_attributes": [
         0,
         0,
@@ -1201,7 +1704,7 @@
       "icon_code": 604,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 55,
+      "sort_order": 76,
       "equipment_attributes": [
         0,
         0,
@@ -1222,7 +1725,7 @@
       "icon_code": 605,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 56,
+      "sort_order": 77,
       "equipment_attributes": [
         0,
         0,
@@ -1243,7 +1746,7 @@
       "icon_code": 606,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 57,
+      "sort_order": 78,
       "equipment_attributes": [
         0,
         0,
@@ -1264,7 +1767,7 @@
       "icon_code": 607,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 58,
+      "sort_order": 79,
       "equipment_attributes": [
         0,
         0,
@@ -1285,7 +1788,7 @@
       "icon_code": 608,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 59,
+      "sort_order": 80,
       "equipment_attributes": [
         0,
         0,
@@ -1306,7 +1809,7 @@
       "icon_code": 609,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 60,
+      "sort_order": 81,
       "equipment_attributes": [
         0,
         0,
@@ -1327,7 +1830,7 @@
       "icon_code": 700,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 61,
+      "sort_order": 82,
       "equipment_attributes": [
         0,
         0,
@@ -1350,7 +1853,7 @@
       "icon_code": 701,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 62,
+      "sort_order": 83,
       "equipment_attributes": [
         0,
         0,
@@ -1373,7 +1876,7 @@
       "icon_code": 702,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 63,
+      "sort_order": 84,
       "equipment_attributes": [
         0,
         0,
@@ -1396,7 +1899,7 @@
       "icon_code": 703,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 64,
+      "sort_order": 85,
       "equipment_attributes": [
         0,
         0,
@@ -1419,7 +1922,7 @@
       "icon_code": 704,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 65,
+      "sort_order": 86,
       "equipment_attributes": [
         0,
         0,
@@ -1442,7 +1945,7 @@
       "icon_code": 705,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 66,
+      "sort_order": 87,
       "equipment_attributes": [
         0,
         0,
@@ -1465,7 +1968,7 @@
       "icon_code": 706,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 67,
+      "sort_order": 88,
       "equipment_attributes": [
         0,
         0,
@@ -1488,7 +1991,7 @@
       "icon_code": 707,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 68,
+      "sort_order": 89,
       "equipment_attributes": [
         0,
         0,
@@ -1511,7 +2014,7 @@
       "icon_code": 708,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 69,
+      "sort_order": 90,
       "equipment_attributes": [
         0,
         0,
@@ -1534,7 +2037,7 @@
       "icon_code": 709,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 70,
+      "sort_order": 91,
       "equipment_attributes": [
         0,
         0,
@@ -1557,7 +2060,7 @@
       "icon_code": 800,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 71,
+      "sort_order": 92,
       "equipment_attributes": [
         0,
         0,
@@ -1580,7 +2083,7 @@
       "icon_code": 801,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 72,
+      "sort_order": 93,
       "equipment_attributes": [
         0,
         0,
@@ -1603,7 +2106,7 @@
       "icon_code": 802,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 73,
+      "sort_order": 94,
       "equipment_attributes": [
         0,
         0,
@@ -1626,7 +2129,7 @@
       "icon_code": 803,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 74,
+      "sort_order": 95,
       "equipment_attributes": [
         0,
         0,
@@ -1649,7 +2152,7 @@
       "icon_code": 804,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 75,
+      "sort_order": 96,
       "equipment_attributes": [
         0,
         0,
@@ -1672,7 +2175,7 @@
       "icon_code": 805,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 76,
+      "sort_order": 97,
       "equipment_attributes": [
         0,
         0,
@@ -1695,7 +2198,7 @@
       "icon_code": 806,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 77,
+      "sort_order": 98,
       "equipment_attributes": [
         0,
         0,
@@ -1718,7 +2221,7 @@
       "icon_code": 807,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 78,
+      "sort_order": 99,
       "equipment_attributes": [
         0,
         0,
@@ -1741,7 +2244,7 @@
       "icon_code": 808,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 79,
+      "sort_order": 100,
       "equipment_attributes": [
         0,
         0,
@@ -1764,7 +2267,7 @@
       "icon_code": 809,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 80,
+      "sort_order": 101,
       "equipment_attributes": [
         0,
         0,
@@ -1787,7 +2290,7 @@
       "icon_code": 900,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 81,
+      "sort_order": 102,
       "equipment_attributes": [
         0,
         0,
@@ -1810,7 +2313,7 @@
       "icon_code": 901,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 82,
+      "sort_order": 103,
       "equipment_attributes": [
         0,
         0,
@@ -1833,7 +2336,7 @@
       "icon_code": 902,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 83,
+      "sort_order": 104,
       "equipment_attributes": [
         0,
         0,
@@ -1856,7 +2359,7 @@
       "icon_code": 903,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 84,
+      "sort_order": 105,
       "equipment_attributes": [
         0,
         0,
@@ -1879,7 +2382,7 @@
       "icon_code": 904,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 85,
+      "sort_order": 106,
       "equipment_attributes": [
         0,
         0,
@@ -1902,7 +2405,7 @@
       "icon_code": 905,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 86,
+      "sort_order": 107,
       "equipment_attributes": [
         0,
         0,
@@ -1925,7 +2428,7 @@
       "icon_code": 906,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 87,
+      "sort_order": 108,
       "equipment_attributes": [
         0,
         0,
@@ -1948,7 +2451,7 @@
       "icon_code": 907,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 88,
+      "sort_order": 109,
       "equipment_attributes": [
         0,
         0,
@@ -1971,7 +2474,7 @@
       "icon_code": 908,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 89,
+      "sort_order": 110,
       "equipment_attributes": [
         0,
         0,
@@ -1994,7 +2497,7 @@
       "icon_code": 909,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 90,
+      "sort_order": 111,
       "equipment_attributes": [
         0,
         0,
@@ -2004,678 +2507,6 @@
       "appearance_properties": {
         "18": 9
       }
-    },
-    {
-      "template_id": 140010001,
-      "kind": "equipment",
-      "name": "APK资源预览-法宝-1000",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 14,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1000,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 91,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 140010011,
-      "kind": "equipment",
-      "name": "APK资源预览-法宝-1001",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 14,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1001,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 92,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011001,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1100",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1100,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 93,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011011,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1101",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1101,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 94,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011021,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1102",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1102,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 95,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011031,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1103",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1103,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 96,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011041,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1104",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1104,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 97,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011051,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1105",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1105,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 98,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011061,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1106",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1106,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 99,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011071,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1107",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1107,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 100,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011081,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1108",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1108,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 101,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 110011091,
-      "kind": "equipment",
-      "name": "APK资源预览-戒指-1109",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 11,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1109,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 102,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012001,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1200",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1200,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 103,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012011,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1201",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1201,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 104,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012021,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1202",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1202,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 105,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012031,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1203",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1203,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 106,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012041,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1204",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1204,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 107,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012051,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1205",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1205,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 108,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012061,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1206",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1206,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 109,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012071,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1207",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1207,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 110,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012081,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1208",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1208,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 111,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 120012091,
-      "kind": "equipment",
-      "name": "APK资源预览-外套-1209",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 12,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1209,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 112,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013001,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1300",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1300,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 113,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013011,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1301",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1301,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 114,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013021,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1302",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1302,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 115,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013031,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1303",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1303,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 116,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013041,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1304",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1304,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 117,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013051,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1305",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1305,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 118,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013061,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1306",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1306,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 119,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013071,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1307",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1307,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 120,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013081,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1308",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1308,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 121,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
-    },
-    {
-      "template_id": 130013091,
-      "kind": "equipment",
-      "name": "APK资源预览-饰品-1309",
-      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
-      "max_quantity": 1,
-      "equipment_slot": 13,
-      "price": 0,
-      "level_required": 1,
-      "icon_code": 1309,
-      "quality": 1,
-      "sort_group": 100,
-      "sort_order": 122,
-      "equipment_attributes": [
-        0,
-        0,
-        0,
-        0
-      ],
-      "appearance_properties": {}
     },
     {
       "template_id": 100021001,
@@ -2689,7 +2520,7 @@
       "icon_code": 2100,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 123,
+      "sort_order": 112,
       "equipment_attributes": [
         0,
         0,
@@ -2712,7 +2543,7 @@
       "icon_code": 2101,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 124,
+      "sort_order": 113,
       "equipment_attributes": [
         0,
         0,
@@ -2735,7 +2566,7 @@
       "icon_code": 2102,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 125,
+      "sort_order": 114,
       "equipment_attributes": [
         0,
         0,
@@ -2758,7 +2589,7 @@
       "icon_code": 2103,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 126,
+      "sort_order": 115,
       "equipment_attributes": [
         0,
         0,
@@ -2781,7 +2612,7 @@
       "icon_code": 2104,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 127,
+      "sort_order": 116,
       "equipment_attributes": [
         0,
         0,
@@ -2804,7 +2635,7 @@
       "icon_code": 2105,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 128,
+      "sort_order": 117,
       "equipment_attributes": [
         0,
         0,
@@ -2827,7 +2658,7 @@
       "icon_code": 2106,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 129,
+      "sort_order": 118,
       "equipment_attributes": [
         0,
         0,
@@ -2850,7 +2681,7 @@
       "icon_code": 2107,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 130,
+      "sort_order": 119,
       "equipment_attributes": [
         0,
         0,
@@ -2873,7 +2704,7 @@
       "icon_code": 2108,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 131,
+      "sort_order": 120,
       "equipment_attributes": [
         0,
         0,
@@ -2896,7 +2727,7 @@
       "icon_code": 2109,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 132,
+      "sort_order": 121,
       "equipment_attributes": [
         0,
         0,
@@ -2919,7 +2750,7 @@
       "icon_code": 2200,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 133,
+      "sort_order": 122,
       "equipment_attributes": [
         0,
         0,
@@ -2942,7 +2773,7 @@
       "icon_code": 2201,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 134,
+      "sort_order": 123,
       "equipment_attributes": [
         0,
         0,
@@ -2965,7 +2796,7 @@
       "icon_code": 2202,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 135,
+      "sort_order": 124,
       "equipment_attributes": [
         0,
         0,
@@ -2988,7 +2819,7 @@
       "icon_code": 2203,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 136,
+      "sort_order": 125,
       "equipment_attributes": [
         0,
         0,
@@ -3011,7 +2842,7 @@
       "icon_code": 2204,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 137,
+      "sort_order": 126,
       "equipment_attributes": [
         0,
         0,
@@ -3034,7 +2865,7 @@
       "icon_code": 2205,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 138,
+      "sort_order": 127,
       "equipment_attributes": [
         0,
         0,
@@ -3057,7 +2888,7 @@
       "icon_code": 2206,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 139,
+      "sort_order": 128,
       "equipment_attributes": [
         0,
         0,
@@ -3080,7 +2911,7 @@
       "icon_code": 2207,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 140,
+      "sort_order": 129,
       "equipment_attributes": [
         0,
         0,
@@ -3103,7 +2934,7 @@
       "icon_code": 2208,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 141,
+      "sort_order": 130,
       "equipment_attributes": [
         0,
         0,
@@ -3126,7 +2957,7 @@
       "icon_code": 2209,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 142,
+      "sort_order": 131,
       "equipment_attributes": [
         0,
         0,
@@ -3149,7 +2980,7 @@
       "icon_code": 2300,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 143,
+      "sort_order": 132,
       "equipment_attributes": [
         0,
         0,
@@ -3172,7 +3003,7 @@
       "icon_code": 2301,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 144,
+      "sort_order": 133,
       "equipment_attributes": [
         0,
         0,
@@ -3195,7 +3026,7 @@
       "icon_code": 2302,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 145,
+      "sort_order": 134,
       "equipment_attributes": [
         0,
         0,
@@ -3218,7 +3049,7 @@
       "icon_code": 2303,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 146,
+      "sort_order": 135,
       "equipment_attributes": [
         0,
         0,
@@ -3241,7 +3072,7 @@
       "icon_code": 2304,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 147,
+      "sort_order": 136,
       "equipment_attributes": [
         0,
         0,
@@ -3264,7 +3095,7 @@
       "icon_code": 2305,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 148,
+      "sort_order": 137,
       "equipment_attributes": [
         0,
         0,
@@ -3287,7 +3118,7 @@
       "icon_code": 2306,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 149,
+      "sort_order": 138,
       "equipment_attributes": [
         0,
         0,
@@ -3310,7 +3141,7 @@
       "icon_code": 2307,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 150,
+      "sort_order": 139,
       "equipment_attributes": [
         0,
         0,
@@ -3333,7 +3164,7 @@
       "icon_code": 2308,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 151,
+      "sort_order": 140,
       "equipment_attributes": [
         0,
         0,
@@ -3356,7 +3187,7 @@
       "icon_code": 2309,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 152,
+      "sort_order": 141,
       "equipment_attributes": [
         0,
         0,
@@ -3379,7 +3210,7 @@
       "icon_code": 2400,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 153,
+      "sort_order": 142,
       "equipment_attributes": [
         0,
         0,
@@ -3402,7 +3233,7 @@
       "icon_code": 2401,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 154,
+      "sort_order": 143,
       "equipment_attributes": [
         0,
         0,
@@ -3425,7 +3256,7 @@
       "icon_code": 2402,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 155,
+      "sort_order": 144,
       "equipment_attributes": [
         0,
         0,
@@ -3448,7 +3279,7 @@
       "icon_code": 2403,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 156,
+      "sort_order": 145,
       "equipment_attributes": [
         0,
         0,
@@ -3471,7 +3302,7 @@
       "icon_code": 2404,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 157,
+      "sort_order": 146,
       "equipment_attributes": [
         0,
         0,
@@ -3494,7 +3325,7 @@
       "icon_code": 2405,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 158,
+      "sort_order": 147,
       "equipment_attributes": [
         0,
         0,
@@ -3517,7 +3348,7 @@
       "icon_code": 2406,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 159,
+      "sort_order": 148,
       "equipment_attributes": [
         0,
         0,
@@ -3540,7 +3371,7 @@
       "icon_code": 2407,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 160,
+      "sort_order": 149,
       "equipment_attributes": [
         0,
         0,
@@ -3563,7 +3394,7 @@
       "icon_code": 2408,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 161,
+      "sort_order": 150,
       "equipment_attributes": [
         0,
         0,
@@ -3586,7 +3417,7 @@
       "icon_code": 2409,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 162,
+      "sort_order": 151,
       "equipment_attributes": [
         0,
         0,
@@ -3609,7 +3440,7 @@
       "icon_code": 2500,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 163,
+      "sort_order": 152,
       "equipment_attributes": [
         0,
         0,
@@ -3632,7 +3463,7 @@
       "icon_code": 2501,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 164,
+      "sort_order": 153,
       "equipment_attributes": [
         0,
         0,
@@ -3655,7 +3486,7 @@
       "icon_code": 2502,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 165,
+      "sort_order": 154,
       "equipment_attributes": [
         0,
         0,
@@ -3678,7 +3509,7 @@
       "icon_code": 2503,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 166,
+      "sort_order": 155,
       "equipment_attributes": [
         0,
         0,
@@ -3701,7 +3532,7 @@
       "icon_code": 2504,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 167,
+      "sort_order": 156,
       "equipment_attributes": [
         0,
         0,
@@ -3724,7 +3555,7 @@
       "icon_code": 2505,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 168,
+      "sort_order": 157,
       "equipment_attributes": [
         0,
         0,
@@ -3747,7 +3578,7 @@
       "icon_code": 2506,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 169,
+      "sort_order": 158,
       "equipment_attributes": [
         0,
         0,
@@ -3770,7 +3601,7 @@
       "icon_code": 2507,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 170,
+      "sort_order": 159,
       "equipment_attributes": [
         0,
         0,
@@ -3793,7 +3624,7 @@
       "icon_code": 2508,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 171,
+      "sort_order": 160,
       "equipment_attributes": [
         0,
         0,
@@ -3816,7 +3647,7 @@
       "icon_code": 2509,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 172,
+      "sort_order": 161,
       "equipment_attributes": [
         0,
         0,
@@ -3839,7 +3670,7 @@
       "icon_code": 2600,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 173,
+      "sort_order": 162,
       "equipment_attributes": [
         0,
         0,
@@ -3862,7 +3693,7 @@
       "icon_code": 2601,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 174,
+      "sort_order": 163,
       "equipment_attributes": [
         0,
         0,
@@ -3885,7 +3716,7 @@
       "icon_code": 2602,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 175,
+      "sort_order": 164,
       "equipment_attributes": [
         0,
         0,
@@ -3908,7 +3739,7 @@
       "icon_code": 2603,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 176,
+      "sort_order": 165,
       "equipment_attributes": [
         0,
         0,
@@ -3931,7 +3762,7 @@
       "icon_code": 2604,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 177,
+      "sort_order": 166,
       "equipment_attributes": [
         0,
         0,
@@ -3954,7 +3785,7 @@
       "icon_code": 2605,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 178,
+      "sort_order": 167,
       "equipment_attributes": [
         0,
         0,
@@ -3977,7 +3808,7 @@
       "icon_code": 2606,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 179,
+      "sort_order": 168,
       "equipment_attributes": [
         0,
         0,
@@ -4000,7 +3831,7 @@
       "icon_code": 2607,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 180,
+      "sort_order": 169,
       "equipment_attributes": [
         0,
         0,
@@ -4023,7 +3854,7 @@
       "icon_code": 2608,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 181,
+      "sort_order": 170,
       "equipment_attributes": [
         0,
         0,
@@ -4046,7 +3877,7 @@
       "icon_code": 2609,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 182,
+      "sort_order": 171,
       "equipment_attributes": [
         0,
         0,
@@ -4069,7 +3900,7 @@
       "icon_code": 2700,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 183,
+      "sort_order": 172,
       "equipment_attributes": [
         0,
         0,
@@ -4092,7 +3923,7 @@
       "icon_code": 2701,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 184,
+      "sort_order": 173,
       "equipment_attributes": [
         0,
         0,
@@ -4115,7 +3946,7 @@
       "icon_code": 2702,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 185,
+      "sort_order": 174,
       "equipment_attributes": [
         0,
         0,
@@ -4138,7 +3969,7 @@
       "icon_code": 2703,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 186,
+      "sort_order": 175,
       "equipment_attributes": [
         0,
         0,
@@ -4161,7 +3992,7 @@
       "icon_code": 2704,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 187,
+      "sort_order": 176,
       "equipment_attributes": [
         0,
         0,
@@ -4184,7 +4015,7 @@
       "icon_code": 2705,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 188,
+      "sort_order": 177,
       "equipment_attributes": [
         0,
         0,
@@ -4207,7 +4038,7 @@
       "icon_code": 2706,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 189,
+      "sort_order": 178,
       "equipment_attributes": [
         0,
         0,
@@ -4230,7 +4061,7 @@
       "icon_code": 2707,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 190,
+      "sort_order": 179,
       "equipment_attributes": [
         0,
         0,
@@ -4253,7 +4084,7 @@
       "icon_code": 2708,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 191,
+      "sort_order": 180,
       "equipment_attributes": [
         0,
         0,
@@ -4276,7 +4107,7 @@
       "icon_code": 2709,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 192,
+      "sort_order": 181,
       "equipment_attributes": [
         0,
         0,
@@ -4299,7 +4130,7 @@
       "icon_code": 2800,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 193,
+      "sort_order": 182,
       "equipment_attributes": [
         0,
         0,
@@ -4322,7 +4153,7 @@
       "icon_code": 2801,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 194,
+      "sort_order": 183,
       "equipment_attributes": [
         0,
         0,
@@ -4345,7 +4176,7 @@
       "icon_code": 2802,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 195,
+      "sort_order": 184,
       "equipment_attributes": [
         0,
         0,
@@ -4368,7 +4199,7 @@
       "icon_code": 2803,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 196,
+      "sort_order": 185,
       "equipment_attributes": [
         0,
         0,
@@ -4391,7 +4222,7 @@
       "icon_code": 2804,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 197,
+      "sort_order": 186,
       "equipment_attributes": [
         0,
         0,
@@ -4414,7 +4245,7 @@
       "icon_code": 2805,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 198,
+      "sort_order": 187,
       "equipment_attributes": [
         0,
         0,
@@ -4437,7 +4268,7 @@
       "icon_code": 2806,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 199,
+      "sort_order": 188,
       "equipment_attributes": [
         0,
         0,
@@ -4460,7 +4291,7 @@
       "icon_code": 2807,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 200,
+      "sort_order": 189,
       "equipment_attributes": [
         0,
         0,
@@ -4483,7 +4314,7 @@
       "icon_code": 2808,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 201,
+      "sort_order": 190,
       "equipment_attributes": [
         0,
         0,
@@ -4506,7 +4337,7 @@
       "icon_code": 2809,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 202,
+      "sort_order": 191,
       "equipment_attributes": [
         0,
         0,
@@ -4529,7 +4360,7 @@
       "icon_code": 2900,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 203,
+      "sort_order": 192,
       "equipment_attributes": [
         0,
         0,
@@ -4552,7 +4383,7 @@
       "icon_code": 2901,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 204,
+      "sort_order": 193,
       "equipment_attributes": [
         0,
         0,
@@ -4575,7 +4406,7 @@
       "icon_code": 2902,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 205,
+      "sort_order": 194,
       "equipment_attributes": [
         0,
         0,
@@ -4598,7 +4429,7 @@
       "icon_code": 2903,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 206,
+      "sort_order": 195,
       "equipment_attributes": [
         0,
         0,
@@ -4621,7 +4452,7 @@
       "icon_code": 2904,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 207,
+      "sort_order": 196,
       "equipment_attributes": [
         0,
         0,
@@ -4644,7 +4475,7 @@
       "icon_code": 2905,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 208,
+      "sort_order": 197,
       "equipment_attributes": [
         0,
         0,
@@ -4667,7 +4498,7 @@
       "icon_code": 2906,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 209,
+      "sort_order": 198,
       "equipment_attributes": [
         0,
         0,
@@ -4690,7 +4521,7 @@
       "icon_code": 2907,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 210,
+      "sort_order": 199,
       "equipment_attributes": [
         0,
         0,
@@ -4713,7 +4544,7 @@
       "icon_code": 2908,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 211,
+      "sort_order": 200,
       "equipment_attributes": [
         0,
         0,
@@ -4736,7 +4567,7 @@
       "icon_code": 2909,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 212,
+      "sort_order": 201,
       "equipment_attributes": [
         0,
         0,
@@ -4759,7 +4590,7 @@
       "icon_code": 3000,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 213,
+      "sort_order": 202,
       "equipment_attributes": [
         0,
         0,
@@ -4782,7 +4613,7 @@
       "icon_code": 3001,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 214,
+      "sort_order": 203,
       "equipment_attributes": [
         0,
         0,
@@ -4805,7 +4636,7 @@
       "icon_code": 3002,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 215,
+      "sort_order": 204,
       "equipment_attributes": [
         0,
         0,
@@ -4828,7 +4659,7 @@
       "icon_code": 3003,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 216,
+      "sort_order": 205,
       "equipment_attributes": [
         0,
         0,
@@ -4851,7 +4682,7 @@
       "icon_code": 3004,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 217,
+      "sort_order": 206,
       "equipment_attributes": [
         0,
         0,
@@ -4874,7 +4705,7 @@
       "icon_code": 3005,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 218,
+      "sort_order": 207,
       "equipment_attributes": [
         0,
         0,
@@ -4897,7 +4728,7 @@
       "icon_code": 3006,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 219,
+      "sort_order": 208,
       "equipment_attributes": [
         0,
         0,
@@ -4920,7 +4751,7 @@
       "icon_code": 3007,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 220,
+      "sort_order": 209,
       "equipment_attributes": [
         0,
         0,
@@ -4943,7 +4774,7 @@
       "icon_code": 3008,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 221,
+      "sort_order": 210,
       "equipment_attributes": [
         0,
         0,
@@ -4966,7 +4797,7 @@
       "icon_code": 3009,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 222,
+      "sort_order": 211,
       "equipment_attributes": [
         0,
         0,
@@ -4989,7 +4820,7 @@
       "icon_code": 3100,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 223,
+      "sort_order": 212,
       "equipment_attributes": [
         0,
         0,
@@ -5012,7 +4843,7 @@
       "icon_code": 3101,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 224,
+      "sort_order": 213,
       "equipment_attributes": [
         0,
         0,
@@ -5035,7 +4866,7 @@
       "icon_code": 3102,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 225,
+      "sort_order": 214,
       "equipment_attributes": [
         0,
         0,
@@ -5058,7 +4889,7 @@
       "icon_code": 3103,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 226,
+      "sort_order": 215,
       "equipment_attributes": [
         0,
         0,
@@ -5081,7 +4912,7 @@
       "icon_code": 3104,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 227,
+      "sort_order": 216,
       "equipment_attributes": [
         0,
         0,
@@ -5104,7 +4935,7 @@
       "icon_code": 3105,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 228,
+      "sort_order": 217,
       "equipment_attributes": [
         0,
         0,
@@ -5127,7 +4958,7 @@
       "icon_code": 3106,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 229,
+      "sort_order": 218,
       "equipment_attributes": [
         0,
         0,
@@ -5150,7 +4981,7 @@
       "icon_code": 3107,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 230,
+      "sort_order": 219,
       "equipment_attributes": [
         0,
         0,
@@ -5173,7 +5004,7 @@
       "icon_code": 3108,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 231,
+      "sort_order": 220,
       "equipment_attributes": [
         0,
         0,
@@ -5196,7 +5027,7 @@
       "icon_code": 3109,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 232,
+      "sort_order": 221,
       "equipment_attributes": [
         0,
         0,
@@ -5219,7 +5050,7 @@
       "icon_code": 3200,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 233,
+      "sort_order": 222,
       "equipment_attributes": [
         0,
         0,
@@ -5242,7 +5073,7 @@
       "icon_code": 3201,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 234,
+      "sort_order": 223,
       "equipment_attributes": [
         0,
         0,
@@ -5265,7 +5096,7 @@
       "icon_code": 3202,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 235,
+      "sort_order": 224,
       "equipment_attributes": [
         0,
         0,
@@ -5288,7 +5119,7 @@
       "icon_code": 3203,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 236,
+      "sort_order": 225,
       "equipment_attributes": [
         0,
         0,
@@ -5311,7 +5142,7 @@
       "icon_code": 3204,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 237,
+      "sort_order": 226,
       "equipment_attributes": [
         0,
         0,
@@ -5334,7 +5165,7 @@
       "icon_code": 3205,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 238,
+      "sort_order": 227,
       "equipment_attributes": [
         0,
         0,
@@ -5357,7 +5188,7 @@
       "icon_code": 3206,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 239,
+      "sort_order": 228,
       "equipment_attributes": [
         0,
         0,
@@ -5380,7 +5211,7 @@
       "icon_code": 3207,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 240,
+      "sort_order": 229,
       "equipment_attributes": [
         0,
         0,
@@ -5403,7 +5234,7 @@
       "icon_code": 3208,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 241,
+      "sort_order": 230,
       "equipment_attributes": [
         0,
         0,
@@ -5426,7 +5257,7 @@
       "icon_code": 3209,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 242,
+      "sort_order": 231,
       "equipment_attributes": [
         0,
         0,
@@ -5449,7 +5280,7 @@
       "icon_code": 3300,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 243,
+      "sort_order": 232,
       "equipment_attributes": [
         0,
         0,
@@ -5472,7 +5303,7 @@
       "icon_code": 3301,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 244,
+      "sort_order": 233,
       "equipment_attributes": [
         0,
         0,
@@ -5495,7 +5326,7 @@
       "icon_code": 3302,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 245,
+      "sort_order": 234,
       "equipment_attributes": [
         0,
         0,
@@ -5518,7 +5349,7 @@
       "icon_code": 3303,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 246,
+      "sort_order": 235,
       "equipment_attributes": [
         0,
         0,
@@ -5541,7 +5372,7 @@
       "icon_code": 3304,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 247,
+      "sort_order": 236,
       "equipment_attributes": [
         0,
         0,
@@ -5564,7 +5395,7 @@
       "icon_code": 3305,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 248,
+      "sort_order": 237,
       "equipment_attributes": [
         0,
         0,
@@ -5587,7 +5418,7 @@
       "icon_code": 3306,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 249,
+      "sort_order": 238,
       "equipment_attributes": [
         0,
         0,
@@ -5610,7 +5441,7 @@
       "icon_code": 3307,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 250,
+      "sort_order": 239,
       "equipment_attributes": [
         0,
         0,
@@ -5633,7 +5464,7 @@
       "icon_code": 3308,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 251,
+      "sort_order": 240,
       "equipment_attributes": [
         0,
         0,
@@ -5656,7 +5487,7 @@
       "icon_code": 3309,
       "quality": 1,
       "sort_group": 100,
-      "sort_order": 252,
+      "sort_order": 241,
       "equipment_attributes": [
         0,
         0,
@@ -5666,6 +5497,678 @@
       "appearance_properties": {
         "7": 230091
       }
+    },
+    {
+      "template_id": 110011001,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1100",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1100,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 242,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011011,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1101",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1101,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 243,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011021,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1102",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1102,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 244,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011031,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1103",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1103,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 245,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011041,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1104",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1104,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 246,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011051,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1105",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1105,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 247,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011061,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1106",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1106,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 248,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011071,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1107",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1107,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 249,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011081,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1108",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1108,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 250,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 110011091,
+      "kind": "equipment",
+      "name": "APK资源预览-戒指-1109",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 11,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1109,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 251,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012001,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1200",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1200,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 252,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012011,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1201",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1201,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 253,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012021,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1202",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1202,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 254,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012031,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1203",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1203,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 255,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012041,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1204",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1204,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 256,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012051,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1205",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1205,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 257,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012061,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1206",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1206,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 258,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012071,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1207",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1207,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 259,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012081,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1208",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1208,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 260,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 120012091,
+      "kind": "equipment",
+      "name": "APK资源预览-外套-1209",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 12,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1209,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 261,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013001,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1300",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1300,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 262,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013011,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1301",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1301,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 263,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013021,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1302",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1302,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 264,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013031,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1303",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1303,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 265,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013041,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1304",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1304,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 266,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013051,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1305",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1305,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 267,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013061,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1306",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1306,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 268,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013071,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1307",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1307,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 269,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013081,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1308",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1308,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 270,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 130013091,
+      "kind": "equipment",
+      "name": "APK资源预览-饰品-1309",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 13,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1309,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 271,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 140010001,
+      "kind": "equipment",
+      "name": "APK资源预览-法宝-1000",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 14,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1000,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 272,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
+    },
+    {
+      "template_id": 140010011,
+      "kind": "equipment",
+      "name": "APK资源预览-法宝-1001",
+      "description": "兼容服 APK 装备图标资源预览项。仅 icon_code/资源分组来自 APK，template_id、名称、等级、属性均为本地预览构造数据，不代表官方装备。",
+      "max_quantity": 1,
+      "equipment_slot": 14,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 1001,
+      "quality": 1,
+      "sort_group": 100,
+      "sort_order": 273,
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "appearance_properties": {}
     }
   ]
 }

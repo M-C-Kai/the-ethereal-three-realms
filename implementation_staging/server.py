@@ -14,9 +14,10 @@ from pathlib import Path
 
 from item_registry import (
     ItemRegistry,
-    armor_property2_from_icon,
+    armor_property2_from_equipment,
     battle_weapon_field2_from_icon,
     default_item_registry,
+    deprecated_armor_template_ids,
 )
 from map_registry import (
     MapActorDefinition,
@@ -1462,7 +1463,7 @@ BATTLE_DROP_TEMPLATE_ID = 260_000_001
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
 DEFAULT_BAG_CAPACITY = 320
-EQUIPMENT_RESOURCE_PREVIEW_VERSION = 1
+EQUIPMENT_RESOURCE_PREVIEW_VERSION = 2
 DEFAULT_CURRENCY_BALANCE = 10_000_000
 MAX_CURRENCY_BALANCE = 2_147_483_647
 CURRENCY_PROPERTIES = {
@@ -1735,6 +1736,24 @@ def ensure_equipment_resource_preview_items(
         role['bag_capacity'] = new_capacity
         changed = True
     items = role_items(role)
+    deprecated_armor = deprecated_armor_template_ids()
+    kept_items: list[dict[str, object]] = []
+    removed_legacy_armor = False
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            template_id = int(item.get('template_id', 0))
+        except (TypeError, ValueError):
+            template_id = 0
+        if template_id in deprecated_armor:
+            removed_legacy_armor = True
+            continue
+        kept_items.append(item)
+    if removed_legacy_armor:
+        role['items'] = kept_items
+        items = role_items(role)
+        changed = True
     present = {
         int(item.get('template_id', 0))
         for item in items
@@ -2631,7 +2650,10 @@ def character_appearance(
         slot = int(resolved.get('equipment_slot', 0))
         if slot == 3:
             # 铠甲只从 armor_appearance_mapping.json 取 property2；未知映射不猜。
-            armor_value = armor_property2_from_icon(int(resolved.get('icon_code', 0)))
+            armor_value = armor_property2_from_equipment(
+                int(resolved.get('template_id', 0)),
+                int(resolved.get('icon_code', 0)),
+            )
             if armor_value is not None:
                 properties[2] = int(armor_value)
         appearance = resolved.get('appearance_properties', {})

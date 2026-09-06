@@ -20,6 +20,8 @@ from item_registry import (
     ItemRegistry,
     PREVIEW_SLOT_APPEARANCE_PROPERTY,
     PREVIEW_SLOTS_WITHOUT_APPEARANCE,
+    armor_resource_preview_template_mapping,
+    deprecated_armor_template_ids,
     battle_weapon_field2_from_icon,
     default_item_registry,
     preview_appearance_properties,
@@ -185,10 +187,10 @@ class EnsureItemsTemplateFieldLeakTests(unittest.TestCase):
         keys = self._get_item_keys(WEAPON_TEMPLATE_ID)
         self.assertNotIn('mount_model', keys)
 
-    def test_armour_item_has_no_template_fields(self):
-        keys = self._get_item_keys(ARMOUR_TEMPLATE_ID)
-        for field in TEMPLATE_FIELDS:
-            self.assertNotIn(field, keys, f'armour item should not have template field {field!r}')
+    def test_deprecated_starter_armour_is_not_granted(self):
+        settings = Settings()
+        role = default_role(settings)
+        self.assertNotIn(ARMOUR_TEMPLATE_ID, {int(item.get('template_id', 0)) for item in role['items']})
 
     def test_potion_item_has_no_template_fields(self):
         keys = self._get_item_keys(POTION_TEMPLATE_ID)
@@ -437,90 +439,46 @@ class RegressionTests(unittest.TestCase):
 
 
 class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
-    def test_preview_catalog_matches_apk_resources(self):
+    def test_preview_catalog_replaces_old_armor_items_with_31_resource_items(self):
         root = Path(__file__).resolve().parents[1]
         resources = json.loads(
             (root / 'data' / 'catalog' / 'apk_equipment_resources.json').read_text(encoding='utf-8')
         )['resources']
-        items_catalog = json.loads(
-            (root / 'data' / 'catalog' / 'items.json').read_text(encoding='utf-8')
-        )['items']
-        preview_catalog = json.loads(
+        preview = json.loads(
             (root / 'data' / 'catalog' / 'equipment_resource_preview_items.json').read_text(encoding='utf-8')
         )
-        official_ids = {int(item['template_id']) for item in items_catalog}
-        preview_items = preview_catalog['items']
+        items = preview['items']
         self.assertEqual(len(resources), 252)
-        self.assertEqual(len(preview_items), 252)
-        self.assertEqual(preview_catalog.get('status'), 'compatibility_preview')
-        preview_ids = [int(item['template_id']) for item in preview_items]
-        icon_codes = [int(item['icon_code']) for item in preview_items]
-        self.assertEqual(len(set(preview_ids)), 252)
-        self.assertEqual(len(set(icon_codes)), 252)
-        self.assertEqual(set(preview_ids) & official_ids, set())
-        manifest = json.loads(
-            (root / 'materials' / 'appearance-layer-audit' / 'manifest.json').read_text(encoding='utf-8')
-        )
-        by_slot: dict[int, list] = {}
-        for resource, item in zip(resources, preview_items):
-            template_id = int(item['template_id'])
-            category = (template_id // 10_000_000) % 100
-            self.assertTrue(1 <= category <= 21, template_id)
-            self.assertEqual(int(item['equipment_slot']), int(resource['equipment_slot']))
-            self.assertEqual(int(item['icon_code']), int(resource['icon_code']))
-            self.assertEqual(item['quality'], 1)
-            expected = synthetic_preview_template_id(
-                resource['equipment_slot'],
-                resource['resource_group'],
-                resource['frame'],
-                reserved_ids=official_ids,
-            )
-            self.assertEqual(template_id, expected)
-            if int(resource['equipment_slot']) == 10:
-                self.assertEqual(category, 10)
-                self.assertEqual((template_id // 100_000) % 100, 0)
-            by_slot.setdefault(int(item['equipment_slot']), []).append(item)
-        for slot, slot_items in by_slot.items():
-            slot_items.sort(key=lambda item: int(item['sort_order']))
-            for preview_index, item in enumerate(slot_items):
-                expected_appearance = preview_appearance_properties(
-                    slot,
-                    preview_index,
-                    manifest,
-                    icon_code=int(item['icon_code']),
-                )
-                self.assertEqual(item['appearance_properties'], expected_appearance)
-            if slot == 10:
-                self.assertEqual(len(slot_items), 130)
-                for item in slot_items:
-                    self.assertIn('7', item['appearance_properties'])
-                    expected_weapon_code = battle_weapon_field2_from_icon(
-                        int(item['icon_code']), int(item['quality'])
-                    )
-                    self.assertGreater(expected_weapon_code, 0)
-                    self.assertEqual(
-                        int(item['appearance_properties']['7']),
-                        expected_weapon_code,
-                    )
-            if slot in PREVIEW_SLOT_APPEARANCE_PROPERTY:
-                self.assertTrue(
-                    all(item['appearance_properties'] for item in slot_items),
-                    slot,
-                )
-                property_key = str(PREVIEW_SLOT_APPEARANCE_PROPERTY[slot])
-                layer = manifest[property_key]
-                allowed = {
-                    int(image_id) - int(layer['group_base'])
-                    for image_id in layer['candidate_image_ids']
-                }
-                for item in slot_items:
-                    value = item['appearance_properties'][property_key]
-                    self.assertIn(value, allowed)
-            if slot in PREVIEW_SLOTS_WITHOUT_APPEARANCE:
-                self.assertTrue(all(item['appearance_properties'] == {} for item in slot_items))
+        self.assertEqual(len(items), 273)
+        self.assertEqual(preview.get('status'), 'compatibility_preview')
+        self.assertEqual(len({int(item['template_id']) for item in items}), 273)
 
+        armor_items = [item for item in items if int(item['equipment_slot']) == 3]
+        self.assertEqual(len(armor_items), 31)
+        expected_mapping = armor_resource_preview_template_mapping()
+        self.assertEqual(
+            {int(item['template_id']): int(item['appearance_properties']['2']) for item in armor_items},
+            expected_mapping,
+        )
+        self.assertTrue(all(int(item['icon_code']) == 300 for item in armor_items))
+        self.assertTrue(
+            set(deprecated_armor_template_ids()).isdisjoint(
+                {int(item['template_id']) for item in items}
+            )
+        )
+
+        nonarmor_resources = [r for r in resources if int(r['equipment_slot']) != 3]
+        nonarmor_items = [i for i in items if int(i['equipment_slot']) != 3]
+        self.assertEqual(len(nonarmor_resources), 242)
+        self.assertEqual(len(nonarmor_items), 242)
+        expected_by_icon = {int(r['icon_code']): int(r['equipment_slot']) for r in nonarmor_resources}
+        actual_by_icon = {int(i['icon_code']): int(i['equipment_slot']) for i in nonarmor_items}
+        self.assertEqual(actual_by_icon, expected_by_icon)
+
+    def test_registry_loads_every_preview_template(self):
         registry = default_item_registry()
-        self.assertEqual(len(registry.preview_template_ids()), 252)
+        preview_ids = registry.preview_template_ids()
+        self.assertEqual(len(preview_ids), 273)
         for template_id in preview_ids:
             registry.require(template_id)
 

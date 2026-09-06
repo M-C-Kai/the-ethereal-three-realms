@@ -87,8 +87,8 @@ def helmet_property20_from_icon(icon_code: int) -> int:
 
 
 @lru_cache(maxsize=1)
-def _armor_appearance_catalog() -> tuple[dict[int, int], dict[int, int]]:
-    """Load APK-confirmed armor resources and explicit icon mappings from catalog."""
+def _armor_appearance_catalog() -> tuple[dict[int, int], dict[int, int], dict[int, int], frozenset[int]]:
+    """Load confirmed armor resources plus explicit preview/deprecation metadata."""
     data = json.loads(ARMOR_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
     if not isinstance(data, dict) or int(data.get('version', 0)) != 1:
         raise ValueError(f'invalid armor appearance mapping catalog: {ARMOR_APPEARANCE_MAPPING_FILE}')
@@ -120,11 +120,33 @@ def _armor_appearance_catalog() -> tuple[dict[int, int], dict[int, int]]:
         if icon_code in icon_mapping:
             raise ValueError(f'duplicate armor icon_code after normalization: {icon_code}')
         icon_mapping[icon_code] = property_value
-    return property_to_image, icon_mapping
+
+    preview = data.get('resource_preview', {})
+    raw_template_mapping = preview.get('template_to_property2') if isinstance(preview, dict) else None
+    if not isinstance(raw_template_mapping, dict) or len(raw_template_mapping) != 31:
+        raise ValueError(f'armor resource preview template table must contain 31 entries: {ARMOR_APPEARANCE_MAPPING_FILE}')
+    template_mapping: dict[int, int] = {}
+    for raw_template, raw_value in raw_template_mapping.items():
+        template_id = int(raw_template)
+        property_value = int(raw_value)
+        expected_template = 30_000_000 + (14_000 + property_value) * 10 + 1
+        if property_value not in property_to_image or template_id != expected_template:
+            raise ValueError(f'invalid armor preview template pair {raw_template!r}->{raw_value!r}')
+        template_mapping[template_id] = property_value
+    if set(template_mapping.values()) != set(range(31)):
+        raise ValueError(f'armor resource preview property range is incomplete: {ARMOR_APPEARANCE_MAPPING_FILE}')
+
+    raw_deprecated = data.get('deprecated_template_ids', [])
+    if not isinstance(raw_deprecated, list):
+        raise ValueError(f'armor deprecated_template_ids must be a list: {ARMOR_APPEARANCE_MAPPING_FILE}')
+    deprecated = frozenset(int(value) for value in raw_deprecated)
+    if 30_001_001 not in deprecated:
+        raise ValueError('legacy starter armor 30001001 must remain deprecated')
+    return property_to_image, icon_mapping, template_mapping, deprecated
 
 
 def armor_property2_to_image_mapping() -> dict[int, int]:
-    """Return APK-confirmed property2 -> armor image mapping (14000..14030)."""
+    """Return confirmed property2 -> armor image mapping (14000..14030)."""
     return dict(_armor_appearance_catalog()[0])
 
 
@@ -133,10 +155,32 @@ def armor_icon_to_property2_mapping() -> dict[int, int]:
     return dict(_armor_appearance_catalog()[1])
 
 
+def armor_resource_preview_template_mapping() -> dict[int, int]:
+    """Return resource-preview template_id -> property2 for all 31 armor bodies."""
+    return dict(_armor_appearance_catalog()[2])
+
+
+def deprecated_armor_template_ids() -> frozenset[int]:
+    """Return local armor templates that must be removed from saved inventories."""
+    return _armor_appearance_catalog()[3]
+
+
 def armor_property2_from_icon(icon_code: int) -> int | None:
-    """Resolve armor property2 from catalog; unresolved icons return None, never guessed."""
+    """Resolve armor property2 from a confirmed icon mapping; unresolved icons stay None."""
     return _armor_appearance_catalog()[1].get(int(icon_code))
 
+
+def armor_property2_from_equipment(template_id: int, icon_code: int) -> int | None:
+    """Resolve armor appearance from catalog data only.
+
+    Dedicated 14000..14030 preview equipment is keyed by template_id. Ordinary
+    armor still requires an explicit icon_code mapping and is never guessed.
+    """
+    catalog = _armor_appearance_catalog()
+    preview_value = catalog[2].get(int(template_id))
+    if preview_value is not None:
+        return preview_value
+    return catalog[1].get(int(icon_code))
 
 def battle_weapon_image_from_icon(icon_code: int) -> int:
     """Resolve one weapon image from the catalog; unknown icons are not guessed."""
