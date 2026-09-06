@@ -4599,10 +4599,20 @@ class LocalGameServer:
         role: dict[str, object],
         fields: list[Field],
     ) -> LifeTransactionResult:
-        """Apply one 1143/action-5 craft and persist mutations only."""
+        """Apply one normal or direct-use 1143/action-5 transaction."""
+        if not (is_life_craft_request(fields) or is_life_direct_use_request(fields)):
+            return LifeTransactionResult((), False, '制造请求格式非法')
         recipe_id = int(fields[1].value)
-        slots = [int(field.value) for field in fields[2:6]]
-        quantity = int(fields[6].value)
+        if is_life_direct_use_request(fields):
+            # APK db.c_(I) sends the six-field direct-use form without a
+            # quantity byte. One direct use is exactly one operation;
+            # zero slots let craft_result perform authoritative material
+            # lookup instead of trusting client-selected instances.
+            slots = [0, 0, 0, 0]
+            quantity = 1
+        else:
+            slots = [int(field.value) for field in fields[2:6]]
+            quantity = int(fields[6].value)
         recipe = self.settings.life_registry.recipe(recipe_id)
         snapshot = copy.deepcopy(role)
         try:
@@ -6301,9 +6311,7 @@ class LocalGameServer:
                             quantity,
                             life_vitality(active_role),
                         )
-                        result = self.handle_life_craft(active_role, fields) if (
-                            is_life_craft_request(fields)
-                        ) else LifeTransactionResult((), False, '该配方不支持直接使用')
+                        result = self.handle_life_craft(active_role, fields)
                         if result.changed:
                             LOG.info(
                                 'LIFE_CRAFT_SUCCESS user=%r role_id=%d recipe_id=%d '
