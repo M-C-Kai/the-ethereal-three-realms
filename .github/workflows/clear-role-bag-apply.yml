@@ -27,7 +27,6 @@ jobs:
           set +e
           cd implementation_staging
           python -m unittest discover -s tests > /tmp/baseline.txt 2>&1
-          echo $? > /tmp/baseline.exit
           set -e
 
       - name: Write RED regression test
@@ -80,29 +79,40 @@ jobs:
               def test_preview_catalog_does_not_refill_after_reset(self):
                   settings = Settings()
                   role = default_role(settings)
+                  role.pop('bag_reset_version', None)  # 模拟升级前已经存在的角色存档。
                   self.assertTrue(any(item.get('location') == 'bag' for item in role_items(role)))
-                  clear_role_bag_once(role)
+                  self.assertTrue(clear_role_bag_once(role))
                   self.assertFalse(any(item.get('location') == 'bag' for item in role_items(role)))
 
                   ensure_equipment_resource_preview_items(role, settings.item_registry)
                   self.assertFalse(any(item.get('location') == 'bag' for item in role_items(role)))
 
-              def test_role_store_migration_clears_existing_bag_and_keeps_equipped(self):
+              def test_roles_for_migrates_legacy_role_but_keeps_equipped(self):
                   with tempfile.TemporaryDirectory() as tmp:
                       settings = Settings(role_data_file=str(Path(tmp) / 'roles.json'))
                       store = RoleStore(settings)
                       role = default_role(settings)
+                      role.pop('bag_reset_version', None)  # 旧存档没有本次迁移标记。
                       first = role_items(role)[0]
                       first['location'] = 'equipped'
                       equipped_id = int(first['id'])
+                      store.data['accounts'] = {'legacy': [role]}
 
-                      self.assertTrue(store._ensure_items(role))
+                      migrated = store.roles_for('legacy')[0]
                       self.assertEqual(
-                          [int(item['id']) for item in role_items(role) if item.get('location') == 'equipped'],
+                          [int(item['id']) for item in role_items(migrated) if item.get('location') == 'equipped'],
                           [equipped_id],
                       )
-                      self.assertFalse(any(item.get('location') == 'bag' for item in role_items(role)))
+                      self.assertFalse(any(item.get('location') == 'bag' for item in role_items(migrated)))
+                      self.assertEqual(migrated['bag_reset_version'], ROLE_BAG_RESET_VERSION)
+
+              def test_new_role_is_marked_current_and_keeps_starter_bag(self):
+                  with tempfile.TemporaryDirectory() as tmp:
+                      settings = Settings(role_data_file=str(Path(tmp) / 'roles.json'))
+                      store = RoleStore(settings)
+                      role = store.roles_for('new-user')[0]
                       self.assertEqual(role['bag_reset_version'], ROLE_BAG_RESET_VERSION)
+                      self.assertTrue(any(item.get('location') == 'bag' for item in role_items(role)))
 
 
           if __name__ == '__main__':
@@ -139,21 +149,35 @@ jobs:
           text = text.replace(anchor, anchor + 'ROLE_BAG_RESET_VERSION = 1\n', 1)
 
           anchor = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    present = {\n"
-          replacement = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    # 已执行背包清空迁移的角色不再自动补回历史 APK 预览物品。\n    # 后续正常获得的新物品仍会保留，因为清空动作本身只执行一次。\n    if int(role.get('bag_reset_version', 0) or 0) >= ROLE_BAG_RESET_VERSION:\n        if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n            role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n            changed = True\n        return changed\n    present = {\n"
+          replacement = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    # 已执行本次背包清空迁移的旧角色，不再自动补回历史 APK 预览物品。\n    if int(role.get('bag_reset_version', 0) or 0) >= ROLE_BAG_RESET_VERSION:\n        if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n            role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n            changed = True\n        return changed\n    present = {\n"
           if anchor not in text:
               raise SystemExit('preview suppression anchor not found')
           text = text.replace(anchor, replacement, 1)
 
           anchor = "    if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n        role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n        changed = True\n    return changed\n\n\ndef starter_mail"
-          replacement = "    if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n        role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n        changed = True\n    return changed\n\n\ndef clear_role_bag_once(role: dict[str, object]) -> bool:\n    \"\"\"一次性清空角色背包，仅删除 location=bag 的物品实例。\n\n    已装备物品必须保留；迁移完成后写入版本号，因此之后正常获得的物品\n    不会在下一次登录时再次被删除。\n    \"\"\"\n    try:\n        current_version = int(role.get('bag_reset_version', 0) or 0)\n    except (TypeError, ValueError):\n        current_version = 0\n    if current_version >= ROLE_BAG_RESET_VERSION:\n        return False\n\n    items = role_items(role)\n    kept_items = [\n        item for item in items\n        if not (isinstance(item, dict) and item.get('location') == 'bag')\n    ]\n    if len(kept_items) != len(items):\n        role['items'] = kept_items\n    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    return True\n\n\ndef starter_mail"
+          replacement = "    if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n        role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n        changed = True\n    return changed\n\n\ndef clear_role_bag_once(role: dict[str, object]) -> bool:\n    \"\"\"一次性清空旧角色背包，只删除 location=bag 的物品实例。\n\n    已装备物品保留；迁移后写版本号，因此之后新获得的物品不会再次被清空。\n    \"\"\"\n    try:\n        current_version = int(role.get('bag_reset_version', 0) or 0)\n    except (TypeError, ValueError):\n        current_version = 0\n    if current_version >= ROLE_BAG_RESET_VERSION:\n        return False\n\n    items = role_items(role)\n    kept_items = [\n        item for item in items\n        if not (isinstance(item, dict) and item.get('location') == 'bag')\n    ]\n    if len(kept_items) != len(items):\n        role['items'] = kept_items\n    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    return True\n\n\ndef starter_mail"
           if anchor not in text:
               raise SystemExit('clear helper insertion anchor not found')
           text = text.replace(anchor, replacement, 1)
 
-          anchor = '        changed = ensure_equipment_resource_preview_items(role, registry) or changed\n'
-          replacement = "        changed = ensure_equipment_resource_preview_items(role, registry) or changed\n        if clear_role_bag_once(role):\n            items = role_items(role)\n            changed = True\n"
+          # 新建角色属于迁移后的数据，不应该在第一次登录时被清空。
+          anchor = "    role['mailbox'] = starter_mail(int(role['id']))\n    role['mailbox_initialized'] = True\n    return role\n"
+          replacement = "    role['mailbox'] = starter_mail(int(role['id']))\n    role['mailbox_initialized'] = True\n    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    return role\n"
           if anchor not in text:
-              raise SystemExit('RoleStore migration anchor not found')
+              raise SystemExit('default_role marker anchor not found')
+          text = text.replace(anchor, replacement, 1)
+
+          anchor = "        role['mailbox'] = starter_mail(role_id)\n        role['mailbox_initialized'] = True\n        roles.append(role)\n"
+          replacement = "        role['mailbox'] = starter_mail(role_id)\n        role['mailbox_initialized'] = True\n        role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n        roles.append(role)\n"
+          if anchor not in text:
+              raise SystemExit('RoleStore.create marker anchor not found')
+          text = text.replace(anchor, replacement, 1)
+
+          # 只有从旧存档加载、没有迁移标记的角色会在 roles_for() 中执行一次清空。
+          anchor = "            changed = self._ensure_items(role) or changed\n            changed = self._ensure_mailbox(role) or changed\n"
+          replacement = "            changed = self._ensure_items(role) or changed\n            changed = clear_role_bag_once(role) or changed\n            changed = self._ensure_mailbox(role) or changed\n"
+          if anchor not in text:
+              raise SystemExit('roles_for migration anchor not found')
           text = text.replace(anchor, replacement, 1)
 
           path.write_text(text, encoding='utf-8')
@@ -207,5 +231,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add implementation_staging/server.py implementation_staging/tests/test_role_bag_reset.py
           git rm .github/workflows/clear-role-bag-apply.yml
-          git commit -m 'fix: clear existing role bag once'
+          git commit -m 'fix: clear legacy role bag once'
           git push origin HEAD:master
