@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -9,42 +10,46 @@ from typing import Any, Iterable, Sequence
 PREVIEW_QUALITY = 1
 PREVIEW_SERIAL_COLLISION_OFFSET = 50_000
 
-# User-confirmed visual mapping between equipment icon groups (21..33) and
-# the APK battle weapon image families.  This is a compatibility mapping
-# derived from the side-by-side resource sheets; it is not claimed to be
-# official server metadata.
-WEAPON_ICON_GROUP_TO_BATTLE_FAMILY = {
-    21: 220,
-    22: 260,
-    23: 271,
-    24: 250,
-    25: 231,
-    26: 280,
-    27: 242,
-    28: 240,
-    29: 241,
-    30: 221,
-    31: 290,
-    32: 270,
-    33: 230,
-}
+WEAPON_APPEARANCE_MAPPING_FILE = (
+    Path(__file__).resolve().parent / 'data' / 'catalog' / 'weapon_appearance_mapping.json'
+)
+
+
+@lru_cache(maxsize=1)
+def _weapon_icon_to_image_mapping() -> dict[int, int]:
+    """Load the weapon appearance relation from the catalog data file."""
+    data = json.loads(WEAPON_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
+    if not isinstance(data, dict) or int(data.get('version', 0)) != 1:
+        raise ValueError(
+            f'invalid weapon appearance mapping catalog: {WEAPON_APPEARANCE_MAPPING_FILE}'
+        )
+    raw_mapping = data.get('icon_to_weapon_image')
+    if not isinstance(raw_mapping, dict) or not raw_mapping:
+        raise ValueError(
+            f'weapon appearance mapping is empty: {WEAPON_APPEARANCE_MAPPING_FILE}'
+        )
+    mapping: dict[int, int] = {}
+    for raw_icon, raw_image in raw_mapping.items():
+        icon_code = int(raw_icon)
+        weapon_image = int(raw_image)
+        if icon_code <= 0 or weapon_image <= 0:
+            raise ValueError(
+                f'invalid weapon appearance pair {raw_icon!r}->{raw_image!r}'
+            )
+        if icon_code in mapping:
+            raise ValueError(f'duplicate weapon icon_code after normalization: {icon_code}')
+        mapping[icon_code] = weapon_image
+    return mapping
+
+
+def weapon_icon_to_image_mapping() -> dict[int, int]:
+    """Return a copy of the catalog-backed icon_code -> weapon image mapping."""
+    return dict(_weapon_icon_to_image_mapping())
 
 
 def battle_weapon_image_from_icon(icon_code: int) -> int:
-    """Map one 21xx..33xx weapon icon to its battle image id.
-
-    Each icon group exposes ten variants. Family 271 starts at 27101 rather
-    than 27100. Family 231 has two extra APK images (23110/23111) which are
-    intentionally not mapped because icon group 25 has only ten entries.
-    Unknown groups/variants return zero instead of inventing an appearance.
-    """
-    code = int(icon_code)
-    group = code // 100
-    variant = code % 100
-    family = WEAPON_ICON_GROUP_TO_BATTLE_FAMILY.get(group)
-    if family is None or not 0 <= variant <= 9:
-        return 0
-    return (family * 100) + variant + (1 if family == 271 else 0)
+    """Resolve one weapon image from the catalog; unknown icons are not guessed."""
+    return _weapon_icon_to_image_mapping().get(int(icon_code), 0)
 
 
 def battle_weapon_field2_from_icon(icon_code: int, quality: int) -> int:
