@@ -38,26 +38,29 @@ class ArmorAppearanceMappingTests(unittest.TestCase):
             {value: 14000 + value for value in range(31)},
         )
 
-    def test_icon_mapping_remains_unresolved_and_not_guessed(self):
-        self.assertEqual(armor_icon_to_property2_mapping(), {})
-        for icon_code in range(300, 310):
-            self.assertIsNone(armor_property2_from_icon(icon_code), icon_code)
+    def test_icon_mapping_covers_30_equippable_armors(self):
+        expected = {}
+        for offset, base in enumerate((300, 1200, 1300)):
+            for frame in range(10):
+                expected[base + frame] = offset * 10 + frame + 1
+        self.assertEqual(armor_icon_to_property2_mapping(), expected)
+        for icon_code, property2 in expected.items():
+            self.assertEqual(armor_property2_from_icon(icon_code), property2)
             self.assertEqual(
-                preview_appearance_properties(3, icon_code - 300, {}, icon_code=icon_code),
-                {},
+                preview_appearance_properties(3, 0, {}, icon_code=icon_code),
+                {'2': property2},
             )
 
-    def test_resource_preview_templates_cover_all_31_armors(self):
+    def test_resource_preview_templates_cover_30_equippable_armors(self):
         mapping = armor_resource_preview_template_mapping()
-        self.assertEqual(len(mapping), 31)
-        self.assertEqual(set(mapping.values()), set(range(31)))
+        self.assertEqual(len(mapping), 30)
+        self.assertEqual(set(mapping.values()), set(range(1, 31)))
         for template_id, property2 in mapping.items():
             self.assertEqual(template_id, 30_000_000 + (14_000 + property2) * 10 + 1)
-            self.assertEqual(armor_property2_from_equipment(template_id, 300), property2)
+            self.assertEqual(armor_property2_from_equipment(template_id, 0), property2)
 
-    def test_legacy_armor_templates_are_deprecated(self):
-        expected = {30_001_001, *[30_003_001 + frame * 10 for frame in range(10)]}
-        self.assertEqual(set(deprecated_armor_template_ids()), expected)
+    def test_default_body_preview_is_deprecated(self):
+        self.assertIn(30_140_001, deprecated_armor_template_ids())
 
     def test_real_and_preview_armor_never_use_property15(self):
         root = Path(__file__).resolve().parents[1]

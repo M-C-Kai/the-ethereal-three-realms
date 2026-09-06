@@ -45,7 +45,7 @@ class InventoryCleanupV3Tests(unittest.TestCase):
         settings = Settings()
         role = default_role(settings)
         role['bag_capacity'] = 320
-        role['equipment_resource_preview_version'] = 2
+        role['equipment_resource_preview_version'] = 3
         control = next(item for item in role['items'] if int(item.get('template_id', 0)) == 100_001_001)
         old_ids = sorted(deprecated_unsupported_equipment_template_ids())
         for offset, template_id in enumerate(old_ids, start=1):
@@ -61,7 +61,7 @@ class InventoryCleanupV3Tests(unittest.TestCase):
         self.assertTrue(set(old_ids).isdisjoint(remaining))
         self.assertIn(int(control['template_id']), remaining)
         self.assertEqual(role['bag_capacity'], 1000)
-        self.assertEqual(role['equipment_resource_preview_version'], 3)
+        self.assertEqual(role['equipment_resource_preview_version'], 4)
 
     def test_generated_preview_catalog_has_no_disabled_slots(self):
         root = Path(__file__).resolve().parents[1]
@@ -70,7 +70,7 @@ class InventoryCleanupV3Tests(unittest.TestCase):
         )
         slots = {int(item['equipment_slot']) for item in payload['items']}
         self.assertTrue({12, 13, 14}.isdisjoint(slots))
-        self.assertEqual(len(payload['items']), 251)
+        self.assertEqual(len(payload['items']), 250)
 
 
 if __name__ == '__main__':

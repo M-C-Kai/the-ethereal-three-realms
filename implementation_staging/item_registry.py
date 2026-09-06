@@ -118,16 +118,18 @@ def _armor_appearance_catalog() -> tuple[dict[int, int], dict[int, int], dict[in
     for raw_icon, raw_value in raw_mapping.items():
         icon_code = int(raw_icon)
         property_value = int(raw_value)
-        if icon_code <= 0 or property_value not in property_to_image:
+        if icon_code <= 0 or property_value not in property_to_image or property_value == 0:
             raise ValueError(f'invalid armor appearance pair {raw_icon!r}->{raw_value!r}')
         if icon_code in icon_mapping:
             raise ValueError(f'duplicate armor icon_code after normalization: {icon_code}')
         icon_mapping[icon_code] = property_value
+    if len(icon_mapping) != 30 or set(icon_mapping.values()) != set(range(1, 31)):
+        raise ValueError(f'armor icon mapping must cover property2 1..30 exactly: {ARMOR_APPEARANCE_MAPPING_FILE}')
 
     preview = data.get('resource_preview', {})
     raw_template_mapping = preview.get('template_to_property2') if isinstance(preview, dict) else None
-    if not isinstance(raw_template_mapping, dict) or len(raw_template_mapping) != 31:
-        raise ValueError(f'armor resource preview template table must contain 31 entries: {ARMOR_APPEARANCE_MAPPING_FILE}')
+    if not isinstance(raw_template_mapping, dict) or len(raw_template_mapping) != 30:
+        raise ValueError(f'armor resource preview template table must contain 30 entries: {ARMOR_APPEARANCE_MAPPING_FILE}')
     template_mapping: dict[int, int] = {}
     for raw_template, raw_value in raw_template_mapping.items():
         template_id = int(raw_template)
@@ -136,8 +138,8 @@ def _armor_appearance_catalog() -> tuple[dict[int, int], dict[int, int], dict[in
         if property_value not in property_to_image or template_id != expected_template:
             raise ValueError(f'invalid armor preview template pair {raw_template!r}->{raw_value!r}')
         template_mapping[template_id] = property_value
-    if set(template_mapping.values()) != set(range(31)):
-        raise ValueError(f'armor resource preview property range is incomplete: {ARMOR_APPEARANCE_MAPPING_FILE}')
+    if set(template_mapping.values()) != set(range(1, 31)):
+        raise ValueError(f'armor resource preview property range must be 1..30: {ARMOR_APPEARANCE_MAPPING_FILE}')
 
     raw_deprecated = data.get('deprecated_template_ids', [])
     if not isinstance(raw_deprecated, list):
@@ -145,6 +147,8 @@ def _armor_appearance_catalog() -> tuple[dict[int, int], dict[int, int], dict[in
     deprecated = frozenset(int(value) for value in raw_deprecated)
     if 30_001_001 not in deprecated:
         raise ValueError('legacy starter armor 30001001 must remain deprecated')
+    if 30_140_001 not in deprecated:
+        raise ValueError('legacy property2=0 armor preview 30140001 must remain deprecated')
     return property_to_image, icon_mapping, template_mapping, deprecated
 
 
@@ -159,7 +163,7 @@ def armor_icon_to_property2_mapping() -> dict[int, int]:
 
 
 def armor_resource_preview_template_mapping() -> dict[int, int]:
-    """Return resource-preview template_id -> property2 for all 31 armor bodies."""
+    """Return resource-preview template_id -> property2 for the 30 equippable armor bodies."""
     return dict(_armor_appearance_catalog()[2])
 
 

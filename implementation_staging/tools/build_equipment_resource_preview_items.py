@@ -74,26 +74,30 @@ def main() -> None:
             'appearance_properties': {},
         })
     armor_preview = armor_catalog['resource_preview']
-    generic_armor_icon = int(armor_preview['generic_icon_code'])
+    property2_to_icon = {
+        int(value): int(icon_code)
+        for value, icon_code in armor_preview['property2_to_icon_code'].items()
+    }
     template_to_property2 = {
         int(template_id): int(value)
         for template_id, value in armor_preview['template_to_property2'].items()
     }
     for template_id, property2 in sorted(template_to_property2.items(), key=lambda row: row[1]):
         image_id = 14000 + property2
+        icon_code = property2_to_icon[property2]
         preview_items.append({
             'template_id': template_id,
             'kind': 'equipment',
             'name': f'APK铠甲资源-{image_id}',
             'description': (
-                f'APK确认人物铠甲主体资源 {image_id} / property2={property2}。'
-                '背包图标0300仅作铠甲类别占位，不代表官方图标与外观对应关系。'
+                f'APK铠甲主体资源 {image_id} / property2={property2}；'
+                f'物品图标 icon_code={icon_code:04d} 已按 APK 铠甲图标组对齐。'
             ),
             'max_quantity': 1,
             'equipment_slot': 3,
             'price': 0,
             'level_required': 1,
-            'icon_code': generic_armor_icon,
+            'icon_code': icon_code,
             'quality': 1,
             'sort_group': 100,
             'sort_order': 0,
@@ -140,7 +144,7 @@ def main() -> None:
                 'APK装备资源预览项。仅 icon_code/资源分组来自 APK；'
                 'template_id、名称、等级、属性均为本地预览构造，不代表官方装备。'
                 '头盔 property20 只读取 helmet_appearance_mapping.json；未解析图标不猜。'
-                '铠甲旧0300..0309预览已废弃；现在下发31个14000..14030资源预览，槽3只使用property2。'
+                '铠甲下发30件：0300..0309→14001..14010、1200..1209→14011..14020、1300..1309→14021..14030；14000是默认身体不作为装备下发。'
                 '外套(slot12)、饰品(slot13)、法宝(slot14)因没有明确装备关系暂时不下发。'
                 '其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。'
                 '武器 property7 使用 weapon_appearance_mapping.json 的证据映射；'

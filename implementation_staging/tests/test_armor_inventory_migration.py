@@ -9,7 +9,7 @@ from server import EQUIPMENT_RESOURCE_PREVIEW_VERSION, RoleStore, Settings, defa
 
 
 class ArmorInventoryMigrationTests(unittest.TestCase):
-    def test_old_armor_instances_are_deleted_and_31_resource_armors_reissued(self):
+    def test_old_armor_instances_are_deleted_and_30_equippable_armors_reissued(self):
         settings = Settings()
         role = default_role(settings)
         new_ids = set(armor_resource_preview_template_mapping())
@@ -33,7 +33,7 @@ class ArmorInventoryMigrationTests(unittest.TestCase):
         template_ids = [int(item.get('template_id', 0)) for item in role['items']]
         self.assertTrue(deprecated.isdisjoint(template_ids))
         self.assertEqual(set(template_ids) & new_ids, new_ids)
-        self.assertEqual(len([tid for tid in template_ids if tid in new_ids]), 31)
+        self.assertEqual(len([tid for tid in template_ids if tid in new_ids]), 30)
         self.assertEqual(role['equipment_resource_preview_version'], EQUIPMENT_RESOURCE_PREVIEW_VERSION)
 
     def test_legacy_starter_armor_is_not_regranted(self):

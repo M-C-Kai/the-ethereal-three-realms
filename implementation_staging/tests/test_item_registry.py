@@ -449,18 +449,18 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
         )
         items = preview['items']
         self.assertEqual(len(resources), 252)
-        self.assertEqual(len(items), 251)
+        self.assertEqual(len(items), 250)
         self.assertEqual(preview.get('status'), 'compatibility_preview')
-        self.assertEqual(len({int(item['template_id']) for item in items}), 251)
+        self.assertEqual(len({int(item['template_id']) for item in items}), 250)
 
         armor_items = [item for item in items if int(item['equipment_slot']) == 3]
-        self.assertEqual(len(armor_items), 31)
+        self.assertEqual(len(armor_items), 30)
         expected_mapping = armor_resource_preview_template_mapping()
         self.assertEqual(
             {int(item['template_id']): int(item['appearance_properties']['2']) for item in armor_items},
             expected_mapping,
         )
-        self.assertTrue(all(int(item['icon_code']) == 300 for item in armor_items))
+        self.assertEqual({int(item['icon_code']) for item in armor_items}, set(range(300,310)) | set(range(1200,1210)) | set(range(1300,1310)))
         self.assertTrue(
             set(deprecated_armor_template_ids()).isdisjoint(
                 {int(item['template_id']) for item in items}
@@ -482,7 +482,7 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
     def test_registry_loads_every_preview_template(self):
         registry = default_item_registry()
         preview_ids = registry.preview_template_ids()
-        self.assertEqual(len(preview_ids), 251)
+        self.assertEqual(len(preview_ids), 250)
         for template_id in preview_ids:
             registry.require(template_id)
 
