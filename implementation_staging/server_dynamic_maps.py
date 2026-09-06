@@ -4,7 +4,10 @@ import logging
 from pathlib import Path
 
 import server as _server
-from generate_map_60010 import ensure_map_60010
+from dynamic_map_builder import (
+    materialize_all_dynamic_maps,
+    merge_dynamic_maps_into_registry_payload,
+)
 from protocol import binary, byte, encode_frame, short
 
 
@@ -12,6 +15,7 @@ LOG = logging.getLogger('piaomiao-local')
 MAP_REF_CHUNK_SIZE = 12_000
 MAX_MAP_REF_TRANSFER_SIZE = 0x7FFF
 _ORIGINAL_MAP_ENTER_FRAMES = _server.map_enter_frames
+_ORIGINAL_LOAD_MAP_REGISTRY = _server.load_map_registry
 
 
 def map_ref_path(map_id: int) -> Path:
@@ -31,7 +35,7 @@ def map_ref_transfer_frames(
       -> m.z byte buffer -> m.C() map.ref parser.
 
     Wire fields are [byte subtype, short total_size, binary chunk, short offset].
-    The first chunk uses subtype 11 and continuations use subtype 12.  The APK
+    The first chunk uses subtype 11 and continuations use subtype 12. The APK
     stores total length and offset as signed Java shorts, so this compatibility
     path deliberately rejects resources above 32767 bytes rather than silently
     wrapping their offsets.
@@ -76,12 +80,8 @@ def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[byt
     if not original:
         raise ValueError(f'map {definition.id} produced no enter frames')
 
-    # APK-local maps enter the map-transition state through action 13 before
-    # their target map.ref is parsed.  Do the same for streamed resources:
-    # action 13/status=1 first prevents an APK-local file lookup, then 1407/11
-    # fills m.z and m.C() parses the target ref while the transition is active.
-    # Keeping 1407 before action 13 repaints the current map renderer directly,
-    # which appears on-device as the new scene sliding down from the top.
+    # Phone-verified order: action 13 must establish the native transition
+    # state before 1407/11+12 causes m.C() to parse the target map.ref.
     transition_start = _server.map_action(
         definition,
         13,
@@ -90,7 +90,8 @@ def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[byt
     )
     continuation = original[1:]
     LOG.info(
-        'MAP_REF_STREAM map=%d path=%s bytes=%d chunks=%d protocol=1010/13->1407/11+12->1010/14+105',
+        'MAP_REF_STREAM map=%d path=%s bytes=%d chunks=%d '
+        'protocol=1010/13->1407/11+12->1010/14+105',
         int(definition.id),
         map_ref_path(definition.id),
         map_ref_path(definition.id).stat().st_size,
@@ -99,20 +100,34 @@ def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[byt
     return [transition_start, *transfer, *continuation]
 
 
-# Patch only the narrow map-reference entry point. All existing server
-# dispatch, battle, NPC, inventory and persistence code remains unchanged.
+def dynamic_load_map_registry(payload, npc_catalog=None, appearance_catalog=None):
+    """Inject maps/<id>/map.json registry metadata before typed validation."""
+    merged = merge_dynamic_maps_into_registry_payload(payload)
+    return _ORIGINAL_LOAD_MAP_REGISTRY(
+        merged,
+        npc_catalog=npc_catalog,
+        appearance_catalog=appearance_catalog,
+    )
+
+
+# Patch only the two compatibility seams required by server-delivered maps.
+# Existing dispatch, battle, NPC, inventory and persistence code stays in server.py.
 _server.map_enter_frames = dynamic_map_enter_frames
+_server.load_map_registry = dynamic_load_map_registry
 
 
 def main() -> None:
-    ref_path, map_o_path = ensure_map_60010()
-    LOG.info(
-        'DYNAMIC_MAP_READY map=60010 ref=%s ref_bytes=%d map_o=%s map_o_bytes=%d',
-        ref_path,
-        ref_path.stat().st_size,
-        map_o_path,
-        map_o_path.stat().st_size,
-    )
+    built_maps = materialize_all_dynamic_maps()
+    for built in built_maps:
+        LOG.info(
+            'DYNAMIC_MAP_READY map=%d ref=%s ref_bytes=%d map_o=%s map_o_bytes=%d',
+            built.map_id,
+            built.map_ref_path,
+            built.map_ref_bytes,
+            built.map_o_path,
+            built.map_o_bytes,
+        )
+    LOG.info('DYNAMIC_MAP_SCAN count=%d', len(built_maps))
     _server.main()
 
 
