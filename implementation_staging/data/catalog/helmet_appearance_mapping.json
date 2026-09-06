@@ -1,20 +1,25 @@
 {
   "version": 1,
   "kind": "helmet_appearance_mapping",
-  "status": "evidence_backed_partial_mapping",
-  "source": "APK equipment icon resources + character appearance property20 audit",
-  "description": "Compatibility-server mapping from helmet icon_code to character appearance property 20. Only evidence-backed pairs are mapped; unresolved icons are never guessed.",
+  "status": "unresolved_mapping",
+  "source": "APK equipment icon resources + character appearance property20 audit + EQUIPMENT_TEMPLATE_EVIDENCE.md",
+  "description": "No icon_code -> property20 pair is currently proven by saved APK evidence. The client property20 resource rule is known, but icon association remains unresolved.",
   "property": 20,
   "image_base": 21000,
   "notes": [
-    "property20=N selects character layer image 21000+N.",
-    "icon_code 109 is the currently confirmed pair: property20=3 -> image 21003.",
-    "icon_code 100..108 remain unresolved because the current APK appearance audit recovered no additional property20 candidates.",
+    "Client rule confirmed: property20=N selects character layer image 21000+N.",
+    "Current appearance audit recovered only image 21003 as a property20 candidate.",
+    "The compatibility item 青纹盔 uses icon_code 109 and property20=3, but repository evidence explicitly says 青纹套装 is local compatibility data and must not be treated as an official icon-to-appearance mapping.",
+    "Therefore icon_code 100..109 are all unresolved until direct APK/resource or original-server evidence establishes a pair.",
     "Unknown or unresolved icon_code values resolve to 0/no added helmet layer."
   ],
-  "icon_to_property20": {
-    "109": 3
-  },
+  "candidate_property20_values": [
+    3
+  ],
+  "candidate_image_ids": [
+    21003
+  ],
+  "icon_to_property20": {},
   "unresolved_icon_codes": [
     100,
     101,
@@ -24,6 +29,7 @@
     105,
     106,
     107,
-    108
+    108,
+    109
   ]
 }

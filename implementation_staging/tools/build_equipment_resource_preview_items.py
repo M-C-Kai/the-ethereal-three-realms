@@ -89,7 +89,7 @@ def main() -> None:
             'note': (
                 'APK装备资源预览项。仅 icon_code/资源分组来自 APK；'
                 'template_id、名称、等级、属性均为本地预览构造，不代表官方装备。'
-                '头盔 property20 使用 helmet_appearance_mapping.json 的证据映射，未解析图标不猜。'
+                '头盔 property20 只读取 helmet_appearance_mapping.json；当前无已证实 icon→property20 对应，全部未解析图标不猜。'
                 '其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。'
                 '武器 property7 使用 weapon_appearance_mapping.json 的证据映射；'
                 '地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。'
