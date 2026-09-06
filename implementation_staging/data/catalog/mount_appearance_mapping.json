@@ -1,11 +1,17 @@
 {
-  "version": 1,
+  "version": 2,
   "source": "piaomiao_local_login.apk",
   "character_property": 22,
+  "image_base": 40000,
   "count": 54,
+  "resource_paths": {
+    "role_dat": "assets/res/role/{role_model}.dat",
+    "images_index": "assets/res/images/images.o",
+    "packed_image": "assets/res/images/png{container}.p"
+  },
   "rules": {
     "role_model": "101000 + ((ride_code % 10000) // 1000) * 1000",
-    "primary_image": "40000 + (ride_code % 10000)"
+    "primary_image": "image_base + (ride_code % 10000)"
   },
   "families": [
     {"role_model": 101000, "image_ids": [40001, 40002, 40003]},
@@ -20,7 +26,8 @@
   },
   "notes": [
     "character property 22 stores the ride code, not the 101000..106000 role-model id",
-    "ride_code = image_id - 40000 for the verified primary riding layer",
-    "411xx resources are rider/saddle interface layers and are not counted as separate mounts"
+    "ride_code = image_id - image_base for the verified primary riding layer",
+    "411xx resources are rider/saddle interface layers and are not counted as separate mounts",
+    "atlas generators must derive the primary image slot and representative animation group from each role DAT instead of hardcoding them"
   ]
 }
