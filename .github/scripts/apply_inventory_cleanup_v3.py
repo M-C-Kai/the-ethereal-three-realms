@@ -15,19 +15,26 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 # ---------------------------------------------------------------------------
 # 1) 独立资料库：暂不下发没有明确装备/外观逻辑的槽位。
+#    旧 preview template_id 直接从当前目录读取，避免假定每个槽固定 10 个资源。
 # ---------------------------------------------------------------------------
 unsupported_slots = {
     12: ('coat', '外套', 120_001_001),
     13: ('accessory', '饰品', 130_001_001),
     14: ('talisman', '法宝', 140_001_001),
 }
+current_preview = json.loads(
+    (ROOT / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8')
+)['items']
 preview_ids: list[int] = []
 slot_rows: list[dict[str, object]] = []
 for slot, (family, label, starter_template_id) in unsupported_slots.items():
-    slot_preview_ids = [
-        slot * 10_000_000 + slot * 1000 + frame * 10 + 1
-        for frame in range(10)
-    ]
+    slot_preview_ids = sorted(
+        int(item['template_id'])
+        for item in current_preview
+        if int(item.get('equipment_slot', 0)) == slot
+    )
+    if not slot_preview_ids:
+        raise SystemExit(f'no existing preview items found for disabled slot {slot}')
     preview_ids.extend(slot_preview_ids)
     slot_rows.append({
         'equipment_slot': slot,
@@ -48,7 +55,7 @@ unsupported_payload = {
     'slots': slot_rows,
     'disabled_slots': sorted(unsupported_slots),
     'starter_template_ids': [row[2] for row in unsupported_slots.values()],
-    'deprecated_preview_template_ids': preview_ids,
+    'deprecated_preview_template_ids': sorted(preview_ids),
     'deprecated_template_ids': sorted(
         preview_ids + [row[2] for row in unsupported_slots.values()]
     ),
@@ -124,7 +131,7 @@ starter_path.write_text(
 )
 
 # ---------------------------------------------------------------------------
-# 5) server：背包 1000；版本 3；加载旧角色时删除那 33 个旧实例。
+# 5) server：背包 1000；版本 3；加载旧角色时删除旧实例。
 # ---------------------------------------------------------------------------
 server_path = ROOT / 'server.py'
 server = server_path.read_text(encoding='utf-8')
@@ -159,18 +166,18 @@ server_path.write_text(server, encoding='utf-8')
 # ---------------------------------------------------------------------------
 test_registry_path = ROOT / 'tests/test_item_registry.py'
 test_registry = test_registry_path.read_text(encoding='utf-8')
-test_registry = test_registry.replace('self.assertEqual(len(items), 273)', 'self.assertEqual(len(items), 243)')
-test_registry = test_registry.replace("self.assertEqual(len({int(item['template_id']) for item in items}), 273)", "self.assertEqual(len({int(item['template_id']) for item in items}), 243)")
+test_registry = test_registry.replace('self.assertEqual(len(items), 273)', 'self.assertEqual(len(items), 251)')
+test_registry = test_registry.replace("self.assertEqual(len({int(item['template_id']) for item in items}), 273)", "self.assertEqual(len({int(item['template_id']) for item in items}), 251)")
 test_registry = replace_once(
     test_registry,
     "        nonarmor_resources = [r for r in resources if int(r['equipment_slot']) != 3]\n        nonarmor_items = [i for i in items if int(i['equipment_slot']) != 3]\n        self.assertEqual(len(nonarmor_resources), 242)\n        self.assertEqual(len(nonarmor_items), 242)",
-    "        nonarmor_resources = [\n            r for r in resources\n            if int(r['equipment_slot']) not in {3, 12, 13, 14}\n        ]\n        nonarmor_items = [i for i in items if int(i['equipment_slot']) != 3]\n        self.assertEqual(len(nonarmor_resources), 212)\n        self.assertEqual(len(nonarmor_items), 212)\n        self.assertTrue(all(int(i['equipment_slot']) not in {12, 13, 14} for i in items))",
+    "        nonarmor_resources = [\n            r for r in resources\n            if int(r['equipment_slot']) not in {3, 12, 13, 14}\n        ]\n        nonarmor_items = [i for i in items if int(i['equipment_slot']) != 3]\n        self.assertEqual(len(nonarmor_resources), 220)\n        self.assertEqual(len(nonarmor_items), 220)\n        self.assertTrue(all(int(i['equipment_slot']) not in {12, 13, 14} for i in items))",
     'test_item_registry unsupported preview expectations',
 )
-test_registry = test_registry.replace('self.assertEqual(len(preview_ids), 273)', 'self.assertEqual(len(preview_ids), 243)')
+test_registry = test_registry.replace('self.assertEqual(len(preview_ids), 273)', 'self.assertEqual(len(preview_ids), 251)')
 test_registry_path.write_text(test_registry, encoding='utf-8')
 
 migration_test = ROOT / 'tests/test_inventory_cleanup_v3.py'
-migration_test.write_text('''import json\nimport sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n\nfrom item_registry import (\n    UNSUPPORTED_EQUIPMENT_FILE,\n    deprecated_unsupported_equipment_template_ids,\n    unsupported_equipment_slots,\n)\nfrom server import (\n    DEFAULT_BAG_CAPACITY,\n    EQUIPMENT_RESOURCE_PREVIEW_VERSION,\n    RoleStore,\n    Settings,\n    default_role,\n)\n\n\nclass InventoryCleanupV3Tests(unittest.TestCase):\n    def test_bag_capacity_is_1000(self):\n        self.assertEqual(DEFAULT_BAG_CAPACITY, 1000)\n        settings = Settings()\n        role = default_role(settings)\n        self.assertEqual(role['bag_capacity'], 1000)\n\n    def test_catalog_disables_only_coat_accessory_talisman(self):\n        data = json.loads(UNSUPPORTED_EQUIPMENT_FILE.read_text(encoding='utf-8'))\n        self.assertEqual(unsupported_equipment_slots(), frozenset({12, 13, 14}))\n        self.assertEqual(data['disabled_slots'], [12, 13, 14])\n        self.assertEqual(len(deprecated_unsupported_equipment_template_ids()), 33)\n\n    def test_new_starter_inventory_does_not_grant_disabled_slots(self):\n        settings = Settings()\n        role = default_role(settings)\n        resolved_slots = {\n            int(settings.item_registry.resolve(item).get('equipment_slot', 0))\n            for item in role['items']\n        }\n        self.assertTrue({12, 13, 14}.isdisjoint(resolved_slots))\n\n    def test_old_saved_instances_are_removed_and_not_regranted(self):\n        settings = Settings()\n        role = default_role(settings)\n        role['bag_capacity'] = 320\n        role['equipment_resource_preview_version'] = 2\n        control = next(item for item in role['items'] if int(item.get('template_id', 0)) == 100_001_001)\n        old_ids = sorted(deprecated_unsupported_equipment_template_ids())\n        for offset, template_id in enumerate(old_ids, start=1):\n            role['items'].append({\n                'id': 9_000_000 + offset,\n                'template_id': template_id,\n                'quantity': 1,\n                'location': 'equipped' if offset % 2 else 'bag',\n            })\n        changed = RoleStore(settings)._ensure_items(role)\n        self.assertTrue(changed)\n        remaining = {int(item.get('template_id', 0)) for item in role['items']}\n        self.assertTrue(set(old_ids).isdisjoint(remaining))\n        self.assertIn(int(control['template_id']), remaining)\n        self.assertEqual(role['bag_capacity'], 1000)\n        self.assertEqual(role['equipment_resource_preview_version'], 3)\n\n    def test_generated_preview_catalog_has_no_disabled_slots(self):\n        root = Path(__file__).resolve().parents[1]\n        payload = json.loads(\n            (root / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8')\n        )\n        slots = {int(item['equipment_slot']) for item in payload['items']}\n        self.assertTrue({12, 13, 14}.isdisjoint(slots))\n        self.assertEqual(len(payload['items']), 243)\n\n\nif __name__ == '__main__':\n    unittest.main()\n''', encoding='utf-8')
+migration_test.write_text('''import json\nimport sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n\nfrom item_registry import (\n    UNSUPPORTED_EQUIPMENT_FILE,\n    deprecated_unsupported_equipment_template_ids,\n    unsupported_equipment_slots,\n)\nfrom server import (\n    DEFAULT_BAG_CAPACITY,\n    RoleStore,\n    Settings,\n    default_role,\n)\n\n\nclass InventoryCleanupV3Tests(unittest.TestCase):\n    def test_bag_capacity_is_1000(self):\n        self.assertEqual(DEFAULT_BAG_CAPACITY, 1000)\n        settings = Settings()\n        role = default_role(settings)\n        self.assertEqual(role['bag_capacity'], 1000)\n\n    def test_catalog_disables_only_coat_accessory_talisman(self):\n        data = json.loads(UNSUPPORTED_EQUIPMENT_FILE.read_text(encoding='utf-8'))\n        self.assertEqual(unsupported_equipment_slots(), frozenset({12, 13, 14}))\n        self.assertEqual(data['disabled_slots'], [12, 13, 14])\n        self.assertEqual(len(data['deprecated_preview_template_ids']), 22)\n        self.assertEqual(len(deprecated_unsupported_equipment_template_ids()), 25)\n\n    def test_new_starter_inventory_does_not_grant_disabled_slots(self):\n        settings = Settings()\n        role = default_role(settings)\n        resolved_slots = {\n            int(settings.item_registry.resolve(item).get('equipment_slot', 0))\n            for item in role['items']\n        }\n        self.assertTrue({12, 13, 14}.isdisjoint(resolved_slots))\n\n    def test_old_saved_instances_are_removed_and_not_regranted(self):\n        settings = Settings()\n        role = default_role(settings)\n        role['bag_capacity'] = 320\n        role['equipment_resource_preview_version'] = 2\n        control = next(item for item in role['items'] if int(item.get('template_id', 0)) == 100_001_001)\n        old_ids = sorted(deprecated_unsupported_equipment_template_ids())\n        for offset, template_id in enumerate(old_ids, start=1):\n            role['items'].append({\n                'id': 9_000_000 + offset,\n                'template_id': template_id,\n                'quantity': 1,\n                'location': 'equipped' if offset % 2 else 'bag',\n            })\n        changed = RoleStore(settings)._ensure_items(role)\n        self.assertTrue(changed)\n        remaining = {int(item.get('template_id', 0)) for item in role['items']}\n        self.assertTrue(set(old_ids).isdisjoint(remaining))\n        self.assertIn(int(control['template_id']), remaining)\n        self.assertEqual(role['bag_capacity'], 1000)\n        self.assertEqual(role['equipment_resource_preview_version'], 3)\n\n    def test_generated_preview_catalog_has_no_disabled_slots(self):\n        root = Path(__file__).resolve().parents[1]\n        payload = json.loads(\n            (root / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8')\n        )\n        slots = {int(item['equipment_slot']) for item in payload['items']}\n        self.assertTrue({12, 13, 14}.isdisjoint(slots))\n        self.assertEqual(len(payload['items']), 251)\n\n\nif __name__ == '__main__':\n    unittest.main()\n''', encoding='utf-8')
 
 print('inventory cleanup v3 patch prepared')
