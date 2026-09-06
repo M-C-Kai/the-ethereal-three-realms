@@ -1512,6 +1512,8 @@ MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
 DEFAULT_BAG_CAPACITY = 1000
 EQUIPMENT_RESOURCE_PREVIEW_VERSION = 4
+ROLE_BAG_RESET_VERSION = 1
+ROLE_BAG_PREVIEW_SUPPRESSION_VERSION = 1
 DEFAULT_CURRENCY_BALANCE = 10_000_000
 MAX_CURRENCY_BALANCE = 2_147_483_647
 CURRENCY_PROPERTIES = {
@@ -1685,6 +1687,7 @@ def default_role(settings: Settings) -> dict[str, object]:
     role['strengthening_stones_initialized'] = True
     role['mailbox'] = starter_mail(int(role['id']))
     role['mailbox_initialized'] = True
+    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
     return role
 
 
@@ -1814,6 +1817,13 @@ def ensure_equipment_resource_preview_items(
     if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:
         role['mount_model'] = 0
         changed = True
+    # 只有真正执行过一次性背包清空的旧角色才禁止重新补回历史 APK 预览物品。
+    # 新角色虽然 bag_reset_version 已是最新，但没有 suppression 标记，仍可正常修复预览目录。
+    if int(role.get('bag_preview_suppression_version', 0) or 0) >= ROLE_BAG_PREVIEW_SUPPRESSION_VERSION:
+        if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:
+            role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION
+            changed = True
+        return changed
     present = {
         int(item.get('template_id', 0))
         for item in items
@@ -1834,6 +1844,31 @@ def ensure_equipment_resource_preview_items(
         role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION
         changed = True
     return changed
+
+
+def clear_role_bag_once(role: dict[str, object]) -> bool:
+    """一次性清空旧角色背包，只删除 location=bag 的物品实例。
+
+    已装备物品保留；迁移后写入 reset 与 preview-suppression 版本。
+    reset 确保之后新获得的物品不会再次被清空；suppression 防止旧预览物品自动补回。
+    """
+    try:
+        current_version = int(role.get('bag_reset_version', 0) or 0)
+    except (TypeError, ValueError):
+        current_version = 0
+    if current_version >= ROLE_BAG_RESET_VERSION:
+        return False
+
+    items = role_items(role)
+    kept_items = [
+        item for item in items
+        if not (isinstance(item, dict) and item.get('location') == 'bag')
+    ]
+    if len(kept_items) != len(items):
+        role['items'] = kept_items
+    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
+    role['bag_preview_suppression_version'] = ROLE_BAG_PREVIEW_SUPPRESSION_VERSION
+    return True
 
 
 def starter_mail(role_id: int) -> list[dict[str, object]]:
@@ -2186,6 +2221,7 @@ class RoleStore:
                 role['map_y'] = current_map.spawn_y
                 changed = True
             changed = self._ensure_items(role) or changed
+            changed = clear_role_bag_once(role) or changed
             changed = self._ensure_mailbox(role) or changed
         if changed:
             self._save()
@@ -2231,6 +2267,7 @@ class RoleStore:
         role['strengthening_stones_initialized'] = True
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
+        role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
         roles.append(role)
         accounts = self.data['accounts']
         assert isinstance(accounts, dict)
