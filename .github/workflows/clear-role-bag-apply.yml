@@ -38,6 +38,7 @@ jobs:
           from pathlib import Path
 
           from server import (
+              ROLE_BAG_PREVIEW_SUPPRESSION_VERSION,
               ROLE_BAG_RESET_VERSION,
               RoleStore,
               Settings,
@@ -63,6 +64,10 @@ jobs:
                       [(2, 'equipped')],
                   )
                   self.assertEqual(role['bag_reset_version'], ROLE_BAG_RESET_VERSION)
+                  self.assertEqual(
+                      role['bag_preview_suppression_version'],
+                      ROLE_BAG_PREVIEW_SUPPRESSION_VERSION,
+                  )
 
               def test_reset_is_one_time_and_does_not_delete_future_items(self):
                   role = {
@@ -74,15 +79,30 @@ jobs:
                   self.assertFalse(clear_role_bag_once(role))
                   self.assertEqual([item['id'] for item in role_items(role)], [3])
 
-              def test_preview_catalog_does_not_refill_after_reset(self):
+              def test_preview_catalog_does_not_refill_after_real_reset(self):
                   settings = Settings()
                   role = default_role(settings)
                   role.pop('bag_reset_version', None)
+                  role.pop('bag_preview_suppression_version', None)
                   self.assertTrue(any(item.get('location') == 'bag' for item in role_items(role)))
                   self.assertTrue(clear_role_bag_once(role))
                   self.assertFalse(any(item.get('location') == 'bag' for item in role_items(role)))
                   ensure_equipment_resource_preview_items(role, settings.item_registry)
                   self.assertFalse(any(item.get('location') == 'bag' for item in role_items(role)))
+
+              def test_new_role_reset_marker_does_not_disable_preview_repair(self):
+                  settings = Settings()
+                  role = default_role(settings)
+                  self.assertEqual(role['bag_reset_version'], ROLE_BAG_RESET_VERSION)
+                  self.assertNotIn('bag_preview_suppression_version', role)
+                  preview_id = next(iter(settings.item_registry.preview_template_ids()))
+                  role['items'] = [
+                      item for item in role_items(role)
+                      if int(item.get('template_id', 0)) != int(preview_id)
+                  ]
+                  self.assertNotIn(preview_id, {int(item.get('template_id', 0)) for item in role_items(role)})
+                  self.assertTrue(ensure_equipment_resource_preview_items(role, settings.item_registry))
+                  self.assertIn(preview_id, {int(item.get('template_id', 0)) for item in role_items(role)})
 
               def test_roles_for_migrates_legacy_role_but_keeps_equipped(self):
                   with tempfile.TemporaryDirectory() as tmp:
@@ -90,6 +110,7 @@ jobs:
                       store = RoleStore(settings)
                       role = default_role(settings)
                       role.pop('bag_reset_version', None)
+                      role.pop('bag_preview_suppression_version', None)
                       first = role_items(role)[0]
                       first['location'] = 'equipped'
                       equipped_id = int(first['id'])
@@ -101,6 +122,10 @@ jobs:
                       )
                       self.assertFalse(any(item.get('location') == 'bag' for item in role_items(migrated)))
                       self.assertEqual(migrated['bag_reset_version'], ROLE_BAG_RESET_VERSION)
+                      self.assertEqual(
+                          migrated['bag_preview_suppression_version'],
+                          ROLE_BAG_PREVIEW_SUPPRESSION_VERSION,
+                      )
 
               def test_new_role_is_marked_current_and_keeps_starter_bag(self):
                   with tempfile.TemporaryDirectory() as tmp:
@@ -108,6 +133,7 @@ jobs:
                       store = RoleStore(settings)
                       role = store.roles_for('new-user')[0]
                       self.assertEqual(role['bag_reset_version'], ROLE_BAG_RESET_VERSION)
+                      self.assertNotIn('bag_preview_suppression_version', role)
                       self.assertTrue(any(item.get('location') == 'bag' for item in role_items(role)))
 
 
@@ -128,7 +154,7 @@ jobs:
             echo 'Expected RED failure before implementation, but test passed.' >&2
             exit 1
           fi
-          grep -Eq 'ImportError|cannot import name|ROLE_BAG_RESET_VERSION|clear_role_bag_once' /tmp/red.txt
+          grep -Eq 'ImportError|cannot import name|ROLE_BAG_RESET_VERSION|ROLE_BAG_PREVIEW_SUPPRESSION_VERSION|clear_role_bag_once' /tmp/red.txt
 
       - name: Apply minimal implementation
         shell: bash
@@ -142,20 +168,26 @@ jobs:
           anchor = 'EQUIPMENT_RESOURCE_PREVIEW_VERSION = 4\n'
           if anchor not in text:
               raise SystemExit('constant anchor not found')
-          text = text.replace(anchor, anchor + 'ROLE_BAG_RESET_VERSION = 1\n', 1)
+          text = text.replace(
+              anchor,
+              anchor + 'ROLE_BAG_RESET_VERSION = 1\nROLE_BAG_PREVIEW_SUPPRESSION_VERSION = 1\n',
+              1,
+          )
 
           anchor = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    present = {\n"
-          replacement = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    # 已执行本次背包清空迁移的旧角色，不再自动补回历史 APK 预览物品。\n    if int(role.get('bag_reset_version', 0) or 0) >= ROLE_BAG_RESET_VERSION:\n        if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n            role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n            changed = True\n        return changed\n    present = {\n"
+          replacement = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    # 只有真正执行过一次性背包清空的旧角色才禁止重新补回历史 APK 预览物品。\n    # 新角色虽然 bag_reset_version 已是最新，但没有 suppression 标记，仍可正常修复预览目录。\n    if int(role.get('bag_preview_suppression_version', 0) or 0) >= ROLE_BAG_PREVIEW_SUPPRESSION_VERSION:\n        if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n            role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n            changed = True\n        return changed\n    present = {\n"
           if anchor not in text:
               raise SystemExit('preview suppression anchor not found')
           text = text.replace(anchor, replacement, 1)
 
           anchor = "    if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n        role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n        changed = True\n    return changed\n\n\ndef starter_mail"
-          replacement = "    if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n        role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n        changed = True\n    return changed\n\n\ndef clear_role_bag_once(role: dict[str, object]) -> bool:\n    \"\"\"一次性清空旧角色背包，只删除 location=bag 的物品实例。\n\n    已装备物品保留；迁移后写版本号，因此之后新获得的物品不会再次被清空。\n    \"\"\"\n    try:\n        current_version = int(role.get('bag_reset_version', 0) or 0)\n    except (TypeError, ValueError):\n        current_version = 0\n    if current_version >= ROLE_BAG_RESET_VERSION:\n        return False\n\n    items = role_items(role)\n    kept_items = [\n        item for item in items\n        if not (isinstance(item, dict) and item.get('location') == 'bag')\n    ]\n    if len(kept_items) != len(items):\n        role['items'] = kept_items\n    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    return True\n\n\ndef starter_mail"
+          replacement = "    if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n        role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n        changed = True\n    return changed\n\n\ndef clear_role_bag_once(role: dict[str, object]) -> bool:\n    \"\"\"一次性清空旧角色背包，只删除 location=bag 的物品实例。\n\n    已装备物品保留；迁移后写入 reset 与 preview-suppression 版本。\n    reset 确保之后新获得的物品不会再次被清空；suppression 防止旧预览物品自动补回。\n    \"\"\"\n    try:\n        current_version = int(role.get('bag_reset_version', 0) or 0)\n    except (TypeError, ValueError):\n        current_version = 0\n    if current_version >= ROLE_BAG_RESET_VERSION:\n        return False\n\n    items = role_items(role)\n    kept_items = [\n        item for item in items\n        if not (isinstance(item, dict) and item.get('location') == 'bag')\n    ]\n    if len(kept_items) != len(items):\n        role['items'] = kept_items\n    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    role['bag_preview_suppression_version'] = ROLE_BAG_PREVIEW_SUPPRESSION_VERSION\n    return True\n\n\ndef starter_mail"
           if anchor not in text:
               raise SystemExit('clear helper insertion anchor not found')
           text = text.replace(anchor, replacement, 1)
 
+          # 新建角色属于迁移后的数据，不应该在第一次登录时被清空；
+          # 但不写 suppression 标记，使正常的预览目录修复仍然可用。
           anchor = "    role['mailbox'] = starter_mail(int(role['id']))\n    role['mailbox_initialized'] = True\n    return role\n"
           replacement = "    role['mailbox'] = starter_mail(int(role['id']))\n    role['mailbox_initialized'] = True\n    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    return role\n"
           if anchor not in text:
@@ -168,6 +200,7 @@ jobs:
               raise SystemExit('RoleStore.create marker anchor not found')
           text = text.replace(anchor, replacement, 1)
 
+          # 旧存档在登录/列角色时先完成兼容迁移，再执行一次背包清空。
           anchor = "            changed = self._ensure_items(role) or changed\n            changed = self._ensure_mailbox(role) or changed\n"
           replacement = "            changed = self._ensure_items(role) or changed\n            changed = clear_role_bag_once(role) or changed\n            changed = self._ensure_mailbox(role) or changed\n"
           if anchor not in text:
@@ -185,16 +218,13 @@ jobs:
           python -m py_compile server.py character_update_bus.py
           python -m unittest discover -s tests -p 'test_role_bag_reset.py' -v
 
-      - name: Run related regression probes
+      - name: Run relevant migration regressions
         shell: bash
         run: |
-          set +e
-          cd implementation_staging
-          python -m unittest discover -s tests -p 'test_character_equipment_refresh.py' -v > /tmp/character-refresh.txt 2>&1
-          python -m unittest discover -s tests -p 'test_item_registry.py' -v > /tmp/item-registry.txt 2>&1
-          cat /tmp/character-refresh.txt
-          cat /tmp/item-registry.txt
           set -e
+          cd implementation_staging
+          python -m unittest discover -s tests -p 'test_armor_inventory_migration.py' -v
+          python -m unittest discover -s tests -p 'test_character_equipment_refresh.py' -v
 
       - name: Compare full-suite failures with baseline
         shell: bash
@@ -214,25 +244,12 @@ jobs:
           before = failures('/tmp/baseline.txt')
           after = failures('/tmp/after.txt')
           new = sorted(after - before)
-          Path('/tmp/new-failures.txt').write_text('\n'.join(new), encoding='utf-8')
           print('baseline failures/errors:', len(before))
           print('after failures/errors:', len(after))
           print('new failures/errors:', new)
           if new:
               raise SystemExit(1)
           PY
-
-      - name: Upload diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bag-reset-diagnostics
-          path: |
-            /tmp/baseline.txt
-            /tmp/after.txt
-            /tmp/new-failures.txt
-            /tmp/character-refresh.txt
-            /tmp/item-registry.txt
 
       - name: Commit verified implementation and remove temporary executor
         shell: bash
