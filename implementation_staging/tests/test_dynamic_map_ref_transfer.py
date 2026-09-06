@@ -42,14 +42,18 @@ class DynamicMapRefTransferTests(unittest.TestCase):
                     [b'old-13', b'old-14'],
                 )
 
-    def test_streamed_ref_switches_action_13_to_status_1(self):
+    def test_streamed_ref_enters_transition_before_parsing_new_ref(self):
         definition = SimpleNamespace(id=60010)
         with patch.object(dynamic, 'map_ref_transfer_frames', return_value=[b'ref-chunk']), patch.object(
             dynamic, '_ORIGINAL_MAP_ENTER_FRAMES', return_value=[b'old-13', b'old-14', b'old-105']
         ), patch.object(dynamic._server, 'map_action', return_value=b'new-13') as map_action:
             frames = dynamic.dynamic_map_enter_frames(definition, 10001)
 
-        self.assertEqual(frames, [b'ref-chunk', b'new-13', b'old-14', b'old-105'])
+        # Working APK-local maps receive action 13 before their target map.ref is
+        # parsed.  Keep the same ordering for streamed refs so m.C() runs while
+        # the client is already inside its native map-transition state instead
+        # of repainting the active scene from the top edge.
+        self.assertEqual(frames, [b'new-13', b'ref-chunk', b'old-14', b'old-105'])
         map_action.assert_called_once_with(definition, 13, status=1, role_id=10001)
 
 
