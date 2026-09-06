@@ -1,100 +1,281 @@
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from pathlib import Path
-from xml.sax.saxutils import escape
+
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
-CATALOG = ROOT / "data" / "catalog" / "mount_appearance_mapping.json"
-OUTPUT_DIR = ROOT / "references" / "mount-atlas"
-OUTPUT = OUTPUT_DIR / "mount_riding_atlas.svg"
+sys.path.insert(0, str(ROOT))
 
-COLS = 6
-CARD_W = 190
-CARD_H = 92
-GAP = 14
-LEFT = 36
-TOP = 118
+from tools.map_ref_renderer import AssetReader
+from tools.mirror_role_dat import PIL_TRANSFORM, RoleLayout, parse_layout
+
+CATALOG = ROOT / 'data' / 'catalog' / 'mount_appearance_mapping.json'
+OUTPUT_DIR = ROOT / 'references' / 'mount-atlas'
+
+COLUMNS = 6
+CELL_WIDTH = 250
+CELL_HEIGHT = 210
+IMAGE_WIDTH = 230
+IMAGE_HEIGHT = 150
+HEADER_HEIGHT = 64
 
 
-def build_svg(catalog: dict) -> str:
-    families = catalog["families"]
-    named = {
-        int(image_id): str(meta["name"])
-        for image_id, meta in catalog.get("named_templates", {}).items()
-    }
-    rows = sum((len(family["image_ids"]) + COLS - 1) // COLS for family in families)
-    height = TOP + rows * (CARD_H + GAP) + len(families) * 50 + 80
-    width = LEFT * 2 + COLS * CARD_W + (COLS - 1) * GAP
+def _primary_mount_slot(layout: RoleLayout, image_ids: list[int]) -> int:
+    """Derive the role DAT slot that owns this mount family.
 
-    parts = [f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
-<rect width="100%" height="100%" fill="#0f1115"/>
-<style>
-text{{font-family:Arial,"Microsoft YaHei",sans-serif;fill:#eef2f7}}
-.title{{font-size:30px;font-weight:700}} .sub{{font-size:14px;fill:#9aa4b2}}
-.family{{font-size:20px;font-weight:700;fill:#ffffff}}
-.card{{fill:#171b22;stroke:#303844;stroke-width:1}}
-.id{{font-size:20px;font-weight:700}} .meta{{font-size:13px;fill:#aab4c2}}
-.name{{font-size:13px;fill:#ffd166;font-weight:700}}
-.badge{{fill:#252c36}} .badgeText{{font-size:12px;fill:#d7dee8}}
-</style>
-<text x="{LEFT}" y="48" class="title">飘渺三界 · 骑乘图集</text>
-<text x="{LEFT}" y="75" class="sub">{catalog['count']} 个 APK 验证骑乘资源 · character property {catalog['character_property']} = ride_code · image_id = 40000 + ride_code</text>
-<text x="{LEFT}" y="96" class="sub">每组 role_model 为客户端骑乘人物骨架；411xx 为骑手/鞍具接口层，不计入独立坐骑。</text>
-''']
-
-    y = TOP
-    for family in families:
-        role_model = int(family["role_model"])
-        image_ids = [int(value) for value in family["image_ids"]]
-        parts.append(
-            f'<text x="{LEFT}" y="{y}" class="family">role_model {role_model} · {len(image_ids)} 个</text>'
+    The catalog defines the verified primary image ids.  The role DAT supplies
+    the actual image-slot layout.  Matching the hundred-family distinguishes
+    primary 410xx bodies from 411xx saddle/rider interface layers and likewise
+    separates 400xx from the 401xx/402xx secondary flying layers.
+    """
+    if not image_ids:
+        raise ValueError('mount family has no image_ids')
+    family_prefix = int(image_ids[0]) // 100
+    slots = [
+        index
+        for index, image_id in enumerate(layout.image_ids)
+        if int(image_id) // 100 == family_prefix
+    ]
+    if len(slots) != 1:
+        raise ValueError(
+            f'expected exactly one primary mount slot for image family '
+            f'{family_prefix}, got {slots}'
         )
-        y += 18
-        for index, image_id in enumerate(image_ids):
-            row = index // COLS
-            col = index % COLS
-            x = LEFT + col * (CARD_W + GAP)
-            yy = y + row * (CARD_H + GAP)
-            ride_code = image_id - 40000
-            name = named.get(image_id)
+    return slots[0]
 
-            parts.append(
-                f'<rect x="{x}" y="{yy}" rx="10" ry="10" width="{CARD_W}" height="{CARD_H}" class="card"/>'
-            )
-            parts.append(f'<text x="{x + 14}" y="{yy + 28}" class="id">{image_id}</text>')
-            parts.append(
-                f'<rect x="{x + 112}" y="{yy + 12}" rx="9" ry="9" width="64" height="22" class="badge"/>'
-            )
-            parts.append(
-                f'<text x="{x + 144}" y="{yy + 28}" text-anchor="middle" class="badgeText">#{ride_code}</text>'
-            )
-            parts.append(
-                f'<text x="{x + 14}" y="{yy + 54}" class="meta">ride_code {ride_code}</text>'
-            )
-            parts.append(
-                f'<text x="{x + 14}" y="{yy + 75}" class="meta">rider {role_model}</text>'
-            )
-            if name:
-                parts.append(
-                    f'<text x="{x + 174}" y="{yy + 75}" text-anchor="end" class="name">{escape(name)}</text>'
-                )
-        y += ((len(image_ids) + COLS - 1) // COLS) * (CARD_H + GAP) + 34
 
-    parts.append(
-        f'<text x="{LEFT}" y="{height - 30}" class="sub">source: {escape(str(catalog["source"]))} · catalog: implementation_staging/data/catalog/mount_appearance_mapping.json</text></svg>'
+def _representative_group(layout: RoleLayout, primary_slot: int) -> int:
+    """Pick the first animation group that actually references the mount slot."""
+    groups_with_mount: set[int] = set()
+    for group_index, pieces in enumerate(layout.groups):
+        for piece in pieces:
+            if not 0 <= piece.record_index < len(layout.records):
+                continue
+            if layout.records[piece.record_index].image_slot == primary_slot:
+                groups_with_mount.add(group_index)
+                break
+
+    for sequence in layout.sequences:
+        for group_index in sequence:
+            if group_index in groups_with_mount:
+                return group_index
+    if groups_with_mount:
+        return min(groups_with_mount)
+    raise ValueError(f'no group references primary mount slot {primary_slot}')
+
+
+def _replace_mount_image(layout: RoleLayout, slot: int, image_id: int) -> RoleLayout:
+    image_ids = list(layout.image_ids)
+    image_ids[slot] = int(image_id)
+    return RoleLayout(
+        image_ids=tuple(image_ids),
+        records=layout.records,
+        groups=layout.groups,
+        sequences=layout.sequences,
+        group_offsets=layout.group_offsets,
     )
-    return "".join(parts)
+
+
+def _render_group(layout: RoleLayout, group_index: int, assets: AssetReader) -> Image.Image:
+    prepared: list[tuple[Image.Image, int, int]] = []
+    for piece in layout.groups[group_index]:
+        if not 0 <= piece.record_index < len(layout.records):
+            continue
+        record = layout.records[piece.record_index]
+        if not 0 <= record.image_slot < len(layout.image_ids):
+            continue
+        image_id = layout.image_ids[record.image_slot]
+        if image_id not in assets.locations:
+            continue
+        atlas = assets.image(image_id)
+        image = atlas.crop((
+            record.crop_x,
+            record.crop_y,
+            record.crop_x + record.width,
+            record.crop_y + record.height,
+        ))
+        operation = PIL_TRANSFORM[piece.transform]
+        if operation is not None:
+            image = image.transpose(operation)
+        prepared.append((image, piece.x, piece.y))
+
+    if not prepared:
+        return Image.new('RGBA', (1, 1))
+    left = min(x for image, x, y in prepared)
+    top = min(y for image, x, y in prepared)
+    right = max(x + image.width for image, x, y in prepared)
+    bottom = max(y + image.height for image, x, y in prepared)
+    canvas = Image.new('RGBA', (max(1, right - left), max(1, bottom - top)))
+    for image, x, y in prepared:
+        canvas.alpha_composite(image, (x - left, y - top))
+    alpha_box = canvas.getchannel('A').getbbox()
+    return canvas.crop(alpha_box) if alpha_box else canvas
+
+
+def _font() -> ImageFont.ImageFont:
+    return ImageFont.load_default()
+
+
+def _draw_card(
+    sheet: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    preview: Image.Image,
+    x: int,
+    y: int,
+    image_id: int,
+    ride_code: int,
+    role_model: int,
+) -> None:
+    draw.rectangle(
+        (x, y, x + CELL_WIDTH - 1, y + CELL_HEIGHT - 1),
+        outline=(80, 84, 92, 255),
+        fill=(23, 27, 34, 255),
+    )
+    thumb = preview.copy()
+    thumb.thumbnail((IMAGE_WIDTH, IMAGE_HEIGHT), Image.Resampling.NEAREST)
+    px = x + (CELL_WIDTH - thumb.width) // 2
+    py = y + 34 + (IMAGE_HEIGHT - thumb.height) // 2
+    sheet.alpha_composite(thumb, (px, py))
+    font = _font()
+    draw.text((x + 8, y + 7), f'{image_id}', fill='white', font=font)
+    draw.text((x + 8, y + CELL_HEIGHT - 36), f'ride={ride_code}', fill=(190, 198, 210, 255), font=font)
+    draw.text((x + 8, y + CELL_HEIGHT - 20), f'role={role_model}', fill=(190, 198, 210, 255), font=font)
+
+
+def _write_sheet(entries: list[dict[str, object]], output: Path) -> None:
+    rows = (len(entries) + COLUMNS - 1) // COLUMNS
+    sheet = Image.new(
+        'RGBA',
+        (COLUMNS * CELL_WIDTH, HEADER_HEIGHT + rows * CELL_HEIGHT),
+        (15, 17, 21, 255),
+    )
+    draw = ImageDraw.Draw(sheet)
+    font = _font()
+    draw.text((12, 10), 'Piao Miao San Jie - APK mount resource atlas', fill='white', font=font)
+    draw.text(
+        (12, 30),
+        'source: images.o + png*.p + role/*.dat; ids/families from mount_appearance_mapping.json',
+        fill=(170, 180, 194, 255),
+        font=font,
+    )
+    for index, entry in enumerate(entries):
+        x = (index % COLUMNS) * CELL_WIDTH
+        y = HEADER_HEIGHT + (index // COLUMNS) * CELL_HEIGHT
+        _draw_card(
+            sheet,
+            draw,
+            entry['preview'],  # type: ignore[arg-type]
+            x,
+            y,
+            int(entry['image_id']),
+            int(entry['ride_code']),
+            int(entry['role_model']),
+        )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    sheet.convert('RGB').save(output, optimize=True)
+
+
+def build(apk: Path, output_dir: Path = OUTPUT_DIR) -> dict[str, object]:
+    catalog = json.loads(CATALOG.read_text(encoding='utf-8'))
+    image_base = int(catalog['image_base'])
+    role_template = str(catalog['resource_paths']['role_dat'])
+    families = catalog['families']
+    expected_count = int(catalog['count'])
+    image_ids = [int(value) for family in families for value in family['image_ids']]
+    if len(image_ids) != expected_count or len(set(image_ids)) != expected_count:
+        raise ValueError('mount catalog count/uniqueness mismatch')
+
+    assets = AssetReader(apk)
+    entries: list[dict[str, object]] = []
+    family_manifest: list[dict[str, object]] = []
+    try:
+        for family in families:
+            role_model = int(family['role_model'])
+            family_ids = [int(value) for value in family['image_ids']]
+            role_resource = role_template.format(role_model=role_model)
+            layout = parse_layout(assets.archive.read(role_resource))
+            primary_slot = _primary_mount_slot(layout, family_ids)
+            representative_group = _representative_group(layout, primary_slot)
+            family_entries: list[dict[str, object]] = []
+            for image_id in family_ids:
+                if image_id not in assets.locations:
+                    raise ValueError(f'images.o has no catalog image id {image_id}')
+                preview = _render_group(
+                    _replace_mount_image(layout, primary_slot, image_id),
+                    representative_group,
+                    assets,
+                )
+                container, offset = assets.locations[image_id]
+                entry = {
+                    'image_id': image_id,
+                    'ride_code': image_id - image_base,
+                    'role_model': role_model,
+                    'role_resource': role_resource,
+                    'primary_slot': primary_slot,
+                    'representative_group': representative_group,
+                    'asset_index': {'container': container, 'offset': offset},
+                    'sprite_status': 'rendered_from_apk',
+                    'preview_width': preview.width,
+                    'preview_height': preview.height,
+                    'preview': preview,
+                }
+                entries.append(entry)
+                family_entries.append(entry)
+
+            family_output = output_dir / f'model_{role_model}_resources.png'
+            _write_sheet(family_entries, family_output)
+            family_manifest.append({
+                'role_model': role_model,
+                'role_resource': role_resource,
+                'primary_slot': primary_slot,
+                'representative_group': representative_group,
+                'count': len(family_entries),
+                'atlas': family_output.name,
+            })
+
+        _write_sheet(entries, output_dir / 'mount_riding_atlas.png')
+    finally:
+        assets.close()
+
+    named = catalog.get('named_templates', {})
+    serializable_entries = []
+    for entry in entries:
+        row = {key: value for key, value in entry.items() if key != 'preview'}
+        row['name'] = named.get(str(entry['image_id']), {}).get('name')
+        serializable_entries.append(row)
+
+    manifest = {
+        'version': 2,
+        'source': {
+            'apk': apk.name,
+            'catalog': str(CATALOG.relative_to(ROOT)),
+            'images_index': catalog['resource_paths']['images_index'],
+            'packed_image': catalog['resource_paths']['packed_image'],
+        },
+        'count': expected_count,
+        'families': family_manifest,
+        'entries': serializable_entries,
+    }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / 'manifest.json').write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding='utf-8',
+    )
+    return manifest
 
 
 def main() -> None:
-    catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
-    if int(catalog.get("count", 0)) != 54:
-        raise SystemExit("mount catalog count must remain 54")
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(build_svg(catalog), encoding="utf-8")
-    print(OUTPUT)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--apk', type=Path, required=True)
+    parser.add_argument('--output-dir', type=Path, default=OUTPUT_DIR)
+    args = parser.parse_args()
+    manifest = build(args.apk, args.output_dir)
+    print(f'wrote {manifest["count"]} resource-backed mount previews to {args.output_dir}')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
