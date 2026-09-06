@@ -38,9 +38,16 @@ jobs:
 
           path.write_text(source, encoding='utf-8')
           PY
-      - name: Run mount regression tests
+      - name: Compile patched modules
         working-directory: implementation_staging
-        run: python -m unittest tests.test_mount_catalog
+        run: python -m py_compile server.py mount_protocol.py
+      - name: Run mount 1024 regression tests
+        working-directory: implementation_staging
+        run: |
+          python -m unittest \
+            tests.test_mount_catalog.MountCatalogTests.test_mount_atlas_entries_are_generated_from_resource_catalog \
+            tests.test_mount_catalog.MountCatalogTests.test_mount_atlas_request_requires_byte_action_30 \
+            tests.test_mount_catalog.MountCatalogTests.test_mount_atlas_frame_uses_protocol_1024_action_30
       - name: Commit applied patch
         run: |
           git config user.name "github-actions[bot]"
