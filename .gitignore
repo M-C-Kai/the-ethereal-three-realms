@@ -11,6 +11,11 @@ __pycache__/
 # Local account/character state
 /implementation_staging/data/roles.json
 
+# Dynamic map runtime binaries; source-of-truth lives in maps/<id>/*.json.
+# Existing tracked legacy .map.o files remain tracked despite these rules.
+/implementation_staging/maps/[0-9]*.map.ref
+/implementation_staging/maps/[0-9]*.map.o
+
 # Signing credentials and packaged Android builds
 *.p12
 *.jks
