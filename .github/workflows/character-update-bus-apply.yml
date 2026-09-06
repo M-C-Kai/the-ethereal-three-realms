@@ -1,0 +1,138 @@
+name: Apply character update bus
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'implementation_staging/tools/apply_character_update_bus.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Capture pre-change test baseline
+        shell: bash
+        run: |
+          set +e
+          cd implementation_staging
+          python -m unittest discover -s tests -p 'test_*.py' -v > ../baseline-tests.log 2>&1
+          echo "baseline_status=$?" >> "$GITHUB_ENV"
+          set -e
+
+      - name: Verify RED before implementation
+        shell: bash
+        run: |
+          test ! -f implementation_staging/character_update_bus.py
+          cat > /tmp/test_character_update_bus_red.py <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path('implementation_staging').resolve()))
+          from character_update_bus import CharacterUpdateBus
+          assert CharacterUpdateBus is not None
+          PY
+          set +e
+          python /tmp/test_character_update_bus_red.py > red.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'RED test unexpectedly passed before implementation'
+            cat red.log
+            exit 1
+          fi
+          echo 'RED confirmed: character_update_bus is absent before patch'
+          cat red.log
+
+      - name: Apply implementation
+        run: python implementation_staging/tools/apply_character_update_bus.py
+
+      - name: Run focused GREEN tests
+        shell: bash
+        run: |
+          cd implementation_staging
+          python -m py_compile character_update_bus.py server.py
+          python -m unittest discover -s tests -p 'test_character_update_bus.py' -v
+          python -m unittest discover -s tests -p 'test_character_equipment_refresh.py' -v
+          python -m unittest discover -s tests -p 'test_strengthening.py' -v
+          python -m unittest discover -s tests -p 'test_*appearance*.py' -v
+
+      - name: Verify business paths use the bus
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          server = Path('implementation_staging/server.py').read_text(encoding='utf-8')
+          bus = Path('implementation_staging/character_update_bus.py').read_text(encoding='utf-8')
+          direct_calls = server.count('character_equipment_refresh_frames(')
+          if direct_calls != 1:
+              raise SystemExit(f'expected only the function definition to remain, found {direct_calls} call-like occurrences')
+          if 'import server' in bus or 'from server' in bus:
+              raise SystemExit('character_update_bus.py must not import server.py')
+          required = [
+              'CharacterUpdateEvent.EQUIPMENT_CHANGED',
+              'CharacterUpdateEvent.EQUIPMENT_STRENGTHENED',
+              'CharacterUpdateEvent.CHARACTER_LEVEL_CHANGED',
+          ]
+          for marker in required:
+              if marker not in server:
+                  raise SystemExit(f'missing server bus integration marker: {marker}')
+          print('bus integration source checks passed')
+          PY
+
+      - name: Run full suite and compare failure set
+        shell: bash
+        run: |
+          set +e
+          cd implementation_staging
+          python -m unittest discover -s tests -p 'test_*.py' -v > ../after-tests.log 2>&1
+          echo "after_status=$?" >> "$GITHUB_ENV"
+          set -e
+          cd ..
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          def failures(path):
+              text = Path(path).read_text(encoding='utf-8', errors='replace')
+              found = set()
+              for line in text.splitlines():
+                  match = re.match(r'^(FAIL|ERROR):\s+(.+)$', line)
+                  if match:
+                      found.add((match.group(1), match.group(2).strip()))
+              return found
+
+          before = failures('baseline-tests.log')
+          after = failures('after-tests.log')
+          new = sorted(after - before)
+          resolved = sorted(before - after)
+          print(f'baseline failures/errors: {len(before)}')
+          print(f'after failures/errors: {len(after)}')
+          print(f'new failures/errors: {len(new)}')
+          print(f'resolved historical failures/errors: {len(resolved)}')
+          if new:
+              print('NEW FAILURES/ERRORS:')
+              for item in new:
+                  print(item)
+              raise SystemExit(1)
+          PY
+
+      - name: Commit verified implementation and remove temporary executor
+        shell: bash
+        run: |
+          rm -f baseline-tests.log after-tests.log red.log
+          git rm implementation_staging/tools/apply_character_update_bus.py
+          git rm .github/workflows/character-update-bus-apply.yml
+          git add implementation_staging/character_update_bus.py implementation_staging/server.py implementation_staging/tests/test_character_update_bus.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: route character updates through bus'
+          git push origin HEAD:master
