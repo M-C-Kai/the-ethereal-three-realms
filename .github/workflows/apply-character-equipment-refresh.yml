@@ -91,7 +91,7 @@ jobs:
           cat /tmp/red.log
           rm tests/test_character_equipment_refresh_red.py
           if [ "$red_status" -eq 0 ]; then
-            echo 'Expected pre-patch regression test to fail, but it passed.' >&2
+            echo 'Expected pre-patch regression tests to fail, but they passed.' >&2
             exit 1
           fi
           grep -q 'FAILED' /tmp/red.log
@@ -101,55 +101,62 @@ jobs:
         run: |
           python .github/scripts/apply_character_panel_refresh.py
 
-      - name: Add strengthening refresh regression
+      - name: Append strengthening refresh regression
+        working-directory: implementation_staging
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('implementation_staging/tests/test_character_equipment_refresh.py')
+          path = Path('tests/test_character_equipment_refresh.py')
           text = path.read_text(encoding='utf-8')
           marker = "\n\nif __name__ == '__main__':\n    unittest.main()\n"
           if marker not in text:
               raise SystemExit('test main marker missing')
-          addition = r'''
+          addition = '''
 
-class _AlwaysSuccessRng:
-    def randrange(self, stop):
-        return 0
+          class _AlwaysSuccessRng:
+              def randrange(self, stop):
+                  return 0
 
 
-class CharacterStrengtheningRefreshTests(unittest.TestCase):
-    def test_strengthening_equipped_weapon_appends_1017_and_1039_refresh(self):
-        import server as server_module
-        from strengthening import INITIAL_STRENGTHEN_STONE_TEMPLATE_ID
+          class CharacterStrengtheningRefreshTests(unittest.TestCase):
+              def test_strengthening_equipped_weapon_appends_1017_and_1039_refresh(self):
+                  import server as server_module
+                  from strengthening import INITIAL_STRENGTHEN_STONE_TEMPLATE_ID
 
-        settings = server_module.Settings()
-        role = server_module.default_role(settings)
-        weapon = next(
-            item for item in server_module.role_items(role)
-            if server_module.item_slot(item, settings.item_registry) == 10
-        )
-        stone = next(
-            item for item in server_module.role_items(role)
-            if int(item.get('template_id', 0)) == INITIAL_STRENGTHEN_STONE_TEMPLATE_ID
-        )
-        weapon['location'] = 'equipped'
-        server_module.ensure_weapon_base_attributes(weapon, settings.item_registry)
+                  settings = server_module.Settings()
+                  role = server_module.default_role(settings)
+                  weapon = next(
+                      item for item in server_module.role_items(role)
+                      if server_module.item_slot(item, settings.item_registry) == 10
+                  )
+                  stone = next(
+                      item for item in server_module.role_items(role)
+                      if int(item.get('template_id', 0)) == INITIAL_STRENGTHEN_STONE_TEMPLATE_ID
+                  )
+                  weapon['location'] = 'equipped'
+                  server_module.ensure_weapon_base_attributes(weapon, settings.item_registry)
 
-        game_server = server_module.LocalGameServer(settings)
-        game_server.roles.save = lambda: None
-        frames = game_server.handle_strengthening_request(
-            role,
-            [92, int(weapon['id']), int(stone['id']), 5],
-            rng=_AlwaysSuccessRng(),
-        )
+                  game_server = server_module.LocalGameServer(settings)
+                  game_server.roles.save = lambda: None
+                  frames = game_server.handle_strengthening_request(
+                      role,
+                      [92, int(weapon['id']), int(stone['id']), 5],
+                      rng=_AlwaysSuccessRng(),
+                  )
 
-        message_ids = [decode_frame(frame)[0] for frame in frames]
-        self.assertGreaterEqual(len(message_ids), 2)
-        self.assertEqual(message_ids[-2:], [1017, 1039])
-        _, refresh_fields = decode_frame(frames[-1])
-        self.assertEqual(field_values(refresh_fields)[0], 1)
-'''
+                  message_ids = [decode_frame(frame)[0] for frame in frames]
+                  self.assertGreaterEqual(len(message_ids), 2)
+                  self.assertEqual(message_ids[-2:], [1017, 1039])
+                  _, refresh_fields = decode_frame(frames[-1])
+                  self.assertEqual(field_values(refresh_fields)[0], 1)
+          '''
+          # The YAML block strips its own indentation; remove the intentional
+          # ten-space Python-string margin before inserting into the test file.
+          addition = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in addition.splitlines()
+          )
           path.write_text(text.replace(marker, addition + marker), encoding='utf-8')
           PY
 
@@ -184,11 +191,11 @@ class CharacterStrengtheningRefreshTests(unittest.TestCase):
           cat /tmp/new-failures.txt
           if [ -s /tmp/new-failures.txt ]; then
             echo 'Patch introduced new full-suite failures.' >&2
-            tail -n 120 /tmp/full-after.log
+            tail -n 160 /tmp/full-after.log
             exit 1
           fi
           echo 'No new full-suite failures compared with baseline.'
-          tail -n 40 /tmp/full-after.log
+          tail -n 60 /tmp/full-after.log
 
       - name: Commit production patch
         run: |
