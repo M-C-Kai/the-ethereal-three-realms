@@ -299,3 +299,16 @@ APK `pmsj/work/b/v.r()` 明确执行 `property 7 -> v.e(I)`，而 `property 22 -
 当前用户按 APK contact sheet 确认的 icon group→family 映射为：`21→220, 22→260, 23→271, 24→250, 25→231, 26→280, 27→242, 28→240, 29→241, 30→221, 31→290, 32→270, 33→230`。族 271 映射 `27101..27110`；族 231 只使用 `23100..23109`，额外 `23110/23111` 不自动分配。
 
 同一已装备武器必须满足：`character_appearance(role)[7] == 1048 field[2] == battle_weapon_field2_from_icon(icon_code, quality)`；卸下武器后均为 `0`。
+
+
+## 铠甲外观资源（property 2 / 14000）
+
+APK 与 `pmsj/work/b/v.smali` 已确认：
+
+- 铠甲主体外观使用人物 `property 2`，不是 `property 15`。
+- `property 2` 写入人物复合模型的 image slot/layer 3。
+- 资源编号固定为 `14000 + property2`。
+- 当前 APK 包内连续存在 `0014000_71x32.png` 到 `0014030_71x32.png`，即 `property2=0..30` 共 31 个铠甲外观资源。
+- `property2=0` 是有效值，对应 `image 14000`，不能拿 0 表示“未解析”。
+- 当前尚未恢复 `icon_code 0300..0309 -> property2` 的官方表；没有证据时不得循环候选、按尾号、按颜色或跨 `15000/16000/...` 资源族猜测。
+- 服务器资料库以 `data/catalog/armor_appearance_mapping.json` 为唯一铠甲外观资源来源；程序只读取该表。

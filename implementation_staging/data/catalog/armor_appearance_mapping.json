@@ -1,0 +1,306 @@
+{
+  "version": 1,
+  "kind": "armor_appearance_mapping",
+  "status": "apk_resource_family_confirmed_icon_mapping_unresolved",
+  "source": "direct APK resource extraction + pmsj/work/b/v.smali",
+  "description": "铠甲人物外观只使用 property2。客户端将 property2 写入人物 layer3，实际资源为 image_id=14000+property2。APK 内 14000..14030 共 31 张，全部为 71x32。当前未恢复 icon_code 0300..0309 到 property2 的官方对应表，因此程序不得循环、按尾号或按颜色自动猜测。",
+  "property": 2,
+  "image_slot": 3,
+  "image_base": 14000,
+  "property_range": [
+    0,
+    30
+  ],
+  "image_range": [
+    14000,
+    14030
+  ],
+  "dimensions": [
+    71,
+    32
+  ],
+  "resources": [
+    {
+      "property2": 0,
+      "image_id": 14000,
+      "file": "0014000_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 1,
+      "image_id": 14001,
+      "file": "0014001_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 2,
+      "image_id": 14002,
+      "file": "0014002_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 3,
+      "image_id": 14003,
+      "file": "0014003_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 4,
+      "image_id": 14004,
+      "file": "0014004_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 5,
+      "image_id": 14005,
+      "file": "0014005_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 6,
+      "image_id": 14006,
+      "file": "0014006_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 7,
+      "image_id": 14007,
+      "file": "0014007_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 8,
+      "image_id": 14008,
+      "file": "0014008_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 9,
+      "image_id": 14009,
+      "file": "0014009_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 10,
+      "image_id": 14010,
+      "file": "0014010_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 11,
+      "image_id": 14011,
+      "file": "0014011_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 12,
+      "image_id": 14012,
+      "file": "0014012_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 13,
+      "image_id": 14013,
+      "file": "0014013_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 14,
+      "image_id": 14014,
+      "file": "0014014_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 15,
+      "image_id": 14015,
+      "file": "0014015_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 16,
+      "image_id": 14016,
+      "file": "0014016_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 17,
+      "image_id": 14017,
+      "file": "0014017_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 18,
+      "image_id": 14018,
+      "file": "0014018_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 19,
+      "image_id": 14019,
+      "file": "0014019_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 20,
+      "image_id": 14020,
+      "file": "0014020_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 21,
+      "image_id": 14021,
+      "file": "0014021_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 22,
+      "image_id": 14022,
+      "file": "0014022_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 23,
+      "image_id": 14023,
+      "file": "0014023_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 24,
+      "image_id": 14024,
+      "file": "0014024_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 25,
+      "image_id": 14025,
+      "file": "0014025_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 26,
+      "image_id": 14026,
+      "file": "0014026_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 27,
+      "image_id": 14027,
+      "file": "0014027_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 28,
+      "image_id": 14028,
+      "file": "0014028_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 29,
+      "image_id": 14029,
+      "file": "0014029_71x32.png",
+      "width": 71,
+      "height": 32
+    },
+    {
+      "property2": 30,
+      "image_id": 14030,
+      "file": "0014030_71x32.png",
+      "width": 71,
+      "height": 32
+    }
+  ],
+  "property2_to_image": {
+    "0": 14000,
+    "1": 14001,
+    "2": 14002,
+    "3": 14003,
+    "4": 14004,
+    "5": 14005,
+    "6": 14006,
+    "7": 14007,
+    "8": 14008,
+    "9": 14009,
+    "10": 14010,
+    "11": 14011,
+    "12": 14012,
+    "13": 14013,
+    "14": 14014,
+    "15": 14015,
+    "16": 14016,
+    "17": 14017,
+    "18": 14018,
+    "19": 14019,
+    "20": 14020,
+    "21": 14021,
+    "22": 14022,
+    "23": 14023,
+    "24": 14024,
+    "25": 14025,
+    "26": 14026,
+    "27": 14027,
+    "28": 14028,
+    "29": 14029,
+    "30": 14030
+  },
+  "armor_icon_codes": [
+    300,
+    301,
+    302,
+    303,
+    304,
+    305,
+    306,
+    307,
+    308,
+    309
+  ],
+  "icon_to_property2": {},
+  "unresolved_icon_codes": [
+    300,
+    301,
+    302,
+    303,
+    304,
+    305,
+    306,
+    307,
+    308,
+    309
+  ],
+  "notes": [
+    "0014000_71x32.png through 0014030_71x32.png are the APK armor appearance resource family.",
+    "v.r() routes property 2 to the character armor/body layer handler.",
+    "The handler writes image 14000 + property2 into character layer 3.",
+    "property2 value 0 is valid and selects image 14000; unresolved must therefore be represented as null/None, not 0.",
+    "No icon_code -> property2 pair is stored until supported by original-server evidence or a confirmed visual match."
+  ]
+}

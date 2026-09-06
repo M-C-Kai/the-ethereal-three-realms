@@ -16,6 +16,9 @@ WEAPON_APPEARANCE_MAPPING_FILE = (
 HELMET_APPEARANCE_MAPPING_FILE = (
     Path(__file__).resolve().parent / 'data' / 'catalog' / 'helmet_appearance_mapping.json'
 )
+ARMOR_APPEARANCE_MAPPING_FILE = (
+    Path(__file__).resolve().parent / 'data' / 'catalog' / 'armor_appearance_mapping.json'
+)
 
 
 @lru_cache(maxsize=1)
@@ -83,6 +86,58 @@ def helmet_property20_from_icon(icon_code: int) -> int:
     return _helmet_icon_to_property20_mapping().get(int(icon_code), 0)
 
 
+@lru_cache(maxsize=1)
+def _armor_appearance_catalog() -> tuple[dict[int, int], dict[int, int]]:
+    """Load APK-confirmed armor resources and explicit icon mappings from catalog."""
+    data = json.loads(ARMOR_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
+    if not isinstance(data, dict) or int(data.get('version', 0)) != 1:
+        raise ValueError(f'invalid armor appearance mapping catalog: {ARMOR_APPEARANCE_MAPPING_FILE}')
+    if int(data.get('property', -1)) != 2 or int(data.get('image_base', 0)) != 14000:
+        raise ValueError(f'invalid armor appearance property metadata: {ARMOR_APPEARANCE_MAPPING_FILE}')
+
+    raw_resources = data.get('property2_to_image')
+    if not isinstance(raw_resources, dict) or len(raw_resources) != 31:
+        raise ValueError(f'armor property2 resource table must contain 31 entries: {ARMOR_APPEARANCE_MAPPING_FILE}')
+    property_to_image: dict[int, int] = {}
+    for raw_property, raw_image in raw_resources.items():
+        property_value = int(raw_property)
+        image_id = int(raw_image)
+        if not 0 <= property_value <= 30 or image_id != 14000 + property_value:
+            raise ValueError(f'invalid armor property2 resource {raw_property!r}->{raw_image!r}')
+        property_to_image[property_value] = image_id
+    if set(property_to_image) != set(range(31)):
+        raise ValueError(f'armor property2 resource range is incomplete: {ARMOR_APPEARANCE_MAPPING_FILE}')
+
+    raw_mapping = data.get('icon_to_property2')
+    if not isinstance(raw_mapping, dict):
+        raise ValueError(f'armor icon mapping must be a dict: {ARMOR_APPEARANCE_MAPPING_FILE}')
+    icon_mapping: dict[int, int] = {}
+    for raw_icon, raw_value in raw_mapping.items():
+        icon_code = int(raw_icon)
+        property_value = int(raw_value)
+        if icon_code <= 0 or property_value not in property_to_image:
+            raise ValueError(f'invalid armor appearance pair {raw_icon!r}->{raw_value!r}')
+        if icon_code in icon_mapping:
+            raise ValueError(f'duplicate armor icon_code after normalization: {icon_code}')
+        icon_mapping[icon_code] = property_value
+    return property_to_image, icon_mapping
+
+
+def armor_property2_to_image_mapping() -> dict[int, int]:
+    """Return APK-confirmed property2 -> armor image mapping (14000..14030)."""
+    return dict(_armor_appearance_catalog()[0])
+
+
+def armor_icon_to_property2_mapping() -> dict[int, int]:
+    """Return only explicitly confirmed icon_code -> property2 armor pairs."""
+    return dict(_armor_appearance_catalog()[1])
+
+
+def armor_property2_from_icon(icon_code: int) -> int | None:
+    """Resolve armor property2 from catalog; unresolved icons return None, never guessed."""
+    return _armor_appearance_catalog()[1].get(int(icon_code))
+
+
 def battle_weapon_image_from_icon(icon_code: int) -> int:
     """Resolve one weapon image from the catalog; unknown icons are not guessed."""
     return _weapon_icon_to_image_mapping().get(int(icon_code), 0)
@@ -98,7 +153,6 @@ def battle_weapon_field2_from_icon(icon_code: int, quality: int) -> int:
 # Compatibility-preview pairing only. Not an official icon→appearance mapping.
 PREVIEW_SLOT_APPEARANCE_PROPERTY = {
     2: 16,
-    3: 15,
     5: 14,
     7: 19,
     8: 17,
@@ -198,6 +252,9 @@ def preview_appearance_properties(
     if slot == 1:
         value = helmet_property20_from_icon(icon_code)
         return {'20': value} if value > 0 else {}
+    if slot == 3:
+        value = armor_property2_from_icon(icon_code)
+        return {'2': value} if value is not None else {}
     if slot == 10:
         return {
             '7': preview_weapon_property7(icon_code)
