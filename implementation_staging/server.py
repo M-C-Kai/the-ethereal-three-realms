@@ -98,6 +98,11 @@ from strengthening import (
     strengthening_success,
     total_strengthening_rate,
 )
+from mount_protocol import (
+    is_mount_atlas_request,
+    load_mount_atlas_entries,
+    mount_atlas_frame,
+)
 
 
 LOG = logging.getLogger('piaomiao-local')
@@ -5463,6 +5468,23 @@ class LocalGameServer:
                             cipher=game_cipher,
                             lock=send_lock,
                         )
+                elif message_id == 1024 and values:
+                    if is_mount_atlas_request(fields):
+                        entries = load_mount_atlas_entries()
+                        LOG.info(
+                            'MOUNT_1024 action=30 user=%r role_id=%s atlas_count=%d',
+                            username,
+                            int(active_role['id']) if active_role is not None else None,
+                            len(entries),
+                        )
+                        await self._send(
+                            writer,
+                            mount_atlas_frame(entries),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    else:
+                        LOG.info('ignored mount protocol values=%r', values)
                 elif message_id == 1502 and len(values) >= 3:
                     # Fields are [action, count, id...]. Action 1 requests a
                     # role .dat (1503); actions 0/2 request a PNG payload
