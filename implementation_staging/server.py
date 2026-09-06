@@ -3775,7 +3775,7 @@ def battle_actor_frame(
     fields: list[Field] = [
         integer(source_model),  # 0: flags/model source
         integer(0),              # 1
-        integer(source_model if kind == 1 else 0),  # 2: player model source
+        integer(int(visible_layers.get(7, 0)) if kind == 1 else 0),  # 2: player weapon appearance/property 7
         integer(max(0, current_hp)),  # 3: current hp/status (used by h.d())
         integer(0),              # 4
         integer(side_code),      # 5: side/category
