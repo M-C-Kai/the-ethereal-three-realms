@@ -114,7 +114,7 @@ jobs:
         run: |
           set +e
           cd implementation_staging
-          python -m unittest tests.test_role_bag_reset -v > /tmp/red.txt 2>&1
+          python -m unittest discover -s tests -p 'test_role_bag_reset.py' -v > /tmp/red.txt 2>&1
           status=$?
           set -e
           cat /tmp/red.txt
@@ -136,11 +136,7 @@ jobs:
           anchor = 'EQUIPMENT_RESOURCE_PREVIEW_VERSION = 4\n'
           if anchor not in text:
               raise SystemExit('constant anchor not found')
-          text = text.replace(
-              anchor,
-              anchor + 'ROLE_BAG_RESET_VERSION = 1\n',
-              1,
-          )
+          text = text.replace(anchor, anchor + 'ROLE_BAG_RESET_VERSION = 1\n', 1)
 
           anchor = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    present = {\n"
           replacement = "    if removed_deprecated_mount and int(role.get('mount_model', 0)) != 0:\n        role['mount_model'] = 0\n        changed = True\n    # 已执行背包清空迁移的角色不再自动补回历史 APK 预览物品。\n    # 后续正常获得的新物品仍会保留，因为清空动作本身只执行一次。\n    if int(role.get('bag_reset_version', 0) or 0) >= ROLE_BAG_RESET_VERSION:\n        if role.get('equipment_resource_preview_version') != EQUIPMENT_RESOURCE_PREVIEW_VERSION:\n            role['equipment_resource_preview_version'] = EQUIPMENT_RESOURCE_PREVIEW_VERSION\n            changed = True\n        return changed\n    present = {\n"
@@ -163,15 +159,21 @@ jobs:
           path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Run GREEN tests
+      - name: Run bag reset GREEN tests
         shell: bash
         run: |
           set -e
           cd implementation_staging
           python -m py_compile server.py character_update_bus.py
-          python -m unittest tests.test_role_bag_reset -v
-          python -m unittest tests.test_character_equipment_refresh -v
-          python -m unittest tests.test_item_registry -v
+          python -m unittest discover -s tests -p 'test_role_bag_reset.py' -v
+
+      - name: Run related regression tests
+        shell: bash
+        run: |
+          set -e
+          cd implementation_staging
+          python -m unittest discover -s tests -p 'test_character_equipment_refresh.py' -v
+          python -m unittest discover -s tests -p 'test_item_registry.py' -v
 
       - name: Compare full-suite failures with baseline
         shell: bash
@@ -179,7 +181,6 @@ jobs:
           set +e
           cd implementation_staging
           python -m unittest discover -s tests > /tmp/after.txt 2>&1
-          after_status=$?
           set -e
           python - <<'PY'
           import re
@@ -187,8 +188,7 @@ jobs:
 
           def failures(path):
               text = Path(path).read_text(encoding='utf-8', errors='replace')
-              names = set(re.findall(r'^(?:FAIL|ERROR): ([^ ]+)', text, re.M))
-              return names
+              return set(re.findall(r'^(?:FAIL|ERROR): ([^ ]+)', text, re.M))
 
           before = failures('/tmp/baseline.txt')
           after = failures('/tmp/after.txt')
