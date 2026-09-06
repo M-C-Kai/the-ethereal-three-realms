@@ -104,6 +104,7 @@ from mount_protocol import (
     load_mount_atlas_entries,
     mount_atlas_frame,
 )
+from character_update_bus import CharacterUpdateBus, CharacterUpdateEvent
 
 
 LOG = logging.getLogger('piaomiao-local')
@@ -4678,10 +4679,34 @@ def heartbeat_challenge(nonce: int) -> bytes:
     return encode_frame(1012, [integer(nonce)])
 
 
+def is_role_item_equipped(role: dict[str, object], item_id: int) -> bool:
+    """Return whether one concrete item instance is currently equipped."""
+    for item in role_items(role):
+        try:
+            current_id = int(item.get('id', 0))
+        except (TypeError, ValueError):
+            continue
+        if current_id == int(item_id) and item.get('location') == 'equipped':
+            return True
+    return False
+
+
+def build_character_update_bus() -> CharacterUpdateBus:
+    """Bind the generic update bus to the server's verified refresh builders."""
+    return CharacterUpdateBus(
+        build_full_refresh=character_equipment_refresh_frames,
+        build_appearance_refresh=lambda role, registry: (
+            equipment_panel_refresh_frame(role, registry),
+        ),
+        is_item_equipped=is_role_item_equipped,
+    )
+
+
 class LocalGameServer:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.roles = RoleStore(settings)
+        self.character_update_bus = build_character_update_bus()
         self._next_session_id = 1000
         self._sessions: dict[tuple[int, int], str] = {}
 
@@ -4715,7 +4740,14 @@ class LocalGameServer:
             role.update(snapshot)
             raise
         if result.changed:
-            return (*result.frames, *character_equipment_refresh_frames(role, self.settings.item_registry))
+            target_item_id = int(values[1]) if len(values) > 1 else 0
+            refresh = self.character_update_bus.publish(
+                CharacterUpdateEvent.EQUIPMENT_STRENGTHENED,
+                role=role,
+                registry=self.settings.item_registry,
+                item_id=target_item_id,
+            )
+            return (*result.frames, *refresh.frames)
         return result.frames
 
     def handle_shop_purchase(
@@ -5679,6 +5711,12 @@ class LocalGameServer:
                                     ))
                                     if level_up:
                                         result_frames.append(level_up_effect_frame(active_role))
+                                        refresh = self.character_update_bus.publish(
+                                            CharacterUpdateEvent.CHARACTER_LEVEL_CHANGED,
+                                            role=active_role,
+                                            registry=self.settings.item_registry,
+                                        )
+                                        result_frames.extend(refresh.frames)
                                     else:
                                         result_frames.append(
                                             battle_reward_popup(BATTLE_EXP_REWARD, reward_item, level_up)
@@ -5816,10 +5854,16 @@ class LocalGameServer:
                                 int(active_role['level']),
                                 int(active_role['experience']),
                             )
+                            refresh = self.character_update_bus.publish(
+                                CharacterUpdateEvent.CHARACTER_LEVEL_CHANGED,
+                                role=active_role,
+                                registry=self.settings.item_registry,
+                            )
                             await self._send(
                                 writer,
                                 battle_progress_frame(active_role),
                                 level_up_effect_frame(active_role),
+                                *refresh.frames,
                                 cipher=game_cipher,
                                 lock=send_lock,
                             )
@@ -6059,15 +6103,18 @@ class LocalGameServer:
                             lock=send_lock,
                         )
                     elif action == 3 and item is not None and item_action_location_valid(action, item):
-                        previous_appearance = character_appearance(active_role, self.settings.item_registry)
+                        was_equipped = is_equipment(item) and item.get('location') == 'equipped'
                         role_items(active_role).remove(item)
+                        replies = [encode_frame(1009, [short(3), integer(item_id)])]
+                        if was_equipped:
+                            refresh = self.character_update_bus.publish(
+                                CharacterUpdateEvent.EQUIPMENT_CHANGED,
+                                role=active_role,
+                                registry=self.settings.item_registry,
+                            )
+                            replies.extend(refresh.frames)
                         self.roles.save()
                         LOG.info('item discarded item_id=%d name=%r', item_id, item.get('name'))
-                        replies = [encode_frame(1009, [short(3), integer(item_id)])]
-                        if is_equipment(item):
-                            replies.extend(
-                                character_equipment_refresh_frames(active_role, self.settings.item_registry)
-                            )
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     elif action == 4 and item is not None and item_action_location_valid(action, item):
                         resolved_item = self.settings.item_registry.resolve(item)
@@ -6132,7 +6179,6 @@ class LocalGameServer:
                             await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
                             continue
                         updates: list[bytes] = []
-                        previous_appearance = character_appearance(active_role, self.settings.item_registry)
                         slot = item_slot(item, self.settings.item_registry)
                         for equipped in role_items(active_role):
                             if (
@@ -6145,14 +6191,16 @@ class LocalGameServer:
                         item['location'] = 'equipped'
                         updates.append(item_frame(item, operation=3))
                         updates.append(encode_frame(1009, [short(5)]))
-                        updates.extend(
-                            character_equipment_refresh_frames(active_role, self.settings.item_registry)
+                        refresh = self.character_update_bus.publish(
+                            CharacterUpdateEvent.EQUIPMENT_CHANGED,
+                            role=active_role,
+                            registry=self.settings.item_registry,
                         )
+                        updates.extend(refresh.frames)
                         self.roles.save()
                         LOG.info('item equipped item_id=%d name=%r slot=%d', item_id, resolved_item.get('name'), slot)
                         await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
                     elif action == 6 and item is not None and item_action_location_valid(action, item):
-                        previous_appearance = character_appearance(active_role, self.settings.item_registry)
                         if not try_move_item_to_bag(active_role, item):
                             LOG.info(
                                 'item unequip rejected full_bag item_id=%d occupied=%d capacity=%d',
@@ -6182,12 +6230,15 @@ class LocalGameServer:
                                 lock=send_lock,
                             )
                             continue
+                        refresh = self.character_update_bus.publish(
+                            CharacterUpdateEvent.EQUIPMENT_CHANGED,
+                            role=active_role,
+                            registry=self.settings.item_registry,
+                        )
                         self.roles.save()
                         LOG.info('item unequipped item_id=%d name=%r', item_id, item.get('name'))
                         replies = [item_frame(item, operation=3), encode_frame(1009, [short(6)])]
-                        replies.extend(
-                            character_equipment_refresh_frames(active_role, self.settings.item_registry)
-                        )
+                        replies.extend(refresh.frames)
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     else:
                         LOG.info('ignored item action=%d item_id=%d values=%r', action, item_id, values)
