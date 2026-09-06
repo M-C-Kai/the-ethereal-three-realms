@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "kind": "leg_armor_appearance_mapping",
+  "status": "compatibility_mapping",
+  "source": "direct APK extraction + visual recovery + user-confirmed mapping",
+  "apk_sha256": "34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5",
+  "description": "Leg-armor icon frames 0500..0509 were recovered by visually matching the real APK inventory icon atlas against the real APK property14 character-layer resources. The APK does not expose a direct icon_code -> property14 table, so this catalog records the confirmed compatibility mapping without claiming an official server-side item table.",
+  "property": 14,
+  "image_base": 15000,
+  "character_layer": 4,
+  "equipment_slot": 5,
+  "slot_family": "leg_armor",
+  "icon_resource": {
+    "image_id": 3052424,
+    "width": 240,
+    "height": 24,
+    "frame_width": 24,
+    "frame_height": 24,
+    "icon_to_frame": {
+      "500": 0,
+      "501": 1,
+      "502": 2,
+      "503": 3,
+      "504": 4,
+      "505": 5,
+      "506": 6,
+      "507": 7,
+      "508": 8,
+      "509": 9
+    },
+    "client_rule": "a/c/x.f(icon_code): frame=icon_code%100; resource=3000000+((icon_code%10000)//100)*10000+2424"
+  },
+  "appearance_resource": {
+    "client_rule": "pmsj/work/b/v.z(property14): character layer4 uses image_id=15000+property14; property14=0 has a client-side base-leg fallback that can select 15000 or 15001 according to the character condition",
+    "candidate_property14_values": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ],
+    "candidate_image_ids": [
+      15000,
+      15001,
+      15002,
+      15003,
+      15004,
+      15005,
+      15006,
+      15007,
+      15008,
+      15009,
+      15010,
+      15011,
+      15020,
+      15021,
+      15022,
+      15023,
+      15024,
+      15025,
+      15026,
+      15027,
+      15028,
+      15029
+    ]
+  },
+  "icon_to_property14": {
+    "500": 0,
+    "501": 25,
+    "502": 27,
+    "503": 3,
+    "504": 4,
+    "505": 5,
+    "506": 2,
+    "507": 7,
+    "508": 8,
+    "509": 9
+  },
+  "recovered_mappings": [
+    {
+      "icon_code": 500,
+      "property14": 0,
+      "image_id": 15000,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Gray long-trouser silhouette matches the base leg layer. property14=0 is a client special case; 15000 is the canonical recorded image base, while the client may select 15001 for the alternate character condition."
+    },
+    {
+      "icon_code": 501,
+      "property14": 25,
+      "image_id": 15025,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Blue-cyan trouser body and brown lower-leg/boot section match image 15025."
+    },
+    {
+      "icon_code": 502,
+      "property14": 27,
+      "image_id": 15027,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Yellow-green trouser body and purple lower-leg section match image 15027."
+    },
+    {
+      "icon_code": 503,
+      "property14": 3,
+      "image_id": 15003,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Green trouser body and cyan-gray lower section match image 15003."
+    },
+    {
+      "icon_code": 504,
+      "property14": 4,
+      "image_id": 15004,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Black long-trouser silhouette and shading match image 15004."
+    },
+    {
+      "icon_code": 505,
+      "property14": 5,
+      "image_id": 15005,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Solid cyan-blue long trousers match image 15005; this rules out the previous compatibility value 25, whose brown lower-leg section does not match icon 0505."
+    },
+    {
+      "icon_code": 506,
+      "property14": 2,
+      "image_id": 15002,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Dark red long-trouser palette matches image 15002 and differs from the brighter red/yellow image 15007."
+    },
+    {
+      "icon_code": 507,
+      "property14": 7,
+      "image_id": 15007,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Bright red trouser body with yellow-green lower section matches image 15007."
+    },
+    {
+      "icon_code": 508,
+      "property14": 8,
+      "image_id": 15008,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "Olive yellow-green long-trouser palette matches image 15008."
+    },
+    {
+      "icon_code": 509,
+      "property14": 9,
+      "image_id": 15009,
+      "evidence_level": "apk_visual_confirmed",
+      "note": "White-gray long-trouser palette matches image 15009."
+    }
+  ],
+  "unresolved_icon_codes": [],
+  "notes": [
+    "All icon pixels and all 150xx character-layer pixels used for this recovery were extracted from the uploaded APK with SHA-256 34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5.",
+    "The APK client proves property14 -> character layer4 -> image 15000+value for nonzero values, with a special zero-value base-leg fallback.",
+    "No direct APK static icon_code -> property14 relation table was recovered.",
+    "The mapping therefore records a user-confirmed compatibility database derived from visual matching of both real APK resource families, not an official server-side item template table.",
+    "The previous local relation 0505 -> property14=25 is rejected; 0505 visually matches property14=5 / image15005, while property14=25 matches icon0501."
+  ]
+}
