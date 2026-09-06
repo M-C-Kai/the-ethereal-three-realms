@@ -17,160 +17,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply APK-backed helmet evidence
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import json
-
-          root = Path('implementation_staging')
-          unresolved = list(range(100, 110))
-          icon_frames = {str(code): code - 100 for code in unresolved}
-          role_refs = [
-              'assets/res/role/100000.dat',
-              'assets/res/role/101000.dat',
-              'assets/res/role/102000.dat',
-              'assets/res/role/104000.dat',
-              'assets/res/role/105000.dat',
-              'assets/res/role/110000.dat',
-              'assets/res/role/120000.dat',
-              'assets/res/role/130000.dat',
-              'assets/res/role/140000.dat',
-          ]
-
-          mapping = {
-              'version': 1,
-              'kind': 'helmet_appearance_mapping',
-              'status': 'unresolved_mapping',
-              'source': 'direct extraction from piaomiao_local_login.apk + client smali evidence',
-              'apk_sha256': '34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5',
-              'description': 'APK proves the helmet icon strip and property20 resource rule, but not icon_code -> property20. No pair is guessed.',
-              'property': 20,
-              'image_base': 21000,
-              'icon_resource': {
-                  'image_id': 3012424,
-                  'width': 240,
-                  'height': 24,
-                  'frame_width': 24,
-                  'frame_height': 24,
-                  'icon_to_frame': icon_frames,
-                  'client_rule': 'a/c/x.f(icon_code): frame=icon_code%100; resource=3000000+((icon_code%10000)//100)*10000+2424',
-              },
-              'appearance_resource': {
-                  'client_rule': 'pmsj/work/b/v.F(property20): image_id=21000+property20; 0 clears layer10',
-                  'candidate_property20_values': [3],
-                  'candidate_image_ids': [21003],
-                  'candidate_dimensions': {'21003': [166, 101]},
-                  'role_dat_references': role_refs,
-                  'note': 'images.o contains only image 21003 in the 21000..21999 range. This proves one available layer resource, not which helmet icon uses it.',
-              },
-              'notes': [
-                  'icon_code 100..109 are the ten frames of APK image 3012424.',
-                  'property20=N selects character layer10 image 21000+N.',
-                  'The uploaded APK exposes only 21003 as a 21xxx image resource.',
-                  'No client table, formula, or saved original-server evidence links any icon 100..109 to property20=3.',
-                  'The old compatibility pair icon 109 -> property20 3 was local data, not APK evidence, and is intentionally removed.',
-                  'Unknown or unresolved helmet icons resolve to 0/no added helmet layer.',
-              ],
-              'candidate_property20_values': [3],
-              'candidate_image_ids': [21003],
-              'icon_to_property20': {},
-              'unresolved_icon_codes': unresolved,
-          }
-          (root / 'data/catalog/helmet_appearance_mapping.json').write_text(
-              json.dumps(mapping, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
-          )
-
-          items_path = root / 'data/catalog/items.json'
-          payload = json.loads(items_path.read_text(encoding='utf-8'))
-          removed = []
-          for item in payload['items']:
-              if int(item.get('equipment_slot', 0)) != 1:
-                  continue
-              icon = int(item.get('icon_code', 0))
-              if icon not in unresolved:
-                  continue
-              props = item.get('appearance_properties')
-              if isinstance(props, dict) and '20' in props:
-                  props.pop('20', None)
-                  removed.append([int(item['template_id']), icon])
-                  if not props:
-                      item.pop('appearance_properties', None)
-          items_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-          print('removed unverified property20:', removed)
-
-          audit_dir = root / 'references/helmet-appearance-audit'
-          audit_dir.mkdir(parents=True, exist_ok=True)
-          manifest = {
-              'version': 1,
-              'apk_sha256': mapping['apk_sha256'],
-              'extracted_image_count': 1197,
-              'equipment_icon_strip': {
-                  'image_id': 3012424,
-                  'dimensions': [240, 24],
-                  'frame_size': [24, 24],
-                  'icon_to_frame': icon_frames,
-              },
-              'property20_images_in_apk': [
-                  {'property20': 3, 'image_id': 21003, 'dimensions': [166, 101]}
-              ],
-              'role_dat_references_to_21003': role_refs,
-              'confirmed_icon_to_property20': {},
-              'status': 'no_direct_mapping_recovered',
-          }
-          (audit_dir / 'manifest.json').write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
-          )
-          readme_lines = [
-              '# 头盔外观 APK 资源审计',
-              '',
-              '本目录记录直接从 `piaomiao_local_login.apk` 提取并复核的头盔资源证据。',
-              '',
-              '## 已确认',
-              '',
-              '- 装备栏头盔图标 `0100..0109` 来自 APK 图片资源 `3012424`（240x24），每格 24x24，frame 为 `icon_code % 100`。',
-              '- 客户端 `pmsj/work/b/v.F(I)` 对人物 property 20 的处理是：`image_id = 21000 + property20`，0 清空 layer10。',
-              '- APK 的 `images.o` 在 `21000..21999` 范围内只索引到 `21003`（166x101），所以当前唯一可用的非零 property20 候选是 3。',
-              '- `21003` 被 9 个基础 role DAT 引用：100000/101000/102000/104000/105000/110000/120000/130000/140000。',
-              '',
-              '## 未恢复',
-              '',
-              'APK 客户端没有恢复出 `icon_code -> property20` 的装备模板表、公式或其他直接关联。因此不能把 `0100..0109` 中任意一项武断指定为 `property20=3`，也不能按序号映射到并不存在的 `21000..21009`。',
-              '',
-              '旧兼容数据中的 `0109 -> property20=3` 不是 APK 官方映射，已从运行数据移除。后续若拿到原服务端装备模板、真实抓包或其他直接证据，只需更新 `data/catalog/helmet_appearance_mapping.json`。',
-              '',
-          ]
-          (audit_dir / 'README.md').write_text('\n'.join(readme_lines), encoding='utf-8')
-
-          test_path = root / 'tests/test_item_registry.py'
-          text = test_path.read_text(encoding='utf-8')
-          old = """    def test_helmet_appearance_applied_from_registry(self):
-        settings = Settings()
-        role = default_role(settings)
-        helmet = next(
-            i for i in role_items(role)
-            if settings.item_registry.resolve(i).get('equipment_slot') == 1
-        )
-        helmet['location'] = 'equipped'
-        appearance = character_appearance(role, settings.item_registry)
-        self.assertEqual(appearance.get(20), 3)
-"""
-          new = """    def test_unresolved_helmet_does_not_apply_unverified_property20(self):
-        settings = Settings()
-        role = default_role(settings)
-        helmet = next(
-            i for i in role_items(role)
-            if settings.item_registry.resolve(i).get('equipment_slot') == 1
-        )
-        helmet['location'] = 'equipped'
-        appearance = character_appearance(role, settings.item_registry)
-        self.assertEqual(appearance.get(20), 0)
-"""
-          if old not in text:
-              raise SystemExit('stale helmet test anchor not found')
-          test_path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
+      - name: Apply APK evidence patch
+        run: python .github/scripts/align_helmet_apk_evidence.py
 
       - name: Regenerate preview catalog
         working-directory: implementation_staging
@@ -180,12 +28,14 @@ jobs:
 
       - name: Run affected tests
         working-directory: implementation_staging
-        run: python -m unittest tests.test_helmet_appearance_mapping tests.test_item_registry
+        run: python -m unittest tests.test_helmet_appearance_mapping tests.test_helmet_apk_resource_evidence tests.test_item_registry
 
-      - name: Commit verified changes and remove workflow
+      - name: Commit verified changes
         shell: bash
         run: |
           rm -f .github/workflows/align-helmet-apk-evidence.yml
+          rm -f .github/scripts/align_helmet_apk_evidence.py
+          rmdir .github/scripts 2>/dev/null || true
           git config user.name 'M-C-Kai'
           git config user.email '58809786+M-C-Kai@users.noreply.github.com'
           git add -A
