@@ -57,8 +57,8 @@ implementation_staging/maps/
 {
   "format": "piaomiao-dynamic-map-v1",
   "map_id": 60011,
-  "width": 24,
-  "height": 24,
+  "width": 4,
+  "height": 2,
   "map_type": 0,
   "tile_pixel_width": 20,
   "tile_pixel_height": 10,
