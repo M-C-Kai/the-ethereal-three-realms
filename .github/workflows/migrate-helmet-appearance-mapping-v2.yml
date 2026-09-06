@@ -1,0 +1,114 @@
+name: Migrate helmet appearance mapping v2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/migrate-helmet-appearance-mapping-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create catalog and migrate reader
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          root = Path('implementation_staging')
+          mapping = {
+              'version': 1,
+              'kind': 'helmet_appearance_mapping',
+              'status': 'evidence_backed_partial_mapping',
+              'source': 'APK equipment icon resources + character appearance property20 audit',
+              'description': 'Compatibility-server mapping from helmet icon_code to character appearance property 20. Only evidence-backed pairs are mapped; unresolved icons are never guessed.',
+              'property': 20,
+              'image_base': 21000,
+              'notes': [
+                  'property20=N selects character layer image 21000+N.',
+                  'icon_code 109 is the currently confirmed pair: property20=3 -> image 21003.',
+                  'icon_code 100..108 remain unresolved because the current APK appearance audit recovered no additional property20 candidates.',
+                  'Unknown or unresolved icon_code values resolve to 0/no added helmet layer.'
+              ],
+              'icon_to_property20': {'109': 3},
+              'unresolved_icon_codes': [100,101,102,103,104,105,106,107,108]
+          }
+          (root / 'data/catalog/helmet_appearance_mapping.json').write_text(
+              json.dumps(mapping, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+          )
+
+          path = root / 'item_registry.py'
+          text = path.read_text(encoding='utf-8')
+          old = """WEAPON_APPEARANCE_MAPPING_FILE = (\n    Path(__file__).resolve().parent / 'data' / 'catalog' / 'weapon_appearance_mapping.json'\n)\n"""
+          new = old + """HELMET_APPEARANCE_MAPPING_FILE = (\n    Path(__file__).resolve().parent / 'data' / 'catalog' / 'helmet_appearance_mapping.json'\n)\n"""
+          if old not in text:
+              raise SystemExit('weapon mapping file constant anchor not found')
+          text = text.replace(old, new, 1)
+
+          anchor = """def weapon_icon_to_image_mapping() -> dict[int, int]:\n    \"\"\"Return a copy of the catalog-backed icon_code -> weapon image mapping.\"\"\"\n    return dict(_weapon_icon_to_image_mapping())\n\n\n"""
+          insert = anchor + """@lru_cache(maxsize=1)\ndef _helmet_icon_to_property20_mapping() -> dict[int, int]:\n    \"\"\"Load the evidence-backed helmet icon -> property20 mapping catalog.\"\"\"\n    data = json.loads(HELMET_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))\n    if not isinstance(data, dict) or int(data.get('version', 0)) != 1:\n        raise ValueError(f'invalid helmet appearance mapping catalog: {HELMET_APPEARANCE_MAPPING_FILE}')\n    if int(data.get('property', 0)) != 20 or int(data.get('image_base', 0)) != 21000:\n        raise ValueError(f'invalid helmet appearance property metadata: {HELMET_APPEARANCE_MAPPING_FILE}')\n    raw_mapping = data.get('icon_to_property20')\n    if not isinstance(raw_mapping, dict):\n        raise ValueError(f'helmet appearance mapping must be a dict: {HELMET_APPEARANCE_MAPPING_FILE}')\n    mapping: dict[int, int] = {}\n    for raw_icon, raw_value in raw_mapping.items():\n        icon_code = int(raw_icon)\n        property_value = int(raw_value)\n        if icon_code <= 0 or property_value <= 0:\n            raise ValueError(f'invalid helmet appearance pair {raw_icon!r}->{raw_value!r}')\n        if icon_code in mapping:\n            raise ValueError(f'duplicate helmet icon_code after normalization: {icon_code}')\n        mapping[icon_code] = property_value\n    return mapping\n\n\ndef helmet_icon_to_property20_mapping() -> dict[int, int]:\n    \"\"\"Return a copy of the catalog-backed helmet appearance mapping.\"\"\"\n    return dict(_helmet_icon_to_property20_mapping())\n\n\ndef helmet_property20_from_icon(icon_code: int) -> int:\n    \"\"\"Resolve helmet property20 from the catalog; unresolved icons are not guessed.\"\"\"\n    return _helmet_icon_to_property20_mapping().get(int(icon_code), 0)\n\n\n"""
+          if anchor not in text:
+              raise SystemExit('weapon mapping public function anchor not found')
+          text = text.replace(anchor, insert, 1)
+
+          old_map = """PREVIEW_SLOT_APPEARANCE_PROPERTY = {\n    1: 20,\n    2: 16,\n    3: 15,\n    5: 14,\n    7: 19,\n    8: 17,\n    9: 18,\n}\n"""
+          new_map = """PREVIEW_SLOT_APPEARANCE_PROPERTY = {\n    2: 16,\n    3: 15,\n    5: 14,\n    7: 19,\n    8: 17,\n    9: 18,\n}\n"""
+          if old_map not in text:
+              raise SystemExit('preview slot appearance map anchor not found')
+          text = text.replace(old_map, new_map, 1)
+
+          old_preview = """    slot = int(equipment_slot)\n    if slot == 10:\n        return {\n            '7': preview_weapon_property7(icon_code)\n        }\n"""
+          new_preview = """    slot = int(equipment_slot)\n    if slot == 1:\n        value = helmet_property20_from_icon(icon_code)\n        return {'20': value} if value > 0 else {}\n    if slot == 10:\n        return {\n            '7': preview_weapon_property7(icon_code)\n        }\n"""
+          if old_preview not in text:
+              raise SystemExit('preview appearance function anchor not found')
+          path.write_text(text.replace(old_preview, new_preview, 1), encoding='utf-8')
+
+          generator = root / 'tools/build_equipment_resource_preview_items.py'
+          text = generator.read_text(encoding='utf-8')
+          old_note = """                '防具 appearance_properties 引用 appearance-layer-audit 人物图层候选。'\n                '武器 property7 使用用户按 APK 资源图确认的 icon group→weapon family 映射；'\n"""
+          new_note = """                '头盔 property20 使用 helmet_appearance_mapping.json 的证据映射，未解析图标不猜。'\n                '其他防具 appearance_properties 仍引用 appearance-layer-audit 人物图层候选。'\n                '武器 property7 使用 weapon_appearance_mapping.json 的证据映射；'\n"""
+          if old_note not in text:
+              raise SystemExit('preview catalog metadata note anchor not found')
+          generator.write_text(text.replace(old_note, new_note, 1), encoding='utf-8')
+
+          (root / 'tests/test_helmet_appearance_mapping.py').write_text("""import json\nimport sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n\nfrom item_registry import (\n    HELMET_APPEARANCE_MAPPING_FILE,\n    helmet_icon_to_property20_mapping,\n    helmet_property20_from_icon,\n)\n\n\nclass HelmetAppearanceMappingTests(unittest.TestCase):\n    def test_catalog_records_only_confirmed_pair(self):\n        payload = json.loads(HELMET_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))\n        self.assertEqual(payload['property'], 20)\n        self.assertEqual(payload['image_base'], 21000)\n        self.assertEqual(payload['icon_to_property20'], {'109': 3})\n        self.assertEqual(payload['unresolved_icon_codes'], list(range(100, 109)))\n\n    def test_runtime_reads_catalog_mapping(self):\n        self.assertEqual(helmet_icon_to_property20_mapping(), {109: 3})\n        self.assertEqual(helmet_property20_from_icon(109), 3)\n\n    def test_unresolved_icons_are_not_guessed(self):\n        for icon_code in range(100, 109):\n            self.assertEqual(helmet_property20_from_icon(icon_code), 0, icon_code)\n        self.assertEqual(helmet_property20_from_icon(9999), 0)\n\n    def test_preview_catalog_does_not_fake_unresolved_helmets(self):\n        root = Path(__file__).resolve().parents[1]\n        preview = json.loads((root / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8'))['items']\n        helmets = {int(item['icon_code']): item['appearance_properties'] for item in preview if int(item.get('equipment_slot', 0)) == 1}\n        self.assertEqual(sorted(helmets), list(range(100, 110)))\n        for icon_code in range(100, 109):\n            self.assertEqual(helmets[icon_code], {}, icon_code)\n        self.assertEqual(helmets[109], {'20': 3})\n\n\nif __name__ == '__main__':\n    unittest.main()\n""", encoding='utf-8')
+          PY
+
+      - name: Regenerate preview catalog
+        working-directory: implementation_staging
+        run: PYTHONPATH=. python tools/build_equipment_resource_preview_items.py
+
+      - name: Run helmet mapping regression
+        working-directory: implementation_staging
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_helmet_appearance_mapping.py' -v
+
+      - name: Run item registry regression
+        working-directory: implementation_staging
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_item_registry.py' -v
+
+      - name: Check diff
+        run: git diff --check
+
+      - name: Commit verified migration and remove workflows
+        shell: bash
+        run: |
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git rm .github/workflows/migrate-helmet-appearance-mapping.yml \
+                 .github/workflows/migrate-helmet-appearance-mapping-v2.yml
+          git add implementation_staging/item_registry.py \
+                  implementation_staging/tools/build_equipment_resource_preview_items.py \
+                  implementation_staging/data/catalog/helmet_appearance_mapping.json \
+                  implementation_staging/data/catalog/equipment_resource_preview_items.json \
+                  implementation_staging/tests/test_helmet_appearance_mapping.py
+          git commit -m 'refactor: move helmet appearance mapping into catalog'
+          git push origin HEAD:master
