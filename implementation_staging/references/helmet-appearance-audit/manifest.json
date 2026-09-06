@@ -47,5 +47,19 @@
     "assets/res/role/140000.dat"
   ],
   "confirmed_icon_to_property20": {},
-  "status": "no_direct_mapping_recovered"
+  "status": "apk_resources_verified_compatibility_mapping_applied",
+  "compatibility_icon_to_property20": {
+    "102": 3
+  },
+  "no_appearance_icon_codes": [
+    100,
+    101,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109
+  ]
 }

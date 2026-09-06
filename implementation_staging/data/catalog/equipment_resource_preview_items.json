@@ -74,7 +74,9 @@
         0,
         0
       ],
-      "appearance_properties": {}
+      "appearance_properties": {
+        "20": 3
+      }
     },
     {
       "template_id": 10001031,

@@ -1,10 +1,10 @@
 {
   "version": 1,
   "kind": "helmet_appearance_mapping",
-  "status": "unresolved_mapping",
-  "source": "direct extraction from piaomiao_local_login.apk + client smali evidence",
+  "status": "compatibility_mapping",
+  "source": "direct APK extraction + visual match + user-confirmed compatibility rule",
   "apk_sha256": "34348c4ac16108222871203c46faabc1e6e5383c455e39b871c7666505da60b5",
-  "description": "APK proves the helmet inventory icon strip and the character property20 resource rule, but no icon_code -> property20 relation was recovered. No pair is guessed.",
+  "description": "The APK packages only one nonzero helmet character layer (property20=3 / image 21003). For compatibility, icon 0102 is mapped to that layer; all other helmet icons 0100..0109 are explicitly treated as having no visible character helmet layer.",
   "property": 20,
   "image_base": 21000,
   "icon_resource": {
@@ -58,10 +58,10 @@
     "icon_code 100..109 are the ten frames of APK image 3012424.",
     "property20=N selects character layer10 image 21000+N.",
     "The uploaded APK exposes only 21003 as a 21xxx image resource.",
-    "No client table, formula, or saved original-server evidence links any icon 100..109 to property20=3.",
-    "Other helmet appearance resources may have been supplied dynamically by the original resource service and are not packaged in this APK.",
-    "The old compatibility pair icon 109 -> property20 3 was local data, not APK evidence, and is removed.",
-    "Unknown or unresolved helmet icons resolve to 0/no added helmet layer."
+    "The APK itself does not contain an official icon_code -> property20 relation table.",
+    "Compatibility decision: icon 0102 uses property20=3 / image 21003.",
+    "Compatibility decision: icon 0100,0101,0103..0109 intentionally have no visible helmet layer.",
+    "Runtime reads this catalog only; unknown icon codes still resolve to 0."
   ],
   "candidate_property20_values": [
     3
@@ -69,11 +69,13 @@
   "candidate_image_ids": [
     21003
   ],
-  "icon_to_property20": {},
-  "unresolved_icon_codes": [
+  "icon_to_property20": {
+    "102": 3
+  },
+  "unresolved_icon_codes": [],
+  "no_appearance_icon_codes": [
     100,
     101,
-    102,
     103,
     104,
     105,
@@ -81,5 +83,12 @@
     107,
     108,
     109
-  ]
+  ],
+  "mapping_decision": {
+    "icon_code": 102,
+    "property20": 3,
+    "image_id": 21003,
+    "evidence_level": "compatibility_confirmed",
+    "note": "APK does not contain an official icon->property20 table. The relation is retained as a compatibility rule because 21003 is the only packaged nonzero helmet layer and visually matches icon 0102; the user confirmed 0102 is the only helmet set expected to have appearance."
+  }
 }
