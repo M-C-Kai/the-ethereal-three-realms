@@ -14,7 +14,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 1,
-      "equipment_attributes": [0, 2, 0, 0],
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ],
       "appearance_properties": {
         "20": 3
       }
@@ -32,7 +37,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 2,
-      "equipment_attributes": [0, 2, 0, 0],
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ],
       "appearance_properties": {
         "16": 23
       }
@@ -50,7 +60,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 3,
-      "equipment_attributes": [0, 2, 0, 0],
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ],
       "appearance_properties": {
         "15": 34
       }
@@ -68,7 +83,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 4,
-      "equipment_attributes": [0, 2, 0, 0]
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ]
     },
     {
       "template_id": 50001001,
@@ -83,7 +103,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 5,
-      "equipment_attributes": [0, 2, 0, 0],
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ],
       "appearance_properties": {
         "14": 25
       }
@@ -101,7 +126,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 6,
-      "equipment_attributes": [0, 0, 0, 0]
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ]
     },
     {
       "template_id": 70001001,
@@ -116,7 +146,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 7,
-      "equipment_attributes": [0, 2, 0, 0],
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ],
       "appearance_properties": {
         "19": 3
       }
@@ -134,7 +169,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 8,
-      "equipment_attributes": [0, 2, 0, 0],
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ],
       "appearance_properties": {
         "17": 8
       }
@@ -152,7 +192,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 9,
-      "equipment_attributes": [0, 2, 0, 0],
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ],
       "appearance_properties": {
         "18": 22
       }
@@ -170,9 +215,14 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 10,
-      "equipment_attributes": [3, 0, 0, 0],
+      "equipment_attributes": [
+        3,
+        0,
+        0,
+        0
+      ],
       "appearance_properties": {
-        "7": 270001
+        "7": 242011
       }
     },
     {
@@ -188,7 +238,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 11,
-      "equipment_attributes": [0, 0, 0, 0]
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ]
     },
     {
       "template_id": 120001001,
@@ -203,7 +258,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 12,
-      "equipment_attributes": [0, 2, 0, 0]
+      "equipment_attributes": [
+        0,
+        2,
+        0,
+        0
+      ]
     },
     {
       "template_id": 130001001,
@@ -218,7 +278,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 13,
-      "equipment_attributes": [0, 0, 0, 0]
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ]
     },
     {
       "template_id": 140001001,
@@ -233,7 +298,12 @@
       "quality": 1,
       "sort_group": 100,
       "sort_order": 14,
-      "equipment_attributes": [0, 0, 0, 0]
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ]
     },
     {
       "template_id": 260000001,
@@ -264,7 +334,12 @@
       "quality": 0,
       "sort_group": 100,
       "sort_order": 17,
-      "equipment_attributes": [0, 0, 0, 0],
+      "equipment_attributes": [
+        0,
+        0,
+        0,
+        0
+      ],
       "mount_model": 105000
     },
     {

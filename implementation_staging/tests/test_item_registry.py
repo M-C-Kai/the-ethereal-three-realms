@@ -20,7 +20,7 @@ from item_registry import (
     ItemRegistry,
     PREVIEW_SLOT_APPEARANCE_PROPERTY,
     PREVIEW_SLOTS_WITHOUT_APPEARANCE,
-    confirmed_weapon_preview_candidates,
+    battle_weapon_field2_from_icon,
     default_item_registry,
     preview_appearance_properties,
     synthetic_preview_template_id,
@@ -461,19 +461,6 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
         manifest = json.loads(
             (root / 'materials' / 'appearance-layer-audit' / 'manifest.json').read_text(encoding='utf-8')
         )
-        weapon_payload = json.loads(
-            (root / 'references' / 'weapon-appearance-audit' / 'property7_candidates.json').read_text(encoding='utf-8')
-        )
-        weapon_candidates = confirmed_weapon_preview_candidates(weapon_payload)
-        role_manifest = json.loads(
-            (root / 'references' / 'weapon-appearance-audit' / 'role_manifest.json').read_text(encoding='utf-8')
-        )
-        weapon_images = json.loads(
-            (root / 'references' / 'weapon-appearance-audit' / 'weapon_image_ids.json').read_text(encoding='utf-8')
-        )
-        existing_role_dats = {int(role['role_id']) for role in role_manifest['roles']}
-        existing_weapon_images = set(int(image_id) for image_id in weapon_images['image_ids'])
-        low4_values = {int(row['property7_low4_candidate']) for row in weapon_candidates}
         by_slot: dict[int, list] = {}
         for resource, item in zip(resources, preview_items):
             template_id = int(item['template_id'])
@@ -501,24 +488,20 @@ class EquipmentResourcePreviewCatalogTests(unittest.TestCase):
                     preview_index,
                     manifest,
                     icon_code=int(item['icon_code']),
-                    weapon_candidates=weapon_candidates,
                 )
                 self.assertEqual(item['appearance_properties'], expected_appearance)
             if slot == 10:
                 self.assertEqual(len(slot_items), 130)
-                used_low4 = set()
                 for item in slot_items:
                     self.assertIn('7', item['appearance_properties'])
-                    property7 = int(item['appearance_properties']['7'])
-                    self.assertIn(property7 % 10000, low4_values)
-                    self.assertEqual(property7 // 10000, int(item['icon_code']) // 100)
-                    suffix = property7 % 10000
-                    role_dat = 100000 + ((suffix // 1000) + 1) * 1000
-                    weapon_image = 40000 + suffix
-                    self.assertIn(role_dat, existing_role_dats)
-                    self.assertIn(weapon_image, existing_weapon_images)
-                    used_low4.add(suffix)
-                self.assertTrue(used_low4 <= low4_values)
+                    expected_weapon_code = battle_weapon_field2_from_icon(
+                        int(item['icon_code']), int(item['quality'])
+                    )
+                    self.assertGreater(expected_weapon_code, 0)
+                    self.assertEqual(
+                        int(item['appearance_properties']['7']),
+                        expected_weapon_code,
+                    )
             if slot in PREVIEW_SLOT_APPEARANCE_PROPERTY:
                 self.assertTrue(
                     all(item['appearance_properties'] for item in slot_items),

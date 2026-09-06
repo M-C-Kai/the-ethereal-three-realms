@@ -10,7 +10,6 @@ from pathlib import Path
 
 from item_registry import (
     SLOT_FAMILY_LABELS,
-    confirmed_weapon_preview_candidates,
     preview_appearance_properties,
     synthetic_preview_template_id,
 )
@@ -19,9 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 RESOURCES_FILE = ROOT / 'data' / 'catalog' / 'apk_equipment_resources.json'
 ITEMS_FILE = ROOT / 'data' / 'catalog' / 'items.json'
 MANIFEST_FILE = ROOT / 'materials' / 'appearance-layer-audit' / 'manifest.json'
-WEAPON_CANDIDATES_FILE = (
-    ROOT / 'references' / 'weapon-appearance-audit' / 'property7_candidates.json'
-)
 OUTPUT_FILE = ROOT / 'data' / 'catalog' / 'equipment_resource_preview_items.json'
 
 DESCRIPTION = (
@@ -34,11 +30,6 @@ def main() -> None:
     resources = json.loads(RESOURCES_FILE.read_text(encoding='utf-8'))['resources']
     official_items = json.loads(ITEMS_FILE.read_text(encoding='utf-8'))['items']
     manifest = json.loads(MANIFEST_FILE.read_text(encoding='utf-8'))
-    weapon_candidates = confirmed_weapon_preview_candidates(
-        json.loads(WEAPON_CANDIDATES_FILE.read_text(encoding='utf-8'))
-    )
-    if not weapon_candidates:
-        raise SystemExit('no confirmed weapon appearance candidates')
     reserved = {int(item['template_id']) for item in official_items}
     preview_items = []
     used = set(reserved)
@@ -82,7 +73,6 @@ def main() -> None:
                 preview_index,
                 manifest,
                 icon_code=int(item['icon_code']),
-                weapon_candidates=weapon_candidates,
             )
     payload = {
         'version': 1,
@@ -94,15 +84,14 @@ def main() -> None:
             'synthetic_required_level': True,
             'only_icon_resource_is_apk_confirmed': True,
             'not_official_equipment_template': True,
-            'appearance_pairing': 'compatibility_preview_pairing',
+            'appearance_pairing': 'confirmed_visual_weapon_family_mapping',
             'appearance_not_official_icon_mapping': True,
             'note': (
                 'APK装备资源预览项。仅 icon_code/资源分组来自 APK；'
                 'template_id、名称、等级、属性均为本地预览构造，不代表官方装备。'
                 '防具 appearance_properties 引用 appearance-layer-audit 人物图层候选。'
-                '武器 property7 低4位循环配对 weapon-appearance-audit 中 69 个 APK-confirmed 候选；'
-                '高位使用 icon_group=icon_code//100，仅为 compatibility preview pairing，'
-                '不是官方 icon_code→property7 映射。'
+                '武器 property7 使用用户按 APK 资源图确认的 icon group→weapon family 映射；'
+                '地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。'
             ),
         },
         'items': preview_items,

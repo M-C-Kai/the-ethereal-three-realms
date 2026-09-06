@@ -128,21 +128,18 @@ def confirmed_weapon_preview_candidates(payload: dict[str, Any]) -> list[dict[st
 
 def preview_weapon_property7(
     icon_code: int,
-    preview_index_in_slot: int,
-    candidates: Sequence[dict[str, Any]],
+    quality: int = PREVIEW_QUALITY,
 ) -> int:
-    """Compatibility preview pairing for map-character property 7.
+    """Return the complete map weapon code for character property 7.
 
-    low4 comes from APK-confirmed resource candidates.
-    The high digits use icon_group = icon_code // 100 as local preview construction.
-    This is not an official icon_code → property7 mapping.
+    APK v.r() routes property 7 to v.e(I). v.e(I) decodes this value
+    exactly like battle 1048 field[2]: value//10 is the weapon image
+    and value%10 is the quality overlay selector.
     """
-    if not candidates:
-        raise ItemCatalogError('weapon preview requires confirmed property7 candidates')
-    candidate = candidates[int(preview_index_in_slot) % len(candidates)]
-    icon_group = int(icon_code) // 100
-    low4 = int(candidate['property7_low4_candidate'])
-    return icon_group * 10_000 + low4
+    value = battle_weapon_field2_from_icon(icon_code, quality)
+    if value == 0:
+        raise ItemCatalogError(f'unknown weapon appearance icon_code={icon_code}')
+    return value
 
 
 def preview_appearance_properties(
@@ -160,11 +157,7 @@ def preview_appearance_properties(
     slot = int(equipment_slot)
     if slot == 10:
         return {
-            '7': preview_weapon_property7(
-                icon_code,
-                preview_index_in_slot,
-                weapon_candidates or (),
-            )
+            '7': preview_weapon_property7(icon_code)
         }
     if slot in PREVIEW_SLOTS_WITHOUT_APPEARANCE:
         return {}

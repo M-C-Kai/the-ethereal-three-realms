@@ -8,9 +8,9 @@
     "synthetic_required_level": true,
     "only_icon_resource_is_apk_confirmed": true,
     "not_official_equipment_template": true,
-    "appearance_pairing": "compatibility_preview_pairing",
+    "appearance_pairing": "confirmed_visual_weapon_family_mapping",
     "appearance_not_official_icon_mapping": true,
-    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。防具 appearance_properties 引用 appearance-layer-audit 人物图层候选。武器 property7 低4位循环配对 weapon-appearance-audit 中 69 个 APK-confirmed 候选；高位使用 icon_group=icon_code//100，仅为 compatibility preview pairing，不是官方 icon_code→property7 映射。"
+    "note": "APK装备资源预览项。仅 icon_code/资源分组来自 APK；template_id、名称、等级、属性均为本地预览构造，不代表官方装备。防具 appearance_properties 引用 appearance-layer-audit 人物图层候选。武器 property7 使用用户按 APK 资源图确认的 icon group→weapon family 映射；地图 property7 与战斗 1048 field[2] 共用完整编码 image*10+quality。"
   },
   "items": [
     {
@@ -2735,7 +2735,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 210001
+        "7": 220001
       }
     },
     {
@@ -2758,7 +2758,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 210002
+        "7": 220011
       }
     },
     {
@@ -2781,7 +2781,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 210003
+        "7": 220021
       }
     },
     {
@@ -2804,7 +2804,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 210101
+        "7": 220031
       }
     },
     {
@@ -2827,7 +2827,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 210102
+        "7": 220041
       }
     },
     {
@@ -2850,7 +2850,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 210201
+        "7": 220051
       }
     },
     {
@@ -2873,7 +2873,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 211001
+        "7": 220061
       }
     },
     {
@@ -2896,7 +2896,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 211002
+        "7": 220071
       }
     },
     {
@@ -2919,7 +2919,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 211003
+        "7": 220081
       }
     },
     {
@@ -2942,7 +2942,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 211004
+        "7": 220091
       }
     },
     {
@@ -2965,7 +2965,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221005
+        "7": 260001
       }
     },
     {
@@ -2988,7 +2988,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221006
+        "7": 260011
       }
     },
     {
@@ -3011,7 +3011,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221007
+        "7": 260021
       }
     },
     {
@@ -3034,7 +3034,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221008
+        "7": 260031
       }
     },
     {
@@ -3057,7 +3057,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221009
+        "7": 260041
       }
     },
     {
@@ -3080,7 +3080,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221010
+        "7": 260051
       }
     },
     {
@@ -3103,7 +3103,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221012
+        "7": 260061
       }
     },
     {
@@ -3126,7 +3126,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221013
+        "7": 260071
       }
     },
     {
@@ -3149,7 +3149,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221014
+        "7": 260081
       }
     },
     {
@@ -3172,7 +3172,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 221015
+        "7": 260091
       }
     },
     {
@@ -3195,7 +3195,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231016
+        "7": 271011
       }
     },
     {
@@ -3218,7 +3218,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231017
+        "7": 271021
       }
     },
     {
@@ -3241,7 +3241,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231018
+        "7": 271031
       }
     },
     {
@@ -3264,7 +3264,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231019
+        "7": 271041
       }
     },
     {
@@ -3287,7 +3287,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231020
+        "7": 271051
       }
     },
     {
@@ -3310,7 +3310,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231022
+        "7": 271061
       }
     },
     {
@@ -3333,7 +3333,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231023
+        "7": 271071
       }
     },
     {
@@ -3356,7 +3356,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231024
+        "7": 271081
       }
     },
     {
@@ -3379,7 +3379,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231025
+        "7": 271091
       }
     },
     {
@@ -3402,7 +3402,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 231026
+        "7": 271101
       }
     },
     {
@@ -3425,7 +3425,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241027
+        "7": 250001
       }
     },
     {
@@ -3448,7 +3448,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241028
+        "7": 250011
       }
     },
     {
@@ -3471,7 +3471,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241029
+        "7": 250021
       }
     },
     {
@@ -3494,7 +3494,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241030
+        "7": 250031
       }
     },
     {
@@ -3517,7 +3517,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241034
+        "7": 250041
       }
     },
     {
@@ -3540,7 +3540,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241036
+        "7": 250051
       }
     },
     {
@@ -3563,7 +3563,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241038
+        "7": 250061
       }
     },
     {
@@ -3586,7 +3586,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241101
+        "7": 250071
       }
     },
     {
@@ -3609,7 +3609,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241102
+        "7": 250081
       }
     },
     {
@@ -3632,7 +3632,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 241103
+        "7": 250091
       }
     },
     {
@@ -3655,7 +3655,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251104
+        "7": 231001
       }
     },
     {
@@ -3678,7 +3678,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251105
+        "7": 231011
       }
     },
     {
@@ -3701,7 +3701,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251106
+        "7": 231021
       }
     },
     {
@@ -3724,7 +3724,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251107
+        "7": 231031
       }
     },
     {
@@ -3747,7 +3747,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251108
+        "7": 231041
       }
     },
     {
@@ -3770,7 +3770,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251111
+        "7": 231051
       }
     },
     {
@@ -3793,7 +3793,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251112
+        "7": 231061
       }
     },
     {
@@ -3816,7 +3816,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251113
+        "7": 231071
       }
     },
     {
@@ -3839,7 +3839,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 251114
+        "7": 231081
       }
     },
     {
@@ -3862,7 +3862,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 252001
+        "7": 231091
       }
     },
     {
@@ -3885,7 +3885,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262003
+        "7": 280001
       }
     },
     {
@@ -3908,7 +3908,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262004
+        "7": 280011
       }
     },
     {
@@ -3931,7 +3931,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262005
+        "7": 280021
       }
     },
     {
@@ -3954,7 +3954,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262006
+        "7": 280031
       }
     },
     {
@@ -3977,7 +3977,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262007
+        "7": 280041
       }
     },
     {
@@ -4000,7 +4000,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262011
+        "7": 280051
       }
     },
     {
@@ -4023,7 +4023,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262021
+        "7": 280061
       }
     },
     {
@@ -4046,7 +4046,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 262031
+        "7": 280071
       }
     },
     {
@@ -4069,7 +4069,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 263001
+        "7": 280081
       }
     },
     {
@@ -4092,7 +4092,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 263002
+        "7": 280091
       }
     },
     {
@@ -4115,7 +4115,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 273003
+        "7": 242001
       }
     },
     {
@@ -4138,7 +4138,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 274002
+        "7": 242011
       }
     },
     {
@@ -4161,7 +4161,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 274003
+        "7": 242021
       }
     },
     {
@@ -4184,7 +4184,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 274005
+        "7": 242031
       }
     },
     {
@@ -4207,7 +4207,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 274007
+        "7": 242041
       }
     },
     {
@@ -4230,7 +4230,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 274009
+        "7": 242051
       }
     },
     {
@@ -4253,7 +4253,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 274010
+        "7": 242061
       }
     },
     {
@@ -4276,7 +4276,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 275001
+        "7": 242071
       }
     },
     {
@@ -4299,7 +4299,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 275002
+        "7": 242081
       }
     },
     {
@@ -4322,7 +4322,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 270001
+        "7": 242091
       }
     },
     {
@@ -4345,7 +4345,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 280002
+        "7": 240001
       }
     },
     {
@@ -4368,7 +4368,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 280003
+        "7": 240011
       }
     },
     {
@@ -4391,7 +4391,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 280101
+        "7": 240021
       }
     },
     {
@@ -4414,7 +4414,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 280102
+        "7": 240031
       }
     },
     {
@@ -4437,7 +4437,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 280201
+        "7": 240041
       }
     },
     {
@@ -4460,7 +4460,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 281001
+        "7": 240051
       }
     },
     {
@@ -4483,7 +4483,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 281002
+        "7": 240061
       }
     },
     {
@@ -4506,7 +4506,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 281003
+        "7": 240071
       }
     },
     {
@@ -4529,7 +4529,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 281004
+        "7": 240081
       }
     },
     {
@@ -4552,7 +4552,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 281005
+        "7": 240091
       }
     },
     {
@@ -4575,7 +4575,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291006
+        "7": 241001
       }
     },
     {
@@ -4598,7 +4598,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291007
+        "7": 241011
       }
     },
     {
@@ -4621,7 +4621,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291008
+        "7": 241021
       }
     },
     {
@@ -4644,7 +4644,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291009
+        "7": 241031
       }
     },
     {
@@ -4667,7 +4667,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291010
+        "7": 241041
       }
     },
     {
@@ -4690,7 +4690,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291012
+        "7": 241051
       }
     },
     {
@@ -4713,7 +4713,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291013
+        "7": 241061
       }
     },
     {
@@ -4736,7 +4736,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291014
+        "7": 241071
       }
     },
     {
@@ -4759,7 +4759,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291015
+        "7": 241081
       }
     },
     {
@@ -4782,7 +4782,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 291016
+        "7": 241091
       }
     },
     {
@@ -4805,7 +4805,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301017
+        "7": 221001
       }
     },
     {
@@ -4828,7 +4828,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301018
+        "7": 221011
       }
     },
     {
@@ -4851,7 +4851,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301019
+        "7": 221021
       }
     },
     {
@@ -4874,7 +4874,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301020
+        "7": 221031
       }
     },
     {
@@ -4897,7 +4897,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301022
+        "7": 221041
       }
     },
     {
@@ -4920,7 +4920,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301023
+        "7": 221051
       }
     },
     {
@@ -4943,7 +4943,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301024
+        "7": 221061
       }
     },
     {
@@ -4966,7 +4966,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301025
+        "7": 221071
       }
     },
     {
@@ -4989,7 +4989,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301026
+        "7": 221081
       }
     },
     {
@@ -5012,7 +5012,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 301027
+        "7": 221091
       }
     },
     {
@@ -5035,7 +5035,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311028
+        "7": 290001
       }
     },
     {
@@ -5058,7 +5058,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311029
+        "7": 290011
       }
     },
     {
@@ -5081,7 +5081,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311030
+        "7": 290021
       }
     },
     {
@@ -5104,7 +5104,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311034
+        "7": 290031
       }
     },
     {
@@ -5127,7 +5127,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311036
+        "7": 290041
       }
     },
     {
@@ -5150,7 +5150,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311038
+        "7": 290051
       }
     },
     {
@@ -5173,7 +5173,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311101
+        "7": 290061
       }
     },
     {
@@ -5196,7 +5196,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311102
+        "7": 290071
       }
     },
     {
@@ -5219,7 +5219,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311103
+        "7": 290081
       }
     },
     {
@@ -5242,7 +5242,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 311104
+        "7": 290091
       }
     },
     {
@@ -5265,7 +5265,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321105
+        "7": 270001
       }
     },
     {
@@ -5288,7 +5288,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321106
+        "7": 270011
       }
     },
     {
@@ -5311,7 +5311,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321107
+        "7": 270021
       }
     },
     {
@@ -5334,7 +5334,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321108
+        "7": 270031
       }
     },
     {
@@ -5357,7 +5357,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321111
+        "7": 270041
       }
     },
     {
@@ -5380,7 +5380,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321112
+        "7": 270051
       }
     },
     {
@@ -5403,7 +5403,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321113
+        "7": 270061
       }
     },
     {
@@ -5426,7 +5426,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 321114
+        "7": 270071
       }
     },
     {
@@ -5449,7 +5449,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 322001
+        "7": 270081
       }
     },
     {
@@ -5472,7 +5472,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 322003
+        "7": 270091
       }
     },
     {
@@ -5495,7 +5495,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 332004
+        "7": 230001
       }
     },
     {
@@ -5518,7 +5518,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 332005
+        "7": 230011
       }
     },
     {
@@ -5541,7 +5541,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 332006
+        "7": 230021
       }
     },
     {
@@ -5564,7 +5564,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 332007
+        "7": 230031
       }
     },
     {
@@ -5587,7 +5587,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 332011
+        "7": 230041
       }
     },
     {
@@ -5610,7 +5610,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 332021
+        "7": 230051
       }
     },
     {
@@ -5633,7 +5633,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 332031
+        "7": 230061
       }
     },
     {
@@ -5656,7 +5656,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 333001
+        "7": 230071
       }
     },
     {
@@ -5679,7 +5679,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 333002
+        "7": 230081
       }
     },
     {
@@ -5702,7 +5702,7 @@
         0
       ],
       "appearance_properties": {
-        "7": 333003
+        "7": 230091
       }
     }
   ]
