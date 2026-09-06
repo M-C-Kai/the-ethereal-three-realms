@@ -67,31 +67,36 @@ def map_ref_transfer_frames(
 
 
 def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[bytes]:
-    """Prefer server-delivered map.ref, otherwise preserve the old APK-local path."""
+    """Prefer server-delivered map.ref while preserving native transition order."""
     original = list(_ORIGINAL_MAP_ENTER_FRAMES(definition, role_id))
     transfer = map_ref_transfer_frames(definition)
     if not transfer:
         return original
 
-    # The old first frame is 1010/action=13. Replace it with status=1 so the
-    # client does not reopen assets/res/map/{mapId}.map.ref after m.z has just
-    # been filled and parsed by the 1407 transfer.
     if not original:
         raise ValueError(f'map {definition.id} produced no enter frames')
-    original[0] = _server.map_action(
+
+    # APK-local maps enter the map-transition state through action 13 before
+    # their target map.ref is parsed.  Do the same for streamed resources:
+    # action 13/status=1 first prevents an APK-local file lookup, then 1407/11
+    # fills m.z and m.C() parses the target ref while the transition is active.
+    # Keeping 1407 before action 13 repaints the current map renderer directly,
+    # which appears on-device as the new scene sliding down from the top.
+    transition_start = _server.map_action(
         definition,
         13,
         status=1,
         role_id=role_id,
     )
+    continuation = original[1:]
     LOG.info(
-        'MAP_REF_STREAM map=%d path=%s bytes=%d chunks=%d protocol=1407/11+12',
+        'MAP_REF_STREAM map=%d path=%s bytes=%d chunks=%d protocol=1010/13->1407/11+12->1010/14+105',
         int(definition.id),
         map_ref_path(definition.id),
         map_ref_path(definition.id).stat().st_size,
         len(transfer),
     )
-    return [*transfer, *original]
+    return [transition_start, *transfer, *continuation]
 
 
 # Patch only the narrow map-reference entry point. All existing server
