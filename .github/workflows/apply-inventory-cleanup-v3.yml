@@ -46,13 +46,13 @@ jobs:
 
           preview = json.loads(Path('data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8'))
           items = preview['items']
-          assert len(items) == 243, len(items)
+          assert len(items) == 251, len(items)
           assert all(int(item['equipment_slot']) not in {12, 13, 14} for item in items)
 
           starter = json.loads(Path('data/catalog/starter_inventory.json').read_text(encoding='utf-8'))
           starter_ids = {int(row['template_id']) for row in starter['items']}
           assert {120001001, 130001001, 140001001}.isdisjoint(starter_ids)
-          assert len(deprecated_unsupported_equipment_template_ids()) == 33
+          assert len(deprecated_unsupported_equipment_template_ids()) == 25
           print('inventory cleanup v3 verified')
           PY
       - name: Commit verified cleanup and remove temporary files
