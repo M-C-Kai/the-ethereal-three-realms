@@ -1215,24 +1215,64 @@ class CombatStats:
     physical_defence: int
 
 
-def equipped_weapon_attack(role: dict[str, object]) -> int:
+def equipped_attribute_totals(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> tuple[int, int, int, int]:
+    """Aggregate the four protocol equipment attributes of all equipped items."""
+    if registry is None:
+        registry = default_item_registry()
+    totals = [0, 0, 0, 0]
+    for item in role_items(role):
+        if item.get('location') != 'equipped':
+            continue
+        try:
+            resolved = registry.resolve(item)
+        except Exception:
+            continue
+        if int(resolved.get('equipment_slot', 0)) <= 0:
+            continue
+        attributes = list(resolved.get('equipment_attributes', [0, 0, 0, 0]))
+        for index, value in enumerate((attributes + [0, 0, 0, 0])[:4]):
+            if type(value) is int:
+                totals[index] += max(0, int(value))
+    return tuple(totals)
+
+
+def effective_character_stats(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> list[int]:
+    """Return the five character-panel values after confirmed equipment bonuses."""
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    values = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    equipment = equipped_attribute_totals(role, registry)
+    # Compatibility evidence: equipment attribute[0] is attack and [1] is
+    # defence.  Do not invent meanings for the remaining two fields.
+    values[0] += equipment[0]
+    values[1] += equipment[1]
+    return values
+
+
+def equipped_weapon_attack(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> int:
     """Return the effective first attribute of the equipped slot-10 weapon."""
-    weapon = next(
-        (
-            item
-            for item in role_items(role)
-            if item.get('location') == 'equipped'
-            and is_equipment(item)
-            and item_slot(item) == 10
-        ),
-        None,
-    )
-    if weapon is None:
-        return 0
-    attributes = list(weapon.get('equipment_attributes', [0, 0, 0, 0]))
-    if not attributes or type(attributes[0]) is not int:
-        return 0
-    return max(0, attributes[0])
+    if registry is None:
+        registry = default_item_registry()
+    for item in role_items(role):
+        if item.get('location') != 'equipped':
+            continue
+        resolved = registry.resolve(item)
+        if int(resolved.get('equipment_slot', 0)) != 10:
+            continue
+        attributes = list(resolved.get('equipment_attributes', [0, 0, 0, 0]))
+        if not attributes or type(attributes[0]) is not int:
+            return 0
+        return max(0, int(attributes[0]))
+    return 0
+
 
 
 def equipped_weapon_battle_field2(
@@ -1266,21 +1306,21 @@ def equipped_weapon_battle_field2(
     )
 
 
-def combat_stats(role: dict[str, object]) -> CombatStats:
-    """Derive battle values from the same level/stats shown by the character UI."""
+def combat_stats(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> CombatStats:
+    """Derive battle values from the same equipped state shown by the character UI."""
     level = max(1, int(role.get('level', 1)))
     raw_stats = [int(value) for value in list(role.get('stats', []))]
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    equipment = equipped_attribute_totals(role, registry)
     return CombatStats(
         max_hp=100 + ((level - 1) * 10) + base_stats[1],
-        physical_attack=(
-            10
-            + base_stats[0]
-            + ((level - 1) * 2)
-            + equipped_weapon_attack(role)
-        ),
-        physical_defence=base_stats[1] + (level - 1),
+        physical_attack=(10 + base_stats[0] + ((level - 1) * 2) + equipment[0]),
+        physical_defence=base_stats[1] + (level - 1) + equipment[1],
     )
+
 
 
 @dataclass
@@ -2239,24 +2279,29 @@ def game_server_redirect(settings: Settings, session_id: int, account_id: int) -
 def role_list(settings: Settings, roles: list[dict[str, object]] | None = None) -> bytes:
     roles = roles if roles is not None else [default_role(settings)]
     records = []
+    preview_properties = (2, 14, 15, 16, 17, 18, 19, 20)
     for role in roles:
         race = int(role.get('race', 0))
         gender = int(role.get('gender', 0))
+        appearance = character_appearance(role, settings.item_registry)
         record = [
             integer(int(role['id'])),
-            integer(race),
+            # APK main/e.K: field 1 -> character property 11 (level).
             integer(int(role.get('level', 1))),
+            # field 2 -> property7 and v.e(I): current equipped weapon preview.
+            integer(int(appearance.get(7, 0))),
             integer(int(role.get('model', settings.role_model))),
             integer((race * 10) + gender),
             string(str(role.get('name', settings.role_name))),
             integer(int(role.get('slot', 0))),
         ]
-        stats = list(role.get('stats', [0] * 8))
-        record.extend(integer(int(value)) for value in (stats + [0] * 8)[:8])
+        # Fields 7..14 are not role stats.  main/e.K feeds them directly to
+        # v.d/z/A/B/C/D/E/F, i.e. armor body and the seven visible overlays.
+        record.extend(integer(int(appearance.get(index, 0))) for index in preview_properties)
         records.extend(record)
-    # 响应的 action 字段由客户端 w.b(0) 读取，必须是 short；客户端发来的
-    # 1080 请求则使用 byte action。这是该协议的非对称字段类型之一。
+    # S->C action is SHORT while the C->S 1080 request action is BYTE.
     return encode_frame(1080, [short(0), byte(len(roles)), *records])
+
 
 
 def creation_names() -> bytes:
@@ -2297,14 +2342,15 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
 
     level = max(1, int(role.get('level', 1)))
     raw_stats = [int(value) for value in list(role.get('stats', []))]
-    base_stats = (raw_stats + [10, 10, 10, 10, 10])[:5]
-    max_hp = 100 + ((level - 1) * 10) + max(0, base_stats[1])
-    max_mp = 50 + ((level - 1) * 5) + max(0, base_stats[2])
+    base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    display_stats = effective_character_stats(role, settings.item_registry)
+    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_mp = 50 + ((level - 1) * 5) + base_stats[2]
     properties[40] = integer(max_hp)
     properties[41] = integer(max_hp)
     properties[42] = integer(max_mp)
     properties[43] = integer(max_mp)
-    for index, value in enumerate(base_stats, start=44):
+    for index, value in enumerate(display_stats, start=44):
         properties[index] = integer(max(0, value))
 
     properties[49] = integer(0)
@@ -2555,20 +2601,25 @@ def initial_skill_frames(role: dict[str, object], settings: Settings) -> tuple[b
     return life_skill_list_frame(role, settings), sect_skill_list(role, settings)
 
 
-def character_panel_frames(role: dict[str, object]) -> tuple[bytes, bytes]:
-    """Return the attribute and divine-power datasets requested by UI 31."""
+def character_panel_frames(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> tuple[bytes, bytes]:
+    """Return live attribute and divine-power datasets requested by UI 31."""
     level = max(1, int(role.get('level', 1)))
     raw_stats = [int(value) for value in list(role.get('stats', []))]
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    display_stats = effective_character_stats(role, registry)
     max_hp = 100 + ((level - 1) * 10) + base_stats[1]
     max_mp = 50 + ((level - 1) * 5) + base_stats[2]
 
-    attribute_thresholds = [max_hp, max_mp, *base_stats]
+    attribute_thresholds = [max_hp, max_mp, *display_stats]
     attributes = encode_frame(1039, [byte(1), *(integer(value) for value in attribute_thresholds)])
 
     divine_values = [int(role['id']), level, level, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     divine = encode_frame(1039, [byte(2), *(integer(value) for value in divine_values)])
     return attributes, divine
+
 
 
 def role_items(role: dict[str, object]) -> list[dict[str, object]]:
@@ -2842,16 +2893,40 @@ def equipment_panel_refresh_frame(
     role: dict[str, object],
     registry: ItemRegistry | None = None,
 ) -> bytes:
-    """Ask the APK to redraw the open equipment tab without changing sprites.
-
-    The original client refreshes the equipment-page widgets from its 1017
-    character-update callback.  Accessory-only slots (belt, necklace, ring,
-    coat, accessory and magic treasure) have no character sprite property, so
-    their 1008 operation=3 update alone leaves an already-open panel stale.
-    Re-sending the effective appearance values is visually a no-op but enters
-    that callback and redraws the equipment vector.
-    """
+    """Enter the APK's verified 1017 redraw callback with the full appearance."""
     return character_appearance_frame(int(role['id']), character_appearance(role, registry))
+
+
+def character_equipment_refresh_frames(
+    role: dict[str, object],
+    registry: ItemRegistry | None = None,
+) -> tuple[bytes, bytes]:
+    """Refresh world appearance plus the open character panel after equipment changes.
+
+    ``main/e.O`` applies 1017 property pairs to the live world character and
+    invokes the native dependent-UI redraws. ``main/e.ae`` action 1 is the
+    character-panel data path and redraws UI 0x166 when that panel is open.
+    """
+    if registry is None:
+        registry = default_item_registry()
+    level = max(1, int(role.get('level', 1)))
+    raw_stats = [int(value) for value in list(role.get('stats', []))]
+    base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
+    display_stats = effective_character_stats(role, registry)
+    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_mp = 50 + ((level - 1) * 5) + base_stats[2]
+
+    properties = character_appearance(role, registry)
+    properties.update({
+        40: max_hp,
+        41: max_hp,
+        42: max_mp,
+        43: max_mp,
+        **{index: value for index, value in enumerate(display_stats, start=44)},
+    })
+    attributes, _ = character_panel_frames(role, registry)
+    return character_appearance_frame(int(role['id']), properties), attributes
+
 
 
 def find_item(role: dict[str, object], item_id: int) -> dict[str, object] | None:
@@ -4639,6 +4714,8 @@ class LocalGameServer:
             role.clear()
             role.update(snapshot)
             raise
+        if result.changed:
+            return (*result.frames, *character_equipment_refresh_frames(role, self.settings.item_registry))
         return result.frames
 
     def handle_shop_purchase(
@@ -5987,9 +6064,10 @@ class LocalGameServer:
                         self.roles.save()
                         LOG.info('item discarded item_id=%d name=%r', item_id, item.get('name'))
                         replies = [encode_frame(1009, [short(3), integer(item_id)])]
-                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance, self.settings.item_registry)
-                        if appearance_frame is not None:
-                            replies.append(appearance_frame)
+                        if is_equipment(item):
+                            replies.extend(
+                                character_equipment_refresh_frames(active_role, self.settings.item_registry)
+                            )
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     elif action == 4 and item is not None and item_action_location_valid(action, item):
                         resolved_item = self.settings.item_registry.resolve(item)
@@ -6067,11 +6145,8 @@ class LocalGameServer:
                         item['location'] = 'equipped'
                         updates.append(item_frame(item, operation=3))
                         updates.append(encode_frame(1009, [short(5)]))
-                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance, self.settings.item_registry)
-                        updates.append(
-                            appearance_frame
-                            if appearance_frame is not None
-                            else equipment_panel_refresh_frame(active_role, self.settings.item_registry)
+                        updates.extend(
+                            character_equipment_refresh_frames(active_role, self.settings.item_registry)
                         )
                         self.roles.save()
                         LOG.info('item equipped item_id=%d name=%r slot=%d', item_id, resolved_item.get('name'), slot)
@@ -6110,11 +6185,8 @@ class LocalGameServer:
                         self.roles.save()
                         LOG.info('item unequipped item_id=%d name=%r', item_id, item.get('name'))
                         replies = [item_frame(item, operation=3), encode_frame(1009, [short(6)])]
-                        appearance_frame = character_appearance_change_frame(active_role, previous_appearance, self.settings.item_registry)
-                        replies.append(
-                            appearance_frame
-                            if appearance_frame is not None
-                            else equipment_panel_refresh_frame(active_role, self.settings.item_registry)
+                        replies.extend(
+                            character_equipment_refresh_frames(active_role, self.settings.item_registry)
                         )
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     else:
