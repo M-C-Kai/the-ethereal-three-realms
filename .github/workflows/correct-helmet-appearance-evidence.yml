@@ -1,0 +1,91 @@
+name: Correct helmet appearance evidence
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/correct-helmet-appearance-evidence.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Correct unverified helmet mapping
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          root = Path('implementation_staging')
+          mapping_path = root / 'data/catalog/helmet_appearance_mapping.json'
+          mapping = {
+              'version': 1,
+              'kind': 'helmet_appearance_mapping',
+              'status': 'unresolved_mapping',
+              'source': 'APK equipment icon resources + character appearance property20 audit + EQUIPMENT_TEMPLATE_EVIDENCE.md',
+              'description': 'No icon_code -> property20 pair is currently proven by saved APK evidence. The client property20 resource rule is known, but icon association remains unresolved.',
+              'property': 20,
+              'image_base': 21000,
+              'notes': [
+                  'Client rule confirmed: property20=N selects character layer image 21000+N.',
+                  'Current appearance audit recovered only image 21003 as a property20 candidate.',
+                  'The compatibility item 青纹盔 uses icon_code 109 and property20=3, but repository evidence explicitly says 青纹套装 is local compatibility data and must not be treated as an official icon-to-appearance mapping.',
+                  'Therefore icon_code 100..109 are all unresolved until direct APK/resource or original-server evidence establishes a pair.',
+                  'Unknown or unresolved icon_code values resolve to 0/no added helmet layer.'
+              ],
+              'candidate_property20_values': [3],
+              'candidate_image_ids': [21003],
+              'icon_to_property20': {},
+              'unresolved_icon_codes': list(range(100, 110))
+          }
+          mapping_path.write_text(json.dumps(mapping, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          test_path = root / 'tests/test_helmet_appearance_mapping.py'
+          test_path.write_text("""import json\nimport sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n\nfrom item_registry import (\n    HELMET_APPEARANCE_MAPPING_FILE,\n    helmet_icon_to_property20_mapping,\n    helmet_property20_from_icon,\n)\n\n\nclass HelmetAppearanceMappingTests(unittest.TestCase):\n    def test_catalog_records_no_unproven_pair(self):\n        payload = json.loads(HELMET_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))\n        self.assertEqual(payload['property'], 20)\n        self.assertEqual(payload['image_base'], 21000)\n        self.assertEqual(payload['candidate_property20_values'], [3])\n        self.assertEqual(payload['candidate_image_ids'], [21003])\n        self.assertEqual(payload['icon_to_property20'], {})\n        self.assertEqual(payload['unresolved_icon_codes'], list(range(100, 110)))\n\n    def test_runtime_does_not_invent_helmet_mapping(self):\n        self.assertEqual(helmet_icon_to_property20_mapping(), {})\n        for icon_code in range(100, 110):\n            self.assertEqual(helmet_property20_from_icon(icon_code), 0, icon_code)\n        self.assertEqual(helmet_property20_from_icon(9999), 0)\n\n    def test_preview_catalog_does_not_fake_helmet_appearance(self):\n        root = Path(__file__).resolve().parents[1]\n        preview = json.loads((root / 'data/catalog/equipment_resource_preview_items.json').read_text(encoding='utf-8'))['items']\n        helmets = {int(item['icon_code']): item['appearance_properties'] for item in preview if int(item.get('equipment_slot', 0)) == 1}\n        self.assertEqual(sorted(helmets), list(range(100, 110)))\n        for icon_code in range(100, 110):\n            self.assertEqual(helmets[icon_code], {}, icon_code)\n\n\nif __name__ == '__main__':\n    unittest.main()\n""", encoding='utf-8')
+
+          generator = root / 'tools/build_equipment_resource_preview_items.py'
+          text = generator.read_text(encoding='utf-8')
+          text = text.replace(
+              '头盔 property20 使用 helmet_appearance_mapping.json 的证据映射，未解析图标不猜。',
+              '头盔 property20 只读取 helmet_appearance_mapping.json；当前无已证实 icon→property20 对应，全部未解析图标不猜。'
+          )
+          generator.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Regenerate preview catalog
+        working-directory: implementation_staging
+        env:
+          PYTHONPATH: .
+        run: python tools/build_equipment_resource_preview_items.py
+
+      - name: Run helmet mapping regression
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_helmet_appearance_mapping.py' -v
+
+      - name: Run item registry regression
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_item_registry.py' -v
+
+      - name: Check diff
+        run: git diff --check
+
+      - name: Commit correction and remove workflow
+        shell: bash
+        run: |
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git rm .github/workflows/correct-helmet-appearance-evidence.yml
+          git add implementation_staging/data/catalog/helmet_appearance_mapping.json \
+                  implementation_staging/data/catalog/equipment_resource_preview_items.json \
+                  implementation_staging/tools/build_equipment_resource_preview_items.py \
+                  implementation_staging/tests/test_helmet_appearance_mapping.py
+          git commit -m 'fix: remove unverified helmet appearance mapping'
+          git push origin HEAD:master
