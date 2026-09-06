@@ -64,6 +64,17 @@
           "target_map_id": 60001,
           "target_x": 8,
           "target_y": 6
+        },
+        {
+          "id": 580006,
+          "name": "青崖试境传送阵",
+          "model": -2043000,
+          "x": 64,
+          "y": 67,
+          "direction": 0,
+          "target_map_id": 60010,
+          "target_x": 12,
+          "target_y": 12
         }
       ]
     },
@@ -123,6 +134,28 @@
           "model": -2043000,
           "x": 9,
           "y": 6,
+          "direction": 0,
+          "target_map_id": 58,
+          "target_x": 60,
+          "target_y": 67
+        }
+      ]
+    },
+    "60010": {
+      "name": "青崖试境",
+      "map_o_file": "maps/60010.map.o",
+      "map_ref_available": false,
+      "fallback_width": 24,
+      "fallback_height": 24,
+      "spawn": {"x": 12, "y": 12},
+      "npcs": [],
+      "portals": [
+        {
+          "id": 6001001,
+          "name": "返回长安",
+          "model": -2043000,
+          "x": 12,
+          "y": 13,
           "direction": 0,
           "target_map_id": 58,
           "target_x": 60,
