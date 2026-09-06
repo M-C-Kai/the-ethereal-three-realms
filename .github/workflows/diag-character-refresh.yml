@@ -1,0 +1,67 @@
+name: Diagnose character refresh protocol
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/diag-character-refresh.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect server refresh functions and APK receivers
+        working-directory: implementation_staging
+        run: |
+          python - <<'PY'
+          import ast
+          import re
+          from pathlib import Path
+
+          source = Path('server.py').read_text(encoding='utf-8')
+          tree = ast.parse(source)
+          wanted = {
+              'role_list', 'player_info', 'character_panel_frames',
+              'character_appearance', 'character_appearance_frame',
+              'character_appearance_change_frame', 'equipment_panel_refresh_frame',
+              'combat_stats', 'role_level_properties', 'equipped_weapon_attack',
+          }
+          print('=== SERVER FUNCTIONS ===')
+          for node in tree.body:
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted:
+                  print(f'\n--- {node.name} ---')
+                  print(ast.get_source_segment(source, node))
+
+          print('\n=== EQUIP/STRENGTH HANDLER CONTEXT ===')
+          for needle in ["action == 5", "action == 6", "strengthening_request_result", "recalculate_equipment_attributes(weapon)"]:
+              pos = source.find(needle)
+              print(f'\n--- needle: {needle!r} pos={pos} ---')
+              if pos >= 0:
+                  print(source[max(0,pos-1800):pos+3200])
+
+          smali = Path('references/smali/pmsj/work/main/e.smali').read_text(encoding='utf-8')
+          def method(name):
+              pat = re.compile(rf'\.method private static {re.escape(name)}\(Lpmsj/work/main/w;\)V.*?\.end method', re.S)
+              m = pat.search(smali)
+              print(f'\n=== SMALI METHOD {name} ===')
+              print(m.group(0) if m else 'NOT FOUND')
+          method('K')  # 1080
+          method('O')  # 1017
+
+          # Find dispatcher target for 1039 / 0x40f.
+          idx = smali.find('0x40f ->')
+          print('\n=== DISPATCH 1039 CONTEXT ===')
+          print(smali[max(0,idx-800):idx+800] if idx >= 0 else 'NOT FOUND')
+          if idx >= 0:
+              line = smali[idx:idx+120].splitlines()[0]
+              m = re.search(r'-> :sswitch_([0-9a-f]+)', line)
+              if m:
+                  label = ':sswitch_' + m.group(1)
+                  p = smali.find(label)
+                  print('\n=== 1039 LABEL CONTEXT ===')
+                  print(smali[p:p+1600])
+          PY
