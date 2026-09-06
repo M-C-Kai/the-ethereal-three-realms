@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import server as _server
+from generate_map_60010 import ensure_map_60010
 from protocol import binary, byte, encode_frame, short
 
 
@@ -72,7 +73,7 @@ def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[byt
     if not transfer:
         return original
 
-    # The old first frame is 1010/action=13.  Replace it with status=1 so the
+    # The old first frame is 1010/action=13. Replace it with status=1 so the
     # client does not reopen assets/res/map/{mapId}.map.ref after m.z has just
     # been filled and parsed by the 1407 transfer.
     if not original:
@@ -93,12 +94,20 @@ def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[byt
     return [*transfer, *original]
 
 
-# Patch only the narrow map-reference entry point.  All existing server
+# Patch only the narrow map-reference entry point. All existing server
 # dispatch, battle, NPC, inventory and persistence code remains unchanged.
 _server.map_enter_frames = dynamic_map_enter_frames
 
 
 def main() -> None:
+    ref_path, map_o_path = ensure_map_60010()
+    LOG.info(
+        'DYNAMIC_MAP_READY map=60010 ref=%s ref_bytes=%d map_o=%s map_o_bytes=%d',
+        ref_path,
+        ref_path.stat().st_size,
+        map_o_path,
+        map_o_path.stat().st_size,
+    )
     _server.main()
 
 
