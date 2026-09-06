@@ -232,19 +232,20 @@ class MapRegistryTests(unittest.TestCase):
                     load_map_registry(invalid)
 
     def test_default_registry_uses_changan_and_rejects_unknown_maps(self):
-        self.assertIsNotNone(default_map_registry, 'default registry factory is missing')
+        self.assertIsNotNone(default_map_registry, 'map registry module is missing')
         if default_map_registry is None:
             return
 
         registry = default_map_registry()
+        changan = registry.require(58)
 
         self.assertEqual(registry.default_map_id, 58)
-        self.assertEqual(registry.require(58).name, '长安')
-        self.assertEqual([item.id for item in registry.require(58).portals], [580001, 580003, 580005])
-        self.assertEqual(
-            [(npc.dat_id, npc.model) for npc in registry.require(58).npcs],
-            [(90000, -2010000), (90010, -2009990), (90020, -2009980)],
-        )
+        self.assertEqual(changan.name, '长安')
+        self.assertEqual([item.id for item in changan.portals], [580001, 580003, 580005])
+        self.assertEqual(len(changan.npcs), 44)
+        self.assertEqual(len({npc.dat_id for npc in changan.npcs}), 44)
+        self.assertEqual([npc.id for npc in changan.npcs[:3]], [1900002, 1900003, 1900004])
+        self.assertEqual([npc.dat_id for npc in changan.npcs[:3]], [95750, 96010, 95520])
         kunlun = registry.require(60001)
         self.assertEqual(kunlun.name, '昆仑')
         self.assertTrue(kunlun.map_ref_available)
@@ -265,6 +266,9 @@ class SettingsRegistryTests(unittest.TestCase):
         self.assertEqual(payload['default_map_id'], 58)
         self.assertNotIn('map_name', payload)
         self.assertEqual(payload['maps']['58']['name'], '长安')
+        self.assertTrue(payload['maps']['58']['npc_appearance_gallery'])
+        self.assertTrue(all('appearance_key' in npc for npc in payload['maps']['58']['npcs']))
+        self.assertTrue(all('dat_id' not in npc for npc in payload['maps']['58']['npcs']))
         self.assertEqual(
             [portal['id'] for portal in payload['maps']['58']['portals']],
             [580001, 580003, 580005],
