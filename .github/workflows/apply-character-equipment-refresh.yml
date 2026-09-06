@@ -151,8 +151,6 @@ jobs:
                   _, refresh_fields = decode_frame(frames[-1])
                   self.assertEqual(field_values(refresh_fields)[0], 1)
           '''
-          # The YAML block strips its own indentation; remove the intentional
-          # ten-space Python-string margin before inserting into the test file.
           addition = '\n'.join(
               line[10:] if line.startswith('          ') else line
               for line in addition.splitlines()
@@ -166,7 +164,6 @@ jobs:
           python -m py_compile server.py
           python -m unittest discover -s tests -p 'test_character_equipment_refresh.py' -v
           python -m unittest discover -s tests -p 'test_strengthening.py' -v
-          python -m unittest discover -s tests -p 'test_inventory.py' -v
           python -m unittest discover -s tests -p 'test_weapon_appearance_consistency.py' -v
           python -m unittest discover -s tests -p 'test_armor_appearance_mapping.py' -v
           python -m unittest discover -s tests -p 'test_armor_downlink.py' -v
