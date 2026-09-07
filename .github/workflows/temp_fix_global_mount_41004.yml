@@ -1,0 +1,187 @@
+name: Fix global 41004 mount semantics
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/temp_fix_global_mount_41004.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Patch catalogs code tests and references
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('implementation_staging')
+          mapping_path = root / 'data/catalog/mount_appearance_mapping.json'
+          items_path = root / 'data/catalog/items.json'
+
+          mapping = json.loads(mapping_path.read_text(encoding='utf-8'))
+          mapping['unprojected_image_ids'] = [
+              int(v) for v in mapping.get('unprojected_image_ids', []) if int(v) != 41004
+          ]
+          deprecated = {int(v) for v in mapping.get('deprecated_template_ids', [])}
+          deprecated.add(170410004)
+          mapping['deprecated_template_ids'] = sorted(deprecated)
+          mapping['notes'] = [
+              note for note in mapping.get('notes', [])
+              if '41004 remains an APK riding appearance but is not projected as a local item' not in str(note)
+          ]
+          mapping_path.write_text(json.dumps(mapping, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          items_doc = json.loads(items_path.read_text(encoding='utf-8'))
+          rows = items_doc['items']
+          rows[:] = [row for row in rows if int(row.get('template_id', 0)) != 170410004]
+          normal_names = {
+              41002: '辟邪', 41003: '四不像', 41004: '浣熊', 41005: '赤明',
+              41006: '谛听', 41007: '玄牝', 41009: '冰虚', 41010: '白泽',
+              42004: '虹琪', 42007: '玄黄',
+          }
+          by_tid = {int(row.get('template_id', 0)): row for row in rows}
+          for image_id, name in normal_names.items():
+              ride_code = image_id - 40000
+              tid = 170900000 + ride_code
+              row = by_tid.get(tid)
+              if row is None:
+                  row = {
+                      'template_id': tid,
+                      'kind': 'mount',
+                      'name': name,
+                      'description': f'坐骑系列 {name}，APK 普通形态资源 {image_id}。',
+                      'max_quantity': 1,
+                      'equipment_slot': 17,
+                      'price': 0,
+                      'level_required': 1,
+                      'icon_code': 6109,
+                      'quality': 0,
+                      'sort_group': 170,
+                      'sort_order': len([r for r in rows if r.get('kind') == 'mount']) + 1,
+                      'equipment_attributes': [0, 0, 0, 0],
+                      'mount_model': ride_code,
+                  }
+                  rows.append(row)
+                  by_tid[tid] = row
+              else:
+                  row['name'] = name
+                  row['mount_model'] = ride_code
+                  row['equipment_slot'] = 17
+                  row['kind'] = 'mount'
+          items_path.write_text(json.dumps(items_doc, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+
+          # Correct protocol documentation: property 22 carries ride_code 1004, not image id 41004.
+          p = root / 'PROTOCOL_LOCK.md'
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('`1017` 更新属性 `22=41004`', '`1017` 更新属性 `22=1004`')
+          p.write_text(text, encoding='utf-8')
+
+          # Correct raw atlas documentation.
+          p = root / 'references/mount-atlas/README.md'
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              '当前已确认 `41004 -> ride_code 1004 -> role_model 102000 -> 辟邪`。',
+              '当前已确认 `41002 -> ride_code 1002 -> role_model 102000 -> 辟邪`，`41004 -> ride_code 1004 -> role_model 102000 -> 浣熊`。',
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # Correct checked-in atlas manifest names from the authoritative series catalog.
+          p = root / 'references/mount-atlas/manifest.json'
+          manifest = json.loads(p.read_text(encoding='utf-8'))
+          for row in manifest.get('entries', []):
+              image_id = int(row.get('image_id', 0))
+              row['name'] = normal_names.get(image_id)
+          p.write_text(json.dumps(manifest, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+
+          # Static SVG is historical but must not preserve the false 41004=辟邪 label.
+          p = root / 'references/mount-atlas/mount_riding_atlas.svg'
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('class="name">辟邪</text>', 'class="name">浣熊</text>')
+          p.write_text(text, encoding='utf-8')
+
+          # Atlas generator must use mount_series names, not removed named_templates overrides.
+          p = root / 'references/scripts/build_mount_atlas.py'
+          text = p.read_text(encoding='utf-8')
+          old = """    named = catalog.get('named_templates', {})\n    serializable_entries = []\n    for entry in entries:\n        row = {key: value for key, value in entry.items() if key != 'preview'}\n        row['name'] = named.get(str(entry['image_id']), {}).get('name')\n        serializable_entries.append(row)\n"""
+          new = """    normal_appearance_names: dict[int, str] = {}\n    for series in catalog.get('mount_series', []):\n        name = str(series.get('name') or '')\n        normal = series.get('appearances', {}).get('normal')\n        if normal is None or not name or name.startswith('坐骑系列 '):\n            continue\n        normal_appearance_names[int(normal)] = name\n\n    serializable_entries = []\n    for entry in entries:\n        row = {key: value for key, value in entry.items() if key != 'preview'}\n        row['name'] = normal_appearance_names.get(int(entry['image_id']))\n        serializable_entries.append(row)\n"""
+          if old not in text:
+              raise SystemExit('atlas generator naming block not found')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Restore series-grant expectations: old bad template is purged, correct 41004 is re-created.
+          p = root / 'tests/test_mount_series_grant.py'
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('        self.assertNotIn(41004, grantable)\n', '        self.assertIn(41004, grantable)\n')
+          text = text.replace(
+              'def test_wrong_legacy_41004_template_is_deprecated_and_not_replaced(self):',
+              'def test_wrong_legacy_41004_template_is_deprecated_and_replaced(self):',
+          )
+          text = text.replace(
+              '        self.assertEqual(len(series_41004), 0)\n        self.assertNotIn(170410004, {int(item[\'template_id\']) for item in role[\'items\']})\n',
+              "        self.assertEqual(len(series_41004), 1)\n        self.assertEqual(int(series_41004[0]['template_id']), 170901004)\n        self.assertEqual(series_41004[0]['mount_state']['stage'], 0)\n        self.assertNotIn(170410004, {int(item['template_id']) for item in role['items']})\n",
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # Catalogue regression now expects all 54 raw appearances to have compatibility projections.
+          p = root / 'tests/test_mount_catalog.py'
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('def test_mount_item_projection_stays_at_53(self):', 'def test_mount_item_projection_has_all_54_appearances(self):')
+          text = text.replace('self.assertEqual(len(mounts), 53)', 'self.assertEqual(len(mounts), 54)')
+          text = text.replace('self.assertNotIn(170901004, template_ids)', 'self.assertIn(170901004, template_ids)')
+          p.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Verify behavior and global semantics
+        working-directory: implementation_staging
+        run: |
+          python -m py_compile mount_constructor.py item_registry.py server.py references/scripts/build_mount_atlas.py
+          python -m unittest tests.test_mount_constructor tests.test_mount_series_grant tests.test_mount_catalog tests.test_shop
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from item_registry import default_item_registry, deprecated_mount_template_ids
+          from mount_constructor import load_mount_catalog
+          from server import ensure_all_mount_series_items
+
+          mapping = json.loads(Path('data/catalog/mount_appearance_mapping.json').read_text(encoding='utf-8'))
+          items = json.loads(Path('data/catalog/items.json').read_text(encoding='utf-8'))['items']
+          catalog = load_mount_catalog()
+          registry = default_item_registry()
+          assert 170410004 in deprecated_mount_template_ids()
+          assert all(int(x.get('template_id', 0)) != 170410004 for x in items)
+          corrected = next(x for x in items if int(x.get('template_id', 0)) == 170901004)
+          assert corrected['name'] == '浣熊' and int(corrected['mount_model']) == 1004
+          bixie = next(x for x in items if int(x.get('template_id', 0)) == 170901002)
+          assert bixie['name'] == '辟邪' and int(bixie['mount_model']) == 1002
+          assert 41004 not in {int(v) for v in mapping.get('unprojected_image_ids', [])}
+          role = {'id': 987, 'items': []}
+          assert ensure_all_mount_series_items(role, registry)
+          series = {int(i['mount_state']['series_id']): i for i in role['items'] if 'mount_state' in i}
+          assert 41004 in series and int(series[41004]['template_id']) == 170901004
+          assert set(series) == set(catalog.series)
+          PY
+
+          # Forbidden semantic residues. Numeric 41004 itself is legal as a real resource.
+          ! git grep -n -I -E '41004[^\n]{0,120}辟邪|辟邪[^\n]{0,120}41004' -- . ':!*.png' ':!*.dat' ':!*.o' ':!data/catalog/mount_appearance_mapping.json'
+          ! git grep -n -I '22=41004' -- . ':!*.png' ':!*.dat' ':!*.o'
+          ! git grep -n -I 'self.assertNotIn(41004, grantable)' -- .
+          ! git grep -n -I 'not_replaced' -- implementation_staging/tests/test_mount_series_grant.py
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm .github/workflows/temp_fix_global_mount_41004.yml
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git add implementation_staging .github/workflows/temp_fix_global_mount_41004.yml
+          git commit -m 'fix: purge global false 41004 mount mapping'
+          git push origin HEAD:master
