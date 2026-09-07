@@ -1,0 +1,85 @@
+name: Remove obsolete 41004 mount template
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/temp_remove_wrong_41004.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Remove obsolete template and add migration coverage
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          mapping_path = Path('implementation_staging/data/catalog/mount_appearance_mapping.json')
+          mapping = json.loads(mapping_path.read_text(encoding='utf-8'))
+          deprecated = {int(v) for v in mapping.get('deprecated_template_ids', [])}
+          deprecated.add(170410004)
+          mapping['deprecated_template_ids'] = sorted(deprecated)
+          notes = list(mapping.get('notes', []))
+          note = 'legacy template 170410004 was an incorrect special mapping of 41004 as 辟邪; it is deprecated and removed so 41004 is rebuilt as 浣熊 and 41002 remains 辟邪'
+          if note not in notes:
+              notes.append(note)
+          mapping['notes'] = notes
+          mapping_path.write_text(json.dumps(mapping, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          items_path = Path('implementation_staging/data/catalog/items.json')
+          items = json.loads(items_path.read_text(encoding='utf-8'))
+          before = len(items['items'])
+          items['items'] = [row for row in items['items'] if int(row.get('template_id', 0)) != 170410004]
+          if len(items['items']) != before - 1:
+              raise SystemExit('expected exactly one 170410004 template row to be removed')
+          items_path.write_text(json.dumps(items, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+
+          test_path = Path('implementation_staging/tests/test_mount_series_grant.py')
+          text = test_path.read_text(encoding='utf-8')
+          if 'deprecated_mount_template_ids' not in text:
+              text = text.replace(
+                  'from item_registry import default_item_registry\n',
+                  'from item_registry import default_item_registry, deprecated_mount_template_ids\n',
+                  1,
+              )
+          marker = "\n\nif __name__ == '__main__':\n"
+          test = '''\n    def test_wrong_legacy_41004_template_is_deprecated_and_replaced(self):\n        registry = default_item_registry()\n        self.assertIn(170410004, deprecated_mount_template_ids())\n        role = {\n            'id': 79,\n            'items': [{\n                'id': 790000,\n                'template_id': 170410004,\n                'quantity': 1,\n                'location': 'bag',\n            }],\n        }\n        # RoleStore migration removes deprecated templates before the mount\n        # series grant helper runs. Simulate that ordering here.\n        role['items'] = [\n            item for item in role['items']\n            if int(item.get('template_id', 0)) not in deprecated_mount_template_ids()\n        ]\n        self.assertTrue(ensure_all_mount_series_items(role, registry))\n        series_41004 = [\n            item for item in role['items']\n            if item.get('mount_state', {}).get('series_id') == 41004\n        ]\n        self.assertEqual(len(series_41004), 1)\n        self.assertNotEqual(series_41004[0]['template_id'], 170410004)\n        self.assertEqual(series_41004[0]['mount_state']['stage'], 0)\n'''
+          if 'test_wrong_legacy_41004_template_is_deprecated_and_replaced' not in text:
+              if marker not in text:
+                  raise SystemExit('test insertion marker missing')
+              text = text.replace(marker, test + marker, 1)
+          test_path.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify removal and migration
+        working-directory: implementation_staging
+        run: |
+          python -m py_compile mount_constructor.py item_registry.py server.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          mapping = json.loads(Path('data/catalog/mount_appearance_mapping.json').read_text(encoding='utf-8'))
+          items = json.loads(Path('data/catalog/items.json').read_text(encoding='utf-8'))
+          assert 170410004 in mapping['deprecated_template_ids']
+          assert all(int(row.get('template_id', 0)) != 170410004 for row in items['items'])
+          series = {int(row['series_id']): row for row in mapping['mount_series']}
+          assert series[41004]['name'] == '浣熊'
+          assert series[41002]['name'] == '辟邪'
+          PY
+          python -m unittest tests.test_mount_constructor tests.test_mount_series_grant
+      - name: Commit cleanup and remove temporary workflow
+        run: |
+          rm .github/workflows/temp_remove_wrong_41004.yml
+          git config user.name 'M-C-Kai'
+          git config user.email '58809786+M-C-Kai@users.noreply.github.com'
+          git add implementation_staging/data/catalog/mount_appearance_mapping.json implementation_staging/data/catalog/items.json implementation_staging/tests/test_mount_series_grant.py .github/workflows/temp_remove_wrong_41004.yml
+          git commit -m 'fix: remove obsolete 41004 mount template'
+          git push origin HEAD:master
