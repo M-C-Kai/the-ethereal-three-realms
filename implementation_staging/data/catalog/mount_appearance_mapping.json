@@ -39,29 +39,27 @@
   ],
   "mount_series": [
     {"series_id": 41001, "name": "坐骑系列 41001", "appearances": {"normal": 41001}},
-    {"series_id": 41002, "name": "坐骑系列 41002", "appearances": {"normal": 41002, "spirit": 41012, "immortal": 41022, "divine": 44002}},
-    {"series_id": 41003, "name": "坐骑系列 41003", "appearances": {"normal": 41003, "spirit": 41013, "immortal": 41023, "divine": 44003}},
-    {"series_id": 41004, "name": "辟邪", "appearances": {"normal": 41004, "spirit": 41014, "immortal": 41024, "divine": 41034}},
-    {"series_id": 41005, "name": "坐骑系列 41005", "appearances": {"normal": 41005, "spirit": 41015, "immortal": 41025, "divine": 44005}},
-    {"series_id": 41006, "name": "坐骑系列 41006", "appearances": {"normal": 41006, "spirit": 41016, "immortal": 41026, "divine": 41036}},
-    {"series_id": 41007, "name": "坐骑系列 41007", "appearances": {"normal": 41007, "spirit": 41017, "immortal": 41027, "divine": 44007}},
+    {"series_id": 41002, "name": "辟邪", "appearances": {"normal": 41002, "spirit": 41012, "immortal": 41022, "divine": 44002}},
+    {"series_id": 41003, "name": "四不像", "appearances": {"normal": 41003, "spirit": 41013, "immortal": 41023, "divine": 44003}},
+    {"series_id": 41004, "name": "浣熊", "appearances": {"normal": 41004, "spirit": 41014, "immortal": 41024, "divine": 41034}},
+    {"series_id": 41005, "name": "赤明", "appearances": {"normal": 41005, "spirit": 41015, "immortal": 41025, "divine": 44005}},
+    {"series_id": 41006, "name": "谛听", "appearances": {"normal": 41006, "spirit": 41016, "immortal": 41026, "divine": 41036}},
+    {"series_id": 41007, "name": "玄牝", "appearances": {"normal": 41007, "spirit": 41017, "immortal": 41027, "divine": 44007}},
     {"series_id": 41008, "name": "坐骑系列 41008", "appearances": {"normal": 41008, "spirit": 41018, "immortal": 41028, "divine": 41038}},
-    {"series_id": 41009, "name": "坐骑系列 41009", "appearances": {"normal": 41009, "spirit": 41019, "immortal": 41029, "divine": 44009}},
-    {"series_id": 41010, "name": "坐骑系列 41010", "appearances": {"normal": 41010, "spirit": 41020, "immortal": 41030, "divine": 44010}},
+    {"series_id": 41009, "name": "冰虚", "appearances": {"normal": 41009, "spirit": 41019, "immortal": 41029, "divine": 44009}},
+    {"series_id": 41010, "name": "白泽", "appearances": {"normal": 41010, "spirit": 41020, "immortal": 41030, "divine": 44010}},
     {"series_id": 42001, "name": "坐骑系列 42001", "appearances": {"normal": 42001, "spirit": 42011, "immortal": 42021, "divine": 42031}},
     {"series_id": 42003, "name": "坐骑系列 42003", "appearances": {"normal": 42003}},
-    {"series_id": 42004, "name": "坐骑系列 42004", "appearances": {"normal": 42004, "divine": 43002}},
+    {"series_id": 42004, "name": "虹琪", "appearances": {"normal": 42004, "divine": 43002}},
     {"series_id": 42005, "name": "坐骑系列 42005", "appearances": {"normal": 42005}},
     {"series_id": 42006, "name": "坐骑系列 42006", "appearances": {"normal": 42006}},
-    {"series_id": 42007, "name": "坐骑系列 42007", "appearances": {"normal": 42007, "divine": 43003}},
+    {"series_id": 42007, "name": "玄黄", "appearances": {"normal": 42007, "divine": 43003}},
     {"series_id": 43001, "name": "坐骑系列 43001", "appearances": {"normal": 43001}},
     {"series_id": 45001, "name": "坐骑系列 45001", "appearances": {"normal": 45001}},
     {"series_id": 45002, "name": "坐骑系列 45002", "appearances": {"normal": 45002}}
   ],
   "unclassified_image_ids": [40001, 40002, 40003],
-  "named_templates": {
-    "41004": {"template_id": 170410004, "starter_offset": 16, "name": "辟邪", "ride_code": 1004, "role_model": 102000}
-  },
+  "named_templates": {},
   "deprecated_template_ids": [],
   "notes": [
     "character property 22 stores the ride code, not the 101000..106000 role-model id",
@@ -72,6 +70,8 @@
     "42007 uses 42007 through normal/spirit/immortal and switches to 43003 at divine",
     "40001/40002/40003 remain intentionally unclassified until stronger APK evidence is available",
     "411xx resources are rider/saddle interface layers and are not counted as separate mounts",
-    "items.json mount rows remain compatibility projections; per-instance mount_state is authoritative for newly constructed mounts"
+    "items.json mount rows remain compatibility projections; per-instance mount_state is authoritative for newly constructed mounts",
+    "series names confirmed manually: 41002=辟邪, 41003=四不像, 41004=浣熊, 41005=赤明, 41006=谛听, 41007=玄牝, 41009=冰虚, 41010=白泽, 42004=虹琪, 42007=玄黄",
+    "41008 and 42001 remain unnamed pending confirmation"
   ]
 }
