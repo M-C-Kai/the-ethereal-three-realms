@@ -35,4 +35,4 @@ D:\python\python.exe references\scripts\build_mount_atlas.py --apk <原APK路径
 
 `property 22` 下发的是 `ride_code`，其值由 `ride_code = image_id - image_base` 得到。`image_base`、资源路径和 54 个主骑乘资源全部在 `mount_appearance_mapping.json` 中维护。生成器不维护第二套坐骑清单。
 
-`411xx` 继续按 APK 行为视为骑手/鞍具接口层，不计为独立坐骑。没有从 APK 或其他已确认资料中得到的坐骑名称不会猜测；当前已确认 `41004 -> ride_code 1004 -> role_model 102000 -> 辟邪`。
+`411xx` 继续按 APK 行为视为骑手/鞍具接口层，不计为独立坐骑。没有从 APK 或其他已确认资料中得到的坐骑名称不会猜测；当前已确认 `41002 -> ride_code 1002 -> role_model 102000 -> 辟邪`，`41004 -> ride_code 1004 -> role_model 102000 -> 浣熊`。

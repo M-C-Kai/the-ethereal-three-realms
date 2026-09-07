@@ -241,11 +241,18 @@ def build(apk: Path, output_dir: Path = OUTPUT_DIR) -> dict[str, object]:
     finally:
         assets.close()
 
-    named = catalog.get('named_templates', {})
+    normal_appearance_names: dict[int, str] = {}
+    for series in catalog.get('mount_series', []):
+        name = str(series.get('name') or '')
+        normal = series.get('appearances', {}).get('normal')
+        if normal is None or not name or name.startswith('坐骑系列 '):
+            continue
+        normal_appearance_names[int(normal)] = name
+
     serializable_entries = []
     for entry in entries:
         row = {key: value for key, value in entry.items() if key != 'preview'}
-        row['name'] = named.get(str(entry['image_id']), {}).get('name')
+        row['name'] = normal_appearance_names.get(int(entry['image_id']))
         serializable_entries.append(row)
 
     manifest = {

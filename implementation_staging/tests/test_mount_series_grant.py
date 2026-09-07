@@ -23,7 +23,7 @@ class MountSeriesGrantTests(unittest.TestCase):
             except KeyError:
                 continue
             grantable.add(series_id)
-        self.assertNotIn(41004, grantable)
+        self.assertIn(41004, grantable)
         self.assertEqual(len(states), len(grantable))
         self.assertEqual({state.series_id for state in states}, grantable)
         self.assertTrue(all(state.stage == 0 for state in states))
@@ -60,7 +60,7 @@ class MountSeriesGrantTests(unittest.TestCase):
         self.assertEqual(len(series_41002), 1)
         self.assertEqual(series_41002[0]['mount_state']['stage'], 2)
 
-    def test_wrong_legacy_41004_template_is_deprecated_and_not_replaced(self):
+    def test_wrong_legacy_41004_template_is_deprecated_and_replaced(self):
         registry = default_item_registry()
         self.assertIn(170410004, deprecated_mount_template_ids())
         role = {
@@ -81,7 +81,9 @@ class MountSeriesGrantTests(unittest.TestCase):
             item for item in role['items']
             if item.get('mount_state', {}).get('series_id') == 41004
         ]
-        self.assertEqual(len(series_41004), 0)
+        self.assertEqual(len(series_41004), 1)
+        self.assertEqual(int(series_41004[0]['template_id']), 170901004)
+        self.assertEqual(series_41004[0]['mount_state']['stage'], 0)
         self.assertNotIn(170410004, {int(item['template_id']) for item in role['items']})
 
 

@@ -36,16 +36,16 @@ class MountCatalogTests(unittest.TestCase):
         self.assertEqual(len(image_ids), 54)
         self.assertEqual(len(set(image_ids)), 54)
 
-    def test_mount_item_projection_stays_at_53(self):
+    def test_mount_item_projection_has_all_54_appearances(self):
         mounts = [
             definition
             for definition in self.registry._items.values()
             if definition.kind == 'mount'
         ]
-        self.assertEqual(len(mounts), 53)
+        self.assertEqual(len(mounts), 54)
         template_ids = {definition.template_id for definition in mounts}
         self.assertNotIn(170410004, template_ids)
-        self.assertNotIn(170901004, template_ids)
+        self.assertIn(170901004, template_ids)
         self.assertIn(170901002, template_ids)
 
     def test_every_catalog_entry_has_matching_mount_item(self):
