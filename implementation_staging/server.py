@@ -105,6 +105,9 @@ from mount_protocol import (
     mount_atlas_frame,
 )
 from mount_constructor import (
+    construct_mount_state,
+    create_mount_item_instance,
+    load_mount_catalog,
     mount_ride_code_for_role,
     mount_ride_code_from_item,
 )
@@ -1850,6 +1853,50 @@ def ensure_equipment_resource_preview_items(
     return changed
 
 
+def ensure_all_mount_series_items(
+    role: dict[str, object],
+    item_registry: ItemRegistry,
+) -> bool:
+    """Ensure the role owns one real bag item for every known mount series.
+
+    This is intentionally idempotent. Existing mount instances are resolved
+    through the constructor (including legacy appearance-projection items),
+    so reconnecting never duplicates a series the role already owns. New
+    grants are normal item instances with authoritative per-instance
+    ``mount_state`` and start at the normal logical stage in the bag.
+    """
+    catalog = load_mount_catalog()
+    items = role_items(role)
+    owned_series: set[int] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            state = construct_mount_state(item, item_registry, catalog)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if state is not None:
+            owned_series.add(int(state.series_id))
+
+    changed = False
+    for series_id in sorted(catalog.series):
+        if series_id in owned_series:
+            continue
+        items.append(create_mount_item_instance(
+            instance_id=allocate_item_instance_id(role),
+            series_id=series_id,
+            stage=0,
+            grade=1,
+            growth=0,
+            location='bag',
+            catalog=catalog,
+        ))
+        owned_series.add(series_id)
+        changed = True
+    return changed
+
+
+
 def clear_role_bag_once(role: dict[str, object]) -> bool:
     """一次性清空旧角色背包，只删除 location=bag 的物品实例。
 
@@ -1921,6 +1968,7 @@ class RoleStore:
             role['items'] = starter_items(int(role.get('id', 0)), registry)
             role['strengthening_stones_initialized'] = True
             ensure_equipment_resource_preview_items(role, registry)
+            ensure_all_mount_series_items(role, registry)
             return True
         changed = False
         stones_initialized = bool(role.get('strengthening_stones_initialized', False))
@@ -2095,6 +2143,7 @@ class RoleStore:
             role['strengthening_stones_initialized'] = True
             changed = True
         changed = ensure_equipment_resource_preview_items(role, registry) or changed
+        changed = ensure_all_mount_series_items(role, registry) or changed
         for item in items:
             if not isinstance(item, dict) or not is_strengthenable_weapon(item):
                 continue

@@ -1,0 +1,54 @@
+import unittest
+
+from item_registry import default_item_registry
+from mount_constructor import construct_mount_state, load_mount_catalog
+from server import ensure_all_mount_series_items
+
+
+class MountSeriesGrantTests(unittest.TestCase):
+    def test_grants_one_item_for_every_series_and_is_idempotent(self):
+        registry = default_item_registry()
+        catalog = load_mount_catalog()
+        role = {'id': 77, 'items': []}
+
+        self.assertTrue(ensure_all_mount_series_items(role, registry))
+        states = [construct_mount_state(item, registry, catalog) for item in role['items']]
+        self.assertEqual(len(states), len(catalog.series))
+        self.assertEqual({state.series_id for state in states}, set(catalog.series))
+        self.assertTrue(all(state.stage == 0 for state in states))
+        self.assertTrue(all(item['location'] == 'bag' for item in role['items']))
+        self.assertEqual(len({item['id'] for item in role['items']}), len(role['items']))
+
+        before = list(role['items'])
+        self.assertFalse(ensure_all_mount_series_items(role, registry))
+        self.assertEqual(role['items'], before)
+
+    def test_existing_series_is_not_duplicated(self):
+        registry = default_item_registry()
+        catalog = load_mount_catalog()
+        role = {
+            'id': 78,
+            'items': [{
+                'id': 780000,
+                'template_id': catalog.template_id_for_image(41002),
+                'quantity': 1,
+                'location': 'bag',
+                'mount_state': {
+                    'series_id': 41002,
+                    'stage': 2,
+                    'grade': 9,
+                    'growth': 5,
+                },
+            }],
+        }
+        self.assertTrue(ensure_all_mount_series_items(role, registry))
+        series_41002 = [
+            item for item in role['items']
+            if item.get('mount_state', {}).get('series_id') == 41002
+        ]
+        self.assertEqual(len(series_41002), 1)
+        self.assertEqual(series_41002[0]['mount_state']['stage'], 2)
+
+
+if __name__ == '__main__':
+    unittest.main()
