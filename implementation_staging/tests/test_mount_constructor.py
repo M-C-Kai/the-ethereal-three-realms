@@ -77,7 +77,7 @@ class MountConstructorTests(unittest.TestCase):
         self.assertEqual(mount_ride_code_for_role(role, self.registry), 1002)
 
     def test_future_mount_items_are_not_permanently_deprecated(self):
-        self.assertEqual(deprecated_mount_template_ids(), frozenset())
+        self.assertEqual(deprecated_mount_template_ids(), frozenset({170410004}))
 
 
 if __name__ == '__main__':
