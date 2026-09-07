@@ -22,13 +22,18 @@ def catalog_mount_rows(catalog: dict) -> list[dict]:
     projection = catalog['item_projection']
     image_base = int(catalog['image_base'])
     named = catalog.get('named_templates', {})
+    skip_ids = {int(value) for value in catalog.get('unprojected_image_ids', [])}
     rows: list[dict] = []
     sort_order = 0
+    skipped = 0
     for family in catalog['families']:
         role_model = int(family['role_model'])
         for raw_image_id in family['image_ids']:
-            sort_order += 1
             image_id = int(raw_image_id)
+            if image_id in skip_ids:
+                skipped += 1
+                continue
+            sort_order += 1
             ride_code = image_id - image_base
             known = named.get(str(image_id), {})
             template_id = int(
@@ -61,7 +66,7 @@ def catalog_mount_rows(catalog: dict) -> list[dict]:
                 'equipment_attributes': [int(value) for value in projection['equipment_attributes']],
                 'mount_model': ride_code,
             })
-    if len(rows) != int(catalog['count']):
+    if len(rows) != int(catalog['count']) - skipped:
         raise ValueError('catalog mount count mismatch')
     if len({row['template_id'] for row in rows}) != len(rows):
         raise ValueError('duplicate projected mount template id')
@@ -112,17 +117,21 @@ def main() -> None:
 
     expected_items = canonical(projected_items)
     expected_starter = canonical(projected_starter)
+    mount_count = sum(
+        1 for row in projected_items.get('items', [])
+        if isinstance(row, dict) and row.get('kind') == 'mount'
+    )
     if args.check:
         current_items = canonical(items_doc)
         current_starter = canonical(starter_doc)
         if current_items != expected_items or current_starter != expected_starter:
             raise SystemExit('mount catalog projections are stale; run tools/sync_mount_catalog.py')
-        print(f'mount catalog projections OK: {catalog["count"]} mounts')
+        print(f'mount catalog projections OK: {mount_count} mounts')
         return
 
     ITEMS.write_text(expected_items, encoding='utf-8')
     STARTER.write_text(expected_starter, encoding='utf-8')
-    print(f'synced {catalog["count"]} mount item definitions; starter grants=0')
+    print(f'synced {mount_count} mount item definitions; starter grants=0')
 
 
 if __name__ == '__main__':

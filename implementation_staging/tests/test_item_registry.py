@@ -58,7 +58,7 @@ INSTANCE_FIELDS = frozenset({
 WEAPON_TEMPLATE_ID = 10_000_1001
 ARMOUR_TEMPLATE_ID = 30_001_001
 POTION_TEMPLATE_ID = 260_000_001
-MOUNT_TEMPLATE_ID = 170_410_004
+MOUNT_TEMPLATE_ID = 170_901_002
 STONE_TEMPLATE_ID = 322_260_000
 
 
@@ -352,6 +352,7 @@ class ItemFrameReadsFromRegistryTests(unittest.TestCase):
     def test_item_frame_slot_from_registry_for_mount(self):
         settings = Settings()
         role = default_role(settings)
+        RoleStore(settings)._ensure_items(role)
         mount = next(i for i in role['items'] if i.get('template_id') == MOUNT_TEMPLATE_ID)
         mount['location'] = 'equipped'
         _, fields = decode_frame(item_frame(mount, registry=settings.item_registry))

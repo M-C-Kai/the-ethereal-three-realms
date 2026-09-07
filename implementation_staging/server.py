@@ -1882,6 +1882,13 @@ def ensure_all_mount_series_items(
     for series_id in sorted(catalog.series):
         if series_id in owned_series:
             continue
+        template_id = catalog.template_id_for_image(
+            catalog.resolve_appearance(series_id, 0)
+        )
+        try:
+            item_registry.require(template_id)
+        except KeyError:
+            continue
         items.append(create_mount_item_instance(
             instance_id=allocate_item_instance_id(role),
             series_id=series_id,

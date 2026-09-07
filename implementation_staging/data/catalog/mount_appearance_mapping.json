@@ -298,6 +298,9 @@
     40003
   ],
   "named_templates": {},
+  "unprojected_image_ids": [
+    41004
+  ],
   "deprecated_template_ids": [
     170410004
   ],
@@ -313,6 +316,7 @@
     "items.json mount rows remain compatibility projections; per-instance mount_state is authoritative for newly constructed mounts",
     "series names confirmed manually: 41002=辟邪, 41003=四不像, 41004=浣熊, 41005=赤明, 41006=谛听, 41007=玄牝, 41009=冰虚, 41010=白泽, 42004=虹琪, 42007=玄黄",
     "41008 and 42001 remain unnamed pending confirmation",
-    "legacy template 170410004 was an incorrect special mapping of 41004 as 辟邪; it is deprecated and removed so 41004 is rebuilt as 浣熊 and 41002 remains 辟邪"
+    "legacy template 170410004 was an incorrect special mapping of 41004 as 辟邪; it is deprecated and removed",
+    "41004 remains an APK riding appearance but is not projected as a local item; mount item count stays 53"
   ]
 }

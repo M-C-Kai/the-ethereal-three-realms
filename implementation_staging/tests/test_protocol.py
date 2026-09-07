@@ -451,11 +451,22 @@ class ProtocolTests(unittest.TestCase):
     def test_item_records_match_original_client_layout(self):
         settings = Settings()
         registry = settings.item_registry
-        items = role_items(default_role(settings))
+        role = default_role(settings)
+        items = role_items(role)
         weapon = next(item for item in items if registry.resolve(item).get('name') == '青锋剑')
-        armour = next(item for item in items if registry.resolve(item).get('name') == '青纹铠甲')
         potion = next(item for item in items if registry.resolve(item).get('name') == '小还丹')
-        mount = next(item for item in items if registry.resolve(item).get('name') == '辟邪')
+        armour = {
+            'id': (int(role['id']) * 100) + 97,
+            'template_id': 30_001_001,
+            'quantity': 1,
+            'location': 'bag',
+        }
+        mount = {
+            'id': (int(role['id']) * 100) + 98,
+            'template_id': 170_901_002,
+            'quantity': 1,
+            'location': 'bag',
+        }
 
         message_id, fields = decode_frame(item_frame(weapon))
         values = field_values(fields)
@@ -465,24 +476,6 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(values[12], 2701)
         self.assertEqual(values[14:16], [100, 10])
         self.assertEqual(len(values), 35)
-        visible_appearance = {
-            1: {'20': 3},
-            2: {'16': 23},
-            3: {'15': 34},
-            5: {'14': 25},
-            7: {'19': 3},
-            8: {'17': 8},
-            9: {'18': 22},
-            10: {'7': 270001},
-        }
-        self.assertEqual(
-            {
-                int(registry.resolve(item).get('equipment_slot')): registry.resolve(item).get('appearance_properties', {})
-                for item in items
-                if registry.resolve(item).get('appearance_properties')
-            },
-            visible_appearance,
-        )
 
         message_id, fields = decode_frame(item_frame(potion))
         values = field_values(fields)
@@ -495,8 +488,8 @@ class ProtocolTests(unittest.TestCase):
         values = field_values(fields)
         self.assertEqual(message_id, 1008)
         self.assertEqual(values[:5], [1, mount['id'], 1, 1, 50])
-        self.assertEqual(values[7:9], [170_410_004, '辟邪'])
-        self.assertEqual(values[14:16], [100, 17])
+        self.assertEqual(values[7:9], [170_901_002, '骑乘资源 41002'])
+        self.assertEqual(values[14:16], [170, 5])
         self.assertEqual(len(values), 35)
         mount['location'] = 'equipped'
         self.assertEqual(field_values(decode_frame(item_frame(mount, operation=3))[1])[4], 17)

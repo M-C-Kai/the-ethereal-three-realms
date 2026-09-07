@@ -36,6 +36,18 @@ class MountCatalogTests(unittest.TestCase):
         self.assertEqual(len(image_ids), 54)
         self.assertEqual(len(set(image_ids)), 54)
 
+    def test_mount_item_projection_stays_at_53(self):
+        mounts = [
+            definition
+            for definition in self.registry._items.values()
+            if definition.kind == 'mount'
+        ]
+        self.assertEqual(len(mounts), 53)
+        template_ids = {definition.template_id for definition in mounts}
+        self.assertNotIn(170410004, template_ids)
+        self.assertNotIn(170901004, template_ids)
+        self.assertIn(170901002, template_ids)
+
     def test_every_catalog_entry_has_matching_mount_item(self):
         named = self.catalog.get('named_templates', {})
         for family in self.catalog['families']:
@@ -45,8 +57,11 @@ class MountCatalogTests(unittest.TestCase):
                 ride_code = image_id - 40000
                 expected_role_model = 101000 + ((ride_code % 10000) // 1000) * 1000
                 self.assertEqual(role_model, expected_role_model)
-                if str(image_id) in named:
-                    template_id = int(named[str(image_id)]['template_id'])
+                known = named.get(str(image_id), {})
+                if image_id in {int(value) for value in self.catalog.get('unprojected_image_ids', [])}:
+                    continue
+                if 'template_id' in known:
+                    template_id = int(known['template_id'])
                 else:
                     template_id = 170900000 + ride_code
                 definition = self.registry.require(template_id)
@@ -69,18 +84,19 @@ class MountCatalogTests(unittest.TestCase):
         message_id, payload = decode_frame(mount_update_frame(role))
         self.assertEqual(message_id, 1017)
         values = field_values(payload)
-        self.assertEqual(values[0], 10001)
-        self.assertEqual(values[1], 1)
-        self.assertEqual(values[2], 22)
-        self.assertEqual(values[3], 1004)
+        self.assertEqual(values[0], 0)
+        self.assertEqual(values[1], 10001)
+        self.assertEqual(values[2], 1)
+        self.assertEqual(values[3], 22)
+        self.assertEqual(values[4], 1004)
 
     def test_mount_atlas_entries_are_generated_from_resource_catalog(self):
         entries = load_mount_atlas_entries(CATALOG)
         self.assertEqual(len(entries), 54)
         self.assertEqual(len({entry.ride_code for entry in entries}), 54)
-        bixie = next(entry for entry in entries if entry.ride_code == 1004)
-        self.assertEqual(bixie.catalog_id, 1004)
-        self.assertEqual(bixie.name, '辟邪')
+        bixie = next(entry for entry in entries if entry.ride_code == 1002)
+        self.assertEqual(bixie.catalog_id, 1002)
+        self.assertEqual(bixie.name, '骑乘资源 41002')
         self.assertEqual(bixie.mount_type, 0)
 
     def test_mount_atlas_request_requires_byte_action_30(self):
