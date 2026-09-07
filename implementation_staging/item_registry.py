@@ -206,23 +206,18 @@ def deprecated_unsupported_equipment_template_ids() -> frozenset[int]:
 
 @lru_cache(maxsize=1)
 def deprecated_mount_template_ids() -> frozenset[int]:
-    """Return all mount templates that must not be auto-owned by roles."""
+    """Return only explicitly deprecated mount templates.
+
+    The earlier 54-template blanket removal was only for cleaning the
+    accidentally granted starter atlas.  Legacy bags are now handled by
+    the one-time role-bag migration, so real acquired mount instances
+    must survive future logins.
+    """
     data = json.loads(MOUNT_APPEARANCE_MAPPING_FILE.read_text(encoding='utf-8'))
-    image_base = int(data.get('image_base', 40000))
-    projection = data.get('item_projection', {})
-    template_base = int(projection.get('template_base', 170900000))
-    named = data.get('named_templates', {})
-    template_ids: set[int] = set()
-    for family in data.get('families', []):
-        for raw_image_id in family.get('image_ids', []):
-            image_id = int(raw_image_id)
-            ride_code = image_id - image_base
-            override = named.get(str(image_id), {})
-            template_ids.add(int(override.get('template_id', template_base + ride_code)))
-    expected = int(data.get('count', len(template_ids)))
-    if len(template_ids) != expected:
-        raise ValueError(f'mount deprecated template count mismatch: expected={expected} actual={len(template_ids)}')
-    return frozenset(template_ids)
+    raw = data.get('deprecated_template_ids', [])
+    if not isinstance(raw, list):
+        raise ValueError('mount deprecated_template_ids must be a list')
+    return frozenset(int(value) for value in raw)
 
 
 def armor_property2_from_icon(icon_code: int) -> int | None:
