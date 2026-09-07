@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "source": "piaomiao_local_login.apk",
   "character_property": 22,
   "image_base": 40000,
@@ -21,12 +21,14 @@
     "equipment_attributes": [0, 0, 0, 0],
     "starter_offset_start": 20,
     "unnamed_name": "骑乘资源 {image_id}",
-    "description": "APK 骑乘资源 {image_id}。_属性22骑乘码={ride_code}，客户端骑乘人物模型={role_model}。装备后骑乘，卸下后下坐骑。"
+    "description": "APK 骑乘资源 {image_id}。属性22骑乘码={ride_code}，客户端骑乘人物模型={role_model}。装备后骑乘，卸下后下坐骑。"
   },
   "rules": {
     "role_model": "101000 + ((ride_code % 10000) // 1000) * 1000",
-    "primary_image": "image_base + (ride_code % 10000)"
+    "primary_image": "image_base + (ride_code % 10000)",
+    "stage_resolution": "use the requested stage appearance when present; otherwise inherit the nearest earlier appearance"
   },
+  "stage_names": ["normal", "spirit", "immortal", "divine"],
   "families": [
     {"role_model": 101000, "image_ids": [40001, 40002, 40003]},
     {"role_model": 102000, "image_ids": [41001, 41002, 41003, 41004, 41005, 41006, 41007, 41008, 41009, 41010, 41012, 41013, 41014, 41015, 41016, 41017, 41018, 41019, 41020, 41022, 41023, 41024, 41025, 41026, 41027, 41028, 41029, 41030, 41034, 41036, 41038]},
@@ -35,14 +37,41 @@
     {"role_model": 105000, "image_ids": [44002, 44003, 44005, 44007, 44009, 44010]},
     {"role_model": 106000, "image_ids": [45001, 45002]}
   ],
+  "mount_series": [
+    {"series_id": 41001, "name": "坐骑系列 41001", "appearances": {"normal": 41001}},
+    {"series_id": 41002, "name": "坐骑系列 41002", "appearances": {"normal": 41002, "spirit": 41012, "immortal": 41022, "divine": 44002}},
+    {"series_id": 41003, "name": "坐骑系列 41003", "appearances": {"normal": 41003, "spirit": 41013, "immortal": 41023, "divine": 44003}},
+    {"series_id": 41004, "name": "辟邪", "appearances": {"normal": 41004, "spirit": 41014, "immortal": 41024, "divine": 41034}},
+    {"series_id": 41005, "name": "坐骑系列 41005", "appearances": {"normal": 41005, "spirit": 41015, "immortal": 41025, "divine": 44005}},
+    {"series_id": 41006, "name": "坐骑系列 41006", "appearances": {"normal": 41006, "spirit": 41016, "immortal": 41026, "divine": 41036}},
+    {"series_id": 41007, "name": "坐骑系列 41007", "appearances": {"normal": 41007, "spirit": 41017, "immortal": 41027, "divine": 44007}},
+    {"series_id": 41008, "name": "坐骑系列 41008", "appearances": {"normal": 41008, "spirit": 41018, "immortal": 41028, "divine": 41038}},
+    {"series_id": 41009, "name": "坐骑系列 41009", "appearances": {"normal": 41009, "spirit": 41019, "immortal": 41029, "divine": 44009}},
+    {"series_id": 41010, "name": "坐骑系列 41010", "appearances": {"normal": 41010, "spirit": 41020, "immortal": 41030, "divine": 44010}},
+    {"series_id": 42001, "name": "坐骑系列 42001", "appearances": {"normal": 42001, "spirit": 42011, "immortal": 42021, "divine": 42031}},
+    {"series_id": 42003, "name": "坐骑系列 42003", "appearances": {"normal": 42003}},
+    {"series_id": 42004, "name": "坐骑系列 42004", "appearances": {"normal": 42004, "divine": 43002}},
+    {"series_id": 42005, "name": "坐骑系列 42005", "appearances": {"normal": 42005}},
+    {"series_id": 42006, "name": "坐骑系列 42006", "appearances": {"normal": 42006}},
+    {"series_id": 42007, "name": "坐骑系列 42007", "appearances": {"normal": 42007, "divine": 43003}},
+    {"series_id": 43001, "name": "坐骑系列 43001", "appearances": {"normal": 43001}},
+    {"series_id": 45001, "name": "坐骑系列 45001", "appearances": {"normal": 45001}},
+    {"series_id": 45002, "name": "坐骑系列 45002", "appearances": {"normal": 45002}}
+  ],
+  "unclassified_image_ids": [40001, 40002, 40003],
   "named_templates": {
     "41004": {"template_id": 170410004, "starter_offset": 16, "name": "辟邪", "ride_code": 1004, "role_model": 102000}
   },
+  "deprecated_template_ids": [],
   "notes": [
     "character property 22 stores the ride code, not the 101000..106000 role-model id",
     "ride_code = image_id - image_base for the verified primary riding layer",
+    "a mount series is the owned/equippable entity; its APK appearances are stage resources, not separate species",
+    "normal/spirit/immortal/divine are logical stages and do not require distinct images; missing stages inherit the previous appearance",
+    "42004 uses 42004 through normal/spirit/immortal and switches to 43002 at divine",
+    "42007 uses 42007 through normal/spirit/immortal and switches to 43003 at divine",
+    "40001/40002/40003 remain intentionally unclassified until stronger APK evidence is available",
     "411xx resources are rider/saddle interface layers and are not counted as separate mounts",
-    "atlas generators must derive the primary image slot and representative animation group from each role DAT instead of hardcoding them",
-    "items.json and starter_inventory.json mount rows are generated projections of this catalog and are not independent sources of truth"
+    "items.json mount rows remain compatibility projections; per-instance mount_state is authoritative for newly constructed mounts"
   ]
 }

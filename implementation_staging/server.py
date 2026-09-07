@@ -104,6 +104,10 @@ from mount_protocol import (
     load_mount_atlas_entries,
     mount_atlas_frame,
 )
+from mount_constructor import (
+    mount_ride_code_for_role,
+    mount_ride_code_from_item,
+)
 from character_update_bus import CharacterUpdateBus, CharacterUpdateEvent
 
 
@@ -2368,7 +2372,7 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
     for property_index, value in character_appearance(role, settings.item_registry).items():
         properties[property_index] = integer(value)
     properties[23] = integer(1000)
-    properties[22] = integer(int(role.get('mount_model', 0)))
+    properties[22] = integer(mount_ride_code_for_role(role, settings.item_registry))
     properties[24] = integer(1)
     properties[25] = integer(0)
     level = max(1, int(role.get('level', 1)))
@@ -6155,7 +6159,7 @@ class LocalGameServer:
                         await self._send(writer, *replies, cipher=game_cipher, lock=send_lock)
                     elif action == 4 and item is not None and item_action_location_valid(action, item):
                         resolved_item = self.settings.item_registry.resolve(item)
-                        mount_model = resolved_item.get('mount_model')
+                        mount_model = mount_ride_code_from_item(item, self.settings.item_registry)
                         if mount_model:
                             current_mount = int(active_role.get('mount_model', 0))
                             next_mount = 0 if item.get('location') == 'equipped' or current_mount else int(mount_model)
@@ -6192,7 +6196,7 @@ class LocalGameServer:
                         and item_action_location_valid(action, item)
                     ):
                         resolved_item = self.settings.item_registry.resolve(item)
-                        mount_model = resolved_item.get('mount_model')
+                        mount_model = mount_ride_code_from_item(item, self.settings.item_registry)
                         if mount_model:
                             updates: list[bytes] = []
                             for equipped in role_items(active_role):
@@ -6253,7 +6257,7 @@ class LocalGameServer:
                             )
                             continue
                         resolved_item = self.settings.item_registry.resolve(item)
-                        mount_model = resolved_item.get('mount_model')
+                        mount_model = mount_ride_code_from_item(item, self.settings.item_registry)
                         if mount_model:
                             active_role['mount_model'] = 0
                             self.roles.save()
