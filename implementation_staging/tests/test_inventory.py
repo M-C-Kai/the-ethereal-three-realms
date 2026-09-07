@@ -303,7 +303,7 @@ class EquipmentResourcePreviewGrantTests(unittest.TestCase):
             'location': 'equipped',
         }]
         after = character_appearance(role, registry)
-        self.assertEqual(after[7], definition.appearance_properties['7'])
+        self.assertEqual(after[7], (definition.appearance_properties['7'] // 10) * 10)
         self.assertNotEqual(after[7], before[7])
 
     def test_unequipping_preview_weapon_restores_property7(self):
@@ -338,10 +338,10 @@ class EquipmentResourcePreviewGrantTests(unittest.TestCase):
             ],
         }
         equipped = character_appearance(role, registry)
-        self.assertEqual(equipped[7], second.appearance_properties['7'])
+        self.assertEqual(equipped[7], (second.appearance_properties['7'] // 10) * 10)
         role['items'][1]['location'] = 'bag'
         after_one = character_appearance(role, registry)
-        self.assertEqual(after_one[7], first.appearance_properties['7'])
+        self.assertEqual(after_one[7], (first.appearance_properties['7'] // 10) * 10)
         role['items'][0]['location'] = 'bag'
         after_all = character_appearance(role, registry)
         self.assertEqual(after_all[7], BASE_CHARACTER_APPEARANCE[7])

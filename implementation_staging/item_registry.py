@@ -249,6 +249,32 @@ def battle_weapon_field2_from_icon(icon_code: int, quality: int) -> int:
     if image_id == 0 or not 0 <= quality_value <= 9:
         return 0
     return image_id * 10 + quality_value
+
+
+def weapon_effect_selector_from_strengthen_level(strengthen_level: int) -> int:
+    """Map server strengthening +0..+9 to the APK weapon effect selector.
+
+    Confirmed compatibility rule for this project: +0..+3 have no external
+    weapon effect; +4..+9 select the six bundled effect stages 1..6.
+    """
+    try:
+        level = int(strengthen_level)
+    except (TypeError, ValueError):
+        return 0
+    if not 0 <= level <= 9:
+        return 0
+    return 0 if level < 4 else level - 3
+
+
+def weapon_appearance_field_from_icon_and_strengthen(
+    icon_code: int,
+    strengthen_level: int,
+) -> int:
+    """Build live map/battle weapon code from body image and strengthen glow."""
+    image_id = battle_weapon_image_from_icon(icon_code)
+    if image_id == 0:
+        return 0
+    return image_id * 10 + weapon_effect_selector_from_strengthen_level(strengthen_level)
 # Compatibility-preview pairing only. Not an official icon→appearance mapping.
 PREVIEW_SLOT_APPEARANCE_PROPERTY = {
     2: 16,

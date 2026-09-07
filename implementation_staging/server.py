@@ -15,7 +15,7 @@ from pathlib import Path
 from item_registry import (
     ItemRegistry,
     armor_property2_from_equipment,
-    battle_weapon_field2_from_icon,
+    weapon_appearance_field_from_icon_and_strengthen,
     default_item_registry,
     deprecated_armor_template_ids,
     deprecated_mount_template_ids,
@@ -1305,9 +1305,9 @@ def equipped_weapon_battle_field2(
     if weapon is None:
         return 0
     resolved = registry.resolve(weapon)
-    return battle_weapon_field2_from_icon(
+    return weapon_appearance_field_from_icon_and_strengthen(
         int(resolved.get('icon_code', 0)),
-        int(resolved.get('quality', 0)),
+        normalized_strengthen_level(resolved),
     )
 
 
@@ -2768,6 +2768,13 @@ def character_appearance(
             )
             if armor_value is not None:
                 properties[2] = int(armor_value)
+        if slot == 10:
+            # 武器主体来自 icon 映射；外部炫光只由实例强化等级控制。
+            # +0..+3 无炫光，+4..+9 对应 APK 六档效果 1..6。
+            properties[7] = weapon_appearance_field_from_icon_and_strengthen(
+                int(resolved.get('icon_code', 0)),
+                normalized_strengthen_level(resolved),
+            )
         appearance = resolved.get('appearance_properties', {})
         if not isinstance(appearance, dict):
             continue
@@ -2775,6 +2782,9 @@ def character_appearance(
             index = int(property_index)
             if slot == 3 and index in {2, 15}:
                 # 旧铠甲 property15 以及模板内硬编码 property2 都不得覆盖资料库。
+                continue
+            if slot == 10 and index == 7:
+                # 模板中的静态 quality 外观不得覆盖实例强化等级生成的武器效果。
                 continue
             if index in BASE_CHARACTER_APPEARANCE:
                 properties[index] = int(value)

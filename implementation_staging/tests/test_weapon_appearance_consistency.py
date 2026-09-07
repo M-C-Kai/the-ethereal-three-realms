@@ -78,7 +78,7 @@ class WeaponAppearanceConsistencyTests(unittest.TestCase):
             {'id': 1, 'template_id': 100001001, 'quantity': 1, 'location': 'equipped'}
         ]}
         map_code = character_appearance(role, settings.item_registry)[7]
-        self.assertEqual(map_code, 242011)
+        self.assertEqual(map_code, 242010)
         self.assertEqual(equipped_weapon_battle_field2(role, settings.item_registry), map_code)
         _, fields = decode_frame(battle_actor_frames(role, settings)[0])
         self.assertEqual(field_values(fields)[2], map_code)
@@ -97,7 +97,7 @@ class WeaponAppearanceConsistencyTests(unittest.TestCase):
             {'id': 1, 'template_id': int(item['template_id']), 'quantity': 1, 'location': 'equipped'}
         ]}
         map_code = character_appearance(role, registry)[7]
-        self.assertEqual(map_code, 270001)
+        self.assertEqual(map_code, 270000)
         self.assertEqual(equipped_weapon_battle_field2(role, registry), map_code)
         _, fields = decode_frame(
             battle_actor_frames(role, Settings(item_registry=registry))[0]
