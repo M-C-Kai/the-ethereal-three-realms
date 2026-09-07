@@ -179,6 +179,19 @@ jobs:
                   raise SystemExit(f'weapon consistency expectation anchor changed: {old.strip()}')
               text = text.replace(old, new, 1)
           test_path.write_text(text, encoding='utf-8')
+
+          inventory_test = Path('implementation_staging/tests/test_inventory.py')
+          text = inventory_test.read_text(encoding='utf-8')
+          replacements = {
+              "        self.assertEqual(after[7], definition.appearance_properties['7'])\n": "        self.assertEqual(after[7], (definition.appearance_properties['7'] // 10) * 10)\n",
+              "        self.assertEqual(equipped[7], second.appearance_properties['7'])\n": "        self.assertEqual(equipped[7], (second.appearance_properties['7'] // 10) * 10)\n",
+              "        self.assertEqual(after_one[7], first.appearance_properties['7'])\n": "        self.assertEqual(after_one[7], (first.appearance_properties['7'] // 10) * 10)\n",
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'inventory weapon expectation anchor changed: {old.strip()}')
+              text = text.replace(old, new, 1)
+          inventory_test.write_text(text, encoding='utf-8')
           PY
 
       - name: GREEN - targeted refresh and strengthening regression
@@ -190,7 +203,9 @@ jobs:
             tests.test_weapon_appearance_consistency \
             tests.test_character_equipment_refresh \
             tests.test_character_update_bus \
-            tests.test_strengthening
+            tests.test_strengthening \
+            tests.test_inventory.EquipmentResourcePreviewGrantTests.test_equipping_preview_weapon_changes_property7 \
+            tests.test_inventory.EquipmentResourcePreviewGrantTests.test_unequipping_preview_weapon_restores_property7
 
       - name: Verify no new full-suite failures
         shell: bash
@@ -228,6 +243,7 @@ jobs:
           git add implementation_staging/item_registry.py \
                   implementation_staging/server.py \
                   implementation_staging/tests/test_weapon_appearance_consistency.py \
-                  implementation_staging/tests/test_weapon_strengthen_glow.py
+                  implementation_staging/tests/test_weapon_strengthen_glow.py \
+                  implementation_staging/tests/test_inventory.py
           git commit -m 'fix: drive weapon glow from strengthening'
           git push origin HEAD:master
