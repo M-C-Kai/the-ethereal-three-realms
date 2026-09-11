@@ -15,9 +15,9 @@ class NpcSpawnTests(unittest.TestCase):
 
     def test_config_is_npc_baseline(self):
         self.assertTrue(self.settings.npc_enabled)
-        self.assertEqual(len(self.settings.npcs), 3)
+        self.assertEqual(len(self.settings.npcs), 4)
         ids = [n["id"] for n in self.settings.npcs]
-        self.assertEqual(ids, [1900002, 1900003, 1900004])
+        self.assertEqual(ids, [1900002, 1900003, 1900004, 1900099])
 
     def test_npc_catalog_supplements_models_without_touching_config(self):
         by_id = {n["id"]: n for n in self.settings.npcs}
@@ -30,10 +30,19 @@ class NpcSpawnTests(unittest.TestCase):
             self.assertEqual(by_id[npc_id]["dat_id"], dat_id)
             self.assertEqual(by_id[npc_id]["model"], model)
         models = {n["model"] for n in self.settings.npcs}
-        self.assertEqual(len(models), 3)
+        self.assertEqual(len(models), 4)
+
+    def test_boss_green_ring_effect_actor_uses_dedicated_dat(self):
+        by_id = {n["id"]: n for n in self.settings.npcs}
+        effect = by_id[1900099]
+        self.assertEqual(effect["name"], "")
+        self.assertEqual(effect["label"], "")
+        self.assertEqual(effect["dat_id"], 3000000)
+        self.assertEqual(effect["model"], 900000)
+        self.assertEqual((effect["x"], effect["y"]), (9, 28))
 
     def test_map_npc_frames_only_on_map_58(self):
-        self.assertEqual(len(map_npc_frames(settings_for_map(self.settings, 58))), 3)
+        self.assertEqual(len(map_npc_frames(settings_for_map(self.settings, 58))), 4)
         self.assertEqual(map_npc_frames(settings_for_map(self.settings, 50000)), [])
         kunlun = settings_for_map(self.settings, 60001)
         self.assertEqual([npc.id for npc in kunlun.npcs], [1900101])
@@ -43,8 +52,8 @@ class NpcSpawnTests(unittest.TestCase):
     def test_map_enter_frames_includes_npc_frames_on_map_58(self):
         changan = settings_for_map(self.settings, 58)
         frames = map_enter_frames(changan)
-        self.assertGreaterEqual(len(frames), 3 + 1)  # 3 npc + monster (at least)
-        self.assertEqual(len(map_npc_frames(changan)), 3)
+        self.assertGreaterEqual(len(frames), 4 + 1)  # 4 npc + monster (at least)
+        self.assertEqual(len(map_npc_frames(changan)), 4)
 
 
 if __name__ == "__main__":
