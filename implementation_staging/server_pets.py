@@ -26,6 +26,7 @@ PET_REGISTRY = default_pet_registry()
 
 # Internal-only actions used to route pet requests through the base server's
 # existing 1103 response branch. They never appear on the wire.
+_INTERNAL_PET_SKILL_ACTION = 248
 _INTERNAL_PET_DETAIL_ACTION = 249
 _INTERNAL_PET_STATE_ACTION = 250
 
@@ -125,6 +126,12 @@ def pet_decode_payload(payload: bytes):
             LOG.info('PET_1127_DETAIL_REQUEST role_id=%d pet_id=%d', int(role.get('id', 0)), pet_id)
             return 1103, [byte(_INTERNAL_PET_DETAIL_ACTION), integer(pet_id)]
 
+    if message_id == 1103 and is_pet_skill_request(fields):
+        pet_id = int(fields[1].value)
+        if find_pet(role, pet_id) is not None:
+            LOG.info('PET_1103_SKILL_REQUEST role_id=%d pet_id=%d', int(role.get('id', 0)), pet_id)
+            return 1103, [byte(_INTERNAL_PET_SKILL_ACTION), integer(pet_id)]
+
     if message_id == 1130 and is_pet_state_request(fields):
         pet_id = int(fields[1].value)
         if find_pet(role, pet_id) is not None:
@@ -160,19 +167,17 @@ def pet_handle_sect_skill_request(
         )
         return (pet_detail_frame(pet, PET_REGISTRY),)
 
-    # Real C->S 1103/action=10 is the pet skill-container request. Catch it
-    # only when field[1] resolves to an owned pet; all other 1103 traffic keeps
-    # using the existing sect-skill implementation.
-    if action == 10 and len(values) >= 2:
+    if action == _INTERNAL_PET_SKILL_ACTION and len(values) >= 2:
         pet_id = int(values[1])
         pet = find_pet(role, pet_id)
-        if pet is not None:
-            LOG.info(
-                'PET_1103_SKILLS role_id=%d pet_id=%d count=0',
-                int(role.get('id', 0)),
-                pet_id,
-            )
-            return (pet_skill_list_frame(pet),)
+        if pet is None:
+            return ()
+        LOG.info(
+            'PET_1103_SKILLS role_id=%d pet_id=%d count=0',
+            int(role.get('id', 0)),
+            pet_id,
+        )
+        return (pet_skill_list_frame(pet),)
 
     if action == _INTERNAL_PET_STATE_ACTION and len(values) >= 4:
         pet_id = int(values[1])
