@@ -3751,13 +3751,14 @@ def notice_and_world(settings: Settings, role: dict[str, object] | None = None) 
     role = role if role is not None else default_role(settings)
     current_map = settings_for_role(settings, role)
     notice = encode_frame(1123, [byte(0), integer(0), string('本地服务正常')])
-    # 1110 字段 1/2 are the logical map id used by the client. The patched
-    # APK carries the matching 50000.map.ref alias for the target map.
+    # APK main/e stores 1110 as logical map id (field 0), resource map id
+    # (field 1), map flags (field 2), and map name (field 3). Task screens
+    # compare m.q() (field 0) to route map id before same-map local pathing.
     client_map_id = current_map.id
     world = encode_frame(1110, [
+        integer(client_map_id),
+        integer(client_map_id),
         integer(0),
-        integer(client_map_id),
-        integer(client_map_id),
         string(current_map.name),
     ])
     return [notice, world]
