@@ -117,13 +117,26 @@ from mount_constructor import (
     mount_ride_code_from_item,
 )
 from consignment_protocol import (
-    CONSIGNMENT_ACTION_BROWSE,
+    CONSIGNMENT_ACTION_LIST,
     CONSIGNMENT_ITEM_CATEGORIES,
+    CONSIGNMENT_OBJECT_ITEM,
+    CONSIGNMENT_OBJECT_PET,
+    consignment_category_counts_frame,
     consignment_category_frame,
-    empty_consignment_result_frame,
+    consignment_market_list_frame,
+    consignment_my_listings_frame,
+    consignment_remove_market_frame,
+    consignment_remove_owned_frame,
     is_consignment_browse_request,
+    is_consignment_buy_request,
     is_consignment_category_request,
+    is_consignment_list_item_request,
+    is_consignment_market_list_request,
+    is_consignment_my_listings_request,
+    is_consignment_unlist_request,
+    wire_record_from_listing,
 )
+from consignment_service import ConsignmentService
 from character_update_bus import CharacterUpdateBus, CharacterUpdateEvent
 
 
@@ -2904,7 +2917,7 @@ def role_entry_frames(settings: Settings, role: dict[str, object]) -> tuple[byte
         character_extension_info(),
         life_skill_list_frame(role, settings),
         sect_skill_list(role, settings),
-        *(item_frame(item) for item in role_items(role)),
+        *(item_frame(item) for item in role_items(role) if item.get('location', 'bag') != 'consignment'),
         gather_catalog_frame(gather_targets),
         *(gather_spawn_frame(target) for target in gather_targets),
     )
@@ -5464,6 +5477,12 @@ class LocalGameServer:
         # Never persisted to the role; cleared implicitly on disconnect.
         current_shop_mode = 0
         current_shop_category = 0
+        # Native 1138 market state is connection-local; durable listings live in
+        # ConsignmentService/consignment_listings.json. The service reloads the
+        # listing file before each operation so separate client connections see
+        # each other's completed transactions without sharing mutable caches.
+        current_consignment_category = 0
+        consignment = ConsignmentService(self.roles, self.settings.item_registry)
         # Connection-level gathering state (one active 2027 gather at most).
         gathering = ConnectionGathering()
         try:
@@ -6728,34 +6747,90 @@ class LocalGameServer:
                                 )
 
                 elif message_id == 1138 and fields:
+                    role_id = int(active_role.get('id', 0)) if active_role is not None else 0
                     if is_consignment_category_request(fields):
-                        LOG.info(
-                            'CONSIGNMENT_CATEGORIES user=%r role_id=%d count=%d',
-                            username,
-                            int(active_role.get('id', 0)) if active_role is not None else 0,
-                            len(CONSIGNMENT_ITEM_CATEGORIES),
-                        )
-                        await self._send(
-                            writer,
-                            consignment_category_frame(),
-                            cipher=game_cipher,
-                            lock=send_lock,
-                        )
+                        LOG.info('CONSIGNMENT_CATEGORIES user=%r role_id=%d count=%d', username, role_id, len(CONSIGNMENT_ITEM_CATEGORIES))
+                        await self._send(writer, consignment_category_frame(), cipher=game_cipher, lock=send_lock)
+
                     elif is_consignment_browse_request(fields):
-                        category_id = int(fields[1].value)
-                        LOG.info(
-                            'CONSIGNMENT_BROWSE user=%r role_id=%d category_id=%d category=%r',
-                            username,
-                            int(active_role.get('id', 0)) if active_role is not None else 0,
-                            category_id,
-                            CONSIGNMENT_ITEM_CATEGORIES[category_id],
-                        )
-                        await self._send(
-                            writer,
-                            empty_consignment_result_frame(CONSIGNMENT_ACTION_BROWSE),
-                            cipher=game_cipher,
-                            lock=send_lock,
-                        )
+                        current_consignment_category = int(fields[1].value)
+                        total = consignment.category_count(current_consignment_category)
+                        LOG.info('CONSIGNMENT_BROWSE user=%r role_id=%d category_id=%d category=%r active=%d', username, role_id, current_consignment_category, CONSIGNMENT_ITEM_CATEGORIES[current_consignment_category], total)
+                        # APK screen 44 consumes action-13 as a count/filter vector.
+                        # Actual item rows are requested afterwards (action 0/23)
+                        # and arrive as native action-1 eight-field records.
+                        await self._send(writer, consignment_category_counts_frame([total]), cipher=game_cipher, lock=send_lock)
+
+                    elif is_consignment_market_list_request(fields):
+                        rows = consignment.search(current_consignment_category)
+                        records = [wire_record_from_listing(row) for row in rows]
+                        LOG.info('CONSIGNMENT_MARKET_LIST user=%r role_id=%d category=%d count=%d request_action=%d', username, role_id, current_consignment_category, len(records), int(fields[0].value))
+                        await self._send(writer, consignment_market_list_frame(records), cipher=game_cipher, lock=send_lock)
+
+                    elif is_consignment_my_listings_request(fields):
+                        requested_role = int(fields[1].value)
+                        if active_role is None or requested_role != role_id:
+                            LOG.warning('CONSIGNMENT_MY_REJECT user=%r role_id=%d requested=%d', username, role_id, requested_role)
+                        else:
+                            rows = consignment.my_listings(role_id)
+                            await self._send(writer, consignment_my_listings_frame([wire_record_from_listing(row) for row in rows]), cipher=game_cipher, lock=send_lock)
+
+                    elif is_consignment_list_item_request(fields):
+                        item_id = int(fields[1].value); object_type = int(fields[2].value); requested_role = int(fields[3].value)
+                        quantity = int(fields[4].value); unit_price = int(fields[5].value)
+                        if active_role is None or requested_role != role_id:
+                            await self._send(writer, top_message_frame('寄售角色信息已失效'), cipher=game_cipher, lock=send_lock)
+                        elif object_type == CONSIGNMENT_OBJECT_PET:
+                            await self._send(writer, top_message_frame('宠物寄售暂未开放'), cipher=game_cipher, lock=send_lock)
+                        elif object_type != CONSIGNMENT_OBJECT_ITEM:
+                            await self._send(writer, top_message_frame('该对象暂不支持寄售'), cipher=game_cipher, lock=send_lock)
+                        else:
+                            result = consignment.list_item(active_role, item_id, quantity, unit_price)
+                            if not result.ok:
+                                LOG.info('CONSIGNMENT_LIST_REJECT user=%r role_id=%d item_id=%d reason=%s', username, role_id, item_id, result.reason)
+                                await self._send(writer, top_message_frame('寄售失败：' + result.reason), cipher=game_cipher, lock=send_lock)
+                            else:
+                                updates = []
+                                if result.removed_from_bag:
+                                    # Existing bag discard path confirms 1009/short(3)/item-id
+                                    # is the APK-native removal notification.
+                                    updates.append(encode_frame(1009, [short(3), integer(item_id)]))
+                                elif result.source_item is not None:
+                                    updates.append(item_frame(result.source_item, self.settings.item_registry, operation=3))
+                                own = consignment.my_listings(role_id)
+                                updates.append(consignment_my_listings_frame([wire_record_from_listing(row) for row in own], action=CONSIGNMENT_ACTION_LIST))
+                                LOG.info('CONSIGNMENT_LIST_SUCCESS user=%r role_id=%d item_id=%d quantity=%d unit_price=%d', username, role_id, int(result.listing['item_instance_id']), quantity, unit_price)
+                                await self._send(writer, *updates, cipher=game_cipher, lock=send_lock)
+
+                    elif is_consignment_unlist_request(fields):
+                        item_id = int(fields[1].value); object_type = int(fields[2].value); requested_role = int(fields[3].value)
+                        if active_role is None or requested_role != role_id or object_type != CONSIGNMENT_OBJECT_ITEM:
+                            await self._send(writer, top_message_frame('下架请求无效'), cipher=game_cipher, lock=send_lock)
+                        else:
+                            result = consignment.unlist(active_role, item_id)
+                            if not result.ok:
+                                await self._send(writer, top_message_frame('下架失败：' + result.reason), cipher=game_cipher, lock=send_lock)
+                            else:
+                                await self._send(writer, consignment_remove_owned_frame(item_id), item_frame(result.item, self.settings.item_registry, operation=3), cipher=game_cipher, lock=send_lock)
+
+                    elif is_consignment_buy_request(fields):
+                        item_id = int(fields[1].value); requested_buyer = int(fields[2].value)
+                        if active_role is None or requested_buyer != role_id:
+                            await self._send(writer, top_message_frame('购买请求无效'), cipher=game_cipher, lock=send_lock)
+                        else:
+                            result = consignment.buy(active_role, item_id)
+                            if not result.ok:
+                                await self._send(writer, top_message_frame('购买失败：' + result.reason), cipher=game_cipher, lock=send_lock)
+                            else:
+                                silver = int(active_role.get('currencies', {}).get('silver', 0))
+                                await self._send(
+                                    writer,
+                                    consignment_remove_market_frame(item_id),
+                                    item_frame(result.item, self.settings.item_registry, operation=3),
+                                    character_appearance_frame(role_id, {50: silver}),
+                                    cipher=game_cipher, lock=send_lock,
+                                )
+                                LOG.info('CONSIGNMENT_BUY_SUCCESS user=%r buyer_role_id=%d item_id=%d total=%d silver=%d', username, role_id, item_id, result.total_price, silver)
                     else:
                         LOG.info('ignored consignment message=1138 values=%r', values)
 
