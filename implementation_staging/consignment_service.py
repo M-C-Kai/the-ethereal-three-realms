@@ -37,6 +37,7 @@ class ConsignmentResult:
     ok: bool
     reason: str = ''
     listing: dict[str, object] | None = None
+    transaction: dict[str, object] | None = None
     item: dict[str, object] | None = None
     source_item: dict[str, object] | None = None
     removed_from_bag: bool = False
@@ -77,14 +78,22 @@ def _set_silver(role: dict[str, object], value: int) -> None:
     currencies['silver'] = max(0, min(MAX_SILVER, int(value)))
 
 
-def _restore_role_in_place(role: dict[str, object], snapshot: dict[str, object]) -> None:
-    """Restore a role while retaining existing item object identities when possible."""
-    current_items = _role_items(role)
-    current_by_id = {
+def _restore_role_in_place(
+    role: dict[str, object],
+    snapshot: dict[str, object],
+    item_pool: Mapping[int, dict[str, object]] | None = None,
+) -> None:
+    """Restore a role and preserve item identity even after cross-role moves."""
+    # A failed purchase may already have moved the original escrow object from
+    # seller -> buyer.  A role-local lookup cannot find it when restoring the
+    # seller, so _persist supplies one cross-role object pool captured before
+    # either role is restored.
+    current_by_id: dict[int, dict[str, object]] = dict(item_pool or {})
+    current_by_id.update({
         int(item.get('id', 0)): item
-        for item in current_items
+        for item in _role_items(role)
         if int(item.get('id', 0)) > 0
-    }
+    })
     restored_items: list[dict[str, object]] = []
     snapshot_items = snapshot.get('items', [])
     if isinstance(snapshot_items, list):
@@ -146,7 +155,9 @@ class ConsignmentService:
         self.data: dict[str, object] = {
             'next_listing_id': 1,
             'next_item_instance_id': 1,
+            'next_transaction_id': 1,
             'listings': [],
+            'transactions': [],
         }
         self._reload()
 
@@ -159,8 +170,20 @@ class ConsignmentService:
             return
         if not isinstance(loaded, dict) or not isinstance(loaded.get('listings'), list):
             return
+        if 'transactions' in loaded and not isinstance(loaded.get('transactions'), list):
+            return
         loaded.setdefault('next_listing_id', 1)
         loaded.setdefault('next_item_instance_id', 1)
+        transactions = loaded.setdefault('transactions', [])
+        max_transaction_id = max(
+            (int(row.get('transaction_id', 0)) for row in transactions if isinstance(row, dict)),
+            default=0,
+        )
+        loaded['next_transaction_id'] = max(
+            int(loaded.get('next_transaction_id', 1)),
+            max_transaction_id + 1,
+            1,
+        )
         self.data = loaded
 
     def _save(self) -> None:
@@ -178,8 +201,17 @@ class ConsignmentService:
             self.role_store.save()
             self._save()
         except Exception:
+            # Capture original objects across every participating role before
+            # restoring either side. A buy may have already moved the exact
+            # escrow object from seller to buyer.
+            item_pool: dict[int, dict[str, object]] = {}
+            for role, _snapshot in role_snapshots:
+                for current_item in _role_items(role):
+                    current_id = int(current_item.get('id', 0))
+                    if current_id > 0:
+                        item_pool[current_id] = current_item
             for role, snapshot in role_snapshots:
-                _restore_role_in_place(role, snapshot)
+                _restore_role_in_place(role, snapshot, item_pool)
             self.data = copy.deepcopy(data_snapshot)
             # Best-effort repair of persistent state. Never mask the original failure.
             try:
@@ -194,6 +226,13 @@ class ConsignmentService:
         if not isinstance(rows, list):
             rows = []
             self.data['listings'] = rows
+        return rows  # type: ignore[return-value]
+
+    def _transactions(self) -> list[dict[str, object]]:
+        rows = self.data.setdefault('transactions', [])
+        if not isinstance(rows, list):
+            rows = []
+            self.data['transactions'] = rows
         return rows  # type: ignore[return-value]
 
     def _all_roles(self):
@@ -249,6 +288,16 @@ class ConsignmentService:
         existing = [int(row.get('listing_id', 0)) for row in self._listings()]
         value = max(max(existing, default=0) + 1, int(self.data.get('next_listing_id', 1)), 1)
         self.data['next_listing_id'] = value + 1
+        return value
+
+    def _next_transaction_id(self) -> int:
+        existing = [int(row.get('transaction_id', 0)) for row in self._transactions()]
+        value = max(
+            max(existing, default=0) + 1,
+            int(self.data.get('next_transaction_id', 1)),
+            1,
+        )
+        self.data['next_transaction_id'] = value + 1
         return value
 
     def _tradable(self, item: Mapping[str, object]) -> bool:
@@ -355,6 +404,49 @@ class ConsignmentService:
     def category_count(self, category_id: int) -> int:
         return len(self.search(category_id))
 
+    def order_history(
+        self,
+        role_id: int,
+        *,
+        status: str | None = None,
+    ) -> list[dict[str, object]]:
+        """Return one seller's complete listing lifecycle."""
+        self._reload()
+        if status is not None and status not in VALID_STATUSES:
+            raise ValueError(f'unknown listing status: {status}')
+        target = int(role_id)
+        rows = [
+            row
+            for row in self._listings()
+            if int(row.get('seller_role_id', 0)) == target
+            and (status is None or row.get('status') == status)
+        ]
+        return sorted(rows, key=lambda row: int(row.get('listing_id', 0)))
+
+    def trade_history(
+        self,
+        role_id: int,
+        *,
+        side: str = 'all',
+    ) -> list[dict[str, object]]:
+        """Return durable successful-trade receipts for a buyer or seller."""
+        self._reload()
+        if side not in {'all', 'seller', 'buyer'}:
+            raise ValueError(f'unknown trade history side: {side}')
+        target = int(role_id)
+        rows: list[dict[str, object]] = []
+        for row in self._transactions():
+            seller_match = int(row.get('seller_role_id', 0)) == target
+            buyer_match = int(row.get('buyer_role_id', 0)) == target
+            if side == 'seller' and not seller_match:
+                continue
+            if side == 'buyer' and not buyer_match:
+                continue
+            if side == 'all' and not (seller_match or buyer_match):
+                continue
+            rows.append(row)
+        return sorted(rows, key=lambda row: int(row.get('transaction_id', 0)))
+
     def unlist(self, seller: dict[str, object], item_instance_id: int) -> ConsignmentResult:
         self._reload()
         listing = self._listing(item_instance_id)
@@ -406,12 +498,37 @@ class ConsignmentService:
         _role_items(seller).remove(item)
         item['location'] = 'bag'
         _role_items(buyer).append(item)
+        completed_at = int(time.time())
         listing['status'] = 'sold'
         listing['buyer_role_id'] = int(buyer.get('id', 0))
-        listing['sold_at'] = int(time.time())
+        listing['sold_at'] = completed_at
+
+        transaction = {
+            'transaction_id': self._next_transaction_id(),
+            'listing_id': int(listing.get('listing_id', 0)),
+            'status': 'completed',
+            'seller_role_id': int(seller.get('id', 0)),
+            'seller_name': str(seller.get('name', listing.get('seller_name', ''))),
+            'buyer_role_id': int(buyer.get('id', 0)),
+            'buyer_name': str(buyer.get('name', '')),
+            'item_instance_id': int(listing.get('item_instance_id', 0)),
+            'template_id': int(listing.get('template_id', 0)),
+            'display_name': str(listing.get('display_name', item.get('name', ''))),
+            'quantity': int(listing.get('quantity', 1)),
+            'unit_price': int(listing.get('unit_price', 0)),
+            'total_price': total,
+            'completed_at': completed_at,
+        }
+        self._transactions().append(transaction)
 
         self._persist(
             [(buyer, buyer_snapshot), (seller, seller_snapshot)],
             data_snapshot,
         )
-        return ConsignmentResult(True, listing=listing, item=item, total_price=total)
+        return ConsignmentResult(
+            True,
+            listing=listing,
+            transaction=transaction,
+            item=item,
+            total_price=total,
+        )

@@ -176,6 +176,8 @@ class TradeSystemTests(unittest.TestCase):
         self.assertEqual(self.seller['currencies']['silver'], 10_000)
         self.assertEqual(self.buyer['currencies']['silver'], 10_000)
         self.assertIn(item, self.seller['items'])
+        restored = next(row for row in self.seller['items'] if int(row['id']) == item_id)
+        self.assertIs(restored, item)
         self.assertNotIn(item, self.buyer['items'])
         self.assertEqual(item['location'], 'consignment')
         self.assertEqual([row['item_instance_id'] for row in self.service.search(27)], [item_id])

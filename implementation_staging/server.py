@@ -7187,9 +7187,14 @@ class LocalGameServer:
                                     character_appearance_frame(role_id, {50: silver}),
                                     cipher=game_cipher, lock=send_lock,
                                 )
+                                transaction_id = int(
+                                    (result.transaction or {}).get('transaction_id', 0)
+                                )
                                 LOG.info(
-                                    'CONSIGNMENT_BUY_SUCCESS user=%r buyer_role_id=%d item_id=%d total=%d silver=%d',
-                                    username, role_id, item_id, result.total_price, silver,
+                                    'TRADE_COMPLETED transaction_id=%d user=%r buyer_role_id=%d '
+                                    'item_id=%d total=%d silver=%d',
+                                    transaction_id, username, role_id, item_id,
+                                    result.total_price, silver,
                                 )
                     else:
                         LOG.info(
