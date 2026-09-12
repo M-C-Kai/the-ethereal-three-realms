@@ -17,6 +17,8 @@ import time
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+import fuyuan
+
 from item_registry import (
     ItemRegistry,
     armor_property2_from_equipment,
@@ -1339,7 +1341,7 @@ def combat_stats(
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
     equipment = equipped_attribute_totals(role, registry)
     return CombatStats(
-        max_hp=100 + ((level - 1) * 10) + base_stats[1],
+        max_hp=fuyuan.hp_limit(role, 100 + ((level - 1) * 10) + base_stats[1]),
         physical_attack=(10 + base_stats[0] + ((level - 1) * 2) + equipment[0]),
         physical_defence=base_stats[1] + (level - 1) + equipment[1],
     )
@@ -1414,13 +1416,15 @@ class LocalBattleState:
 
     The APK owns rendering and animation; the compatibility server only keeps
     enough state to answer the confirmed 1040/1041/1042 messages for one
-    player and one monster.  Nothing is persisted to the role store.
+    player and up to ten monsters.  Nothing is persisted to the role store.
     """
 
     active: bool = False
     round: int = 1
     player_id: int = 0
     monster_id: int = 0
+    monster_ids: tuple[int, ...] = ()
+    monster_hp_by_id: dict[int, int] = field(default_factory=dict)
     player_hp: int = 100
     player_max_hp: int = 100
     monster_hp: int = 100
@@ -1452,16 +1456,30 @@ class LocalBattleState:
         player_id: int,
         monster_id: int,
         player_stats: CombatStats | None = None,
+        *,
+        monster_ids: tuple[int, ...] | list[int] | None = None,
     ) -> None:
         selected_stats = player_stats or CombatStats(100, 10, 0)
+        encounter_ids = tuple(dict.fromkeys(
+            int(item) for item in (monster_ids if monster_ids is not None else (monster_id,))
+        ))
+        if int(monster_id) not in encounter_ids:
+            encounter_ids = (int(monster_id),) + encounter_ids
+        if not 1 <= len(encounter_ids) <= 10:
+            raise ValueError('battle encounter requires between 1 and 10 monsters')
         self.active = True
         self.round = 1
         self.player_id = player_id
         self.monster_id = monster_id
+        self.monster_ids = encounter_ids
         self.player_max_hp = max(1, selected_stats.max_hp)
         self.player_hp = self.player_max_hp
         self.monster_max_hp = 100
         self.monster_hp = self.monster_max_hp
+        self.monster_hp_by_id = {
+            current_id: self.monster_max_hp
+            for current_id in self.monster_ids
+        }
         self.player_attack = max(1, selected_stats.physical_attack)
         self.player_defence = max(0, selected_stats.physical_defence)
         self.monster_attack = 10
@@ -1510,12 +1528,30 @@ class LocalBattleState:
         self.set_escape_guard(self.map_id, self.monster_id, self.player_id, origin)
         return True
 
-    def apply_basic_attack(self, damage: int = 10) -> bool:
-        """Apply one deterministic local attack and report whether it ended."""
+    def monster_hp_for(self, monster_id: int) -> int:
+        wanted = int(monster_id)
+        if wanted == self.monster_id:
+            return self.monster_hp
+        return int(self.monster_hp_by_id.get(wanted, 0))
+
+    def all_monsters_defeated(self) -> bool:
+        return bool(self.monster_ids) and all(
+            self.monster_hp_for(monster_id) <= 0
+            for monster_id in self.monster_ids
+        )
+
+    def apply_basic_attack(self, damage: int = 10, *, target_id: int | None = None) -> bool:
+        """Apply one deterministic local attack and report whether all monsters died."""
         if not self.active:
             return True
-        self.monster_hp = max(0, self.monster_hp - max(1, damage))
-        return self.monster_hp == 0
+        wanted = self.monster_id if target_id is None else int(target_id)
+        if wanted not in self.monster_ids:
+            return False
+        remaining = max(0, self.monster_hp_for(wanted) - max(1, damage))
+        self.monster_hp_by_id[wanted] = remaining
+        if wanted == self.monster_id:
+            self.monster_hp = remaining
+        return self.all_monsters_defeated()
 
     def player_basic_attack_damage(self) -> int:
         return max(1, self.player_attack - (self.monster_defence // 2))
@@ -1582,6 +1618,19 @@ ROLE_STATS = (
 def is_player_escape_command(command_code: int) -> bool:
     """C->S 1041 command 6 is escape; command 10 is quit-spectator."""
     return int(command_code) == 6
+
+
+def battle_command_target_id(
+    values: list[object],
+    state: LocalBattleState,
+) -> int | None:
+    """Read the APK-confirmed 1041 attack target at field index four."""
+    if len(values) <= 4:
+        return None
+    target_id = int(values[4])
+    if target_id not in state.monster_ids or state.monster_hp_for(target_id) <= 0:
+        return None
+    return target_id
 
 
 def should_suppress_escape_retrigger(
@@ -1710,6 +1759,7 @@ def default_role(settings: Settings) -> dict[str, object]:
     role['mailbox'] = starter_mail(int(role['id']))
     role['mailbox_initialized'] = True
     role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
+    fuyuan.ensure_state(role)
     return role
 
 
@@ -2358,6 +2408,8 @@ class RoleStore:
         assert isinstance(roles, list)
         changed = False
         for role in roles:
+            if fuyuan.settle(role):
+                changed = True
             if 'experience' not in role:
                 role['experience'] = 0
                 changed = True
@@ -2477,6 +2529,7 @@ class RoleStore:
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
         role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
+        fuyuan.ensure_state(role)
         roles.append(role)
         accounts = self.data['accounts']
         assert isinstance(accounts, dict)
@@ -2592,7 +2645,7 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
         properties[property_index] = integer(value)
     properties[23] = integer(1000)
     properties[22] = integer(mount_ride_code_for_role(role, settings.item_registry))
-    properties[24] = integer(1)
+    properties[24] = integer(fuyuan.tier(role))
     properties[25] = integer(0)
     level = max(1, int(role.get('level', 1)))
     experience = max(0, int(role.get('experience', 0)))
@@ -2605,7 +2658,7 @@ def player_info(settings: Settings, role: dict[str, object] | None = None) -> by
     raw_stats = [int(value) for value in list(role.get('stats', []))]
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
     display_stats = effective_character_stats(role, settings.item_registry)
-    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_hp = fuyuan.hp_limit(role, 100 + ((level - 1) * 10) + base_stats[1])
     max_mp = 50 + ((level - 1) * 5) + base_stats[2]
     properties[40] = integer(max_hp)
     properties[41] = integer(max_hp)
@@ -2871,7 +2924,7 @@ def character_panel_frames(
     raw_stats = [int(value) for value in list(role.get('stats', []))]
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
     display_stats = effective_character_stats(role, registry)
-    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_hp = fuyuan.hp_limit(role, 100 + ((level - 1) * 10) + base_stats[1])
     max_mp = 50 + ((level - 1) * 5) + base_stats[2]
 
     attribute_thresholds = [max_hp, max_mp, *display_stats]
@@ -2913,9 +2966,9 @@ def role_entry_frames(settings: Settings, role: dict[str, object]) -> tuple[byte
 def bag_capacity(role: dict[str, object]) -> int:
     """Return the persisted personal-inventory slot limit."""
     try:
-        return max(0, int(role.get('bag_capacity', DEFAULT_BAG_CAPACITY)))
+        return max(0, int(role.get('bag_capacity', DEFAULT_BAG_CAPACITY))) + fuyuan.capacity_bonus(role)
     except (TypeError, ValueError):
-        return DEFAULT_BAG_CAPACITY
+        return DEFAULT_BAG_CAPACITY + fuyuan.capacity_bonus(role)
 
 
 def bag_item_count(role: dict[str, object]) -> int:
@@ -3100,6 +3153,18 @@ def character_appearance_frame(role_id: int, properties: dict[int, int]) -> byte
     return encode_frame(1017, fields)
 
 
+def fuyuan_update_frame(role: dict[str, object]) -> bytes:
+    """Refresh native property slots without restarting the 1006 login flow."""
+    properties = {
+        24: fuyuan.tier(role),
+        40: combat_stats(role).max_hp,
+        41: combat_stats(role).max_hp,
+        50: normalized_currency_balance(role.get('currencies', {}).get('silver', 0)),
+        62: bag_capacity(role),
+    }
+    return character_appearance_frame(int(role['id']), properties)
+
+
 def level_experience_required(level: int) -> int:
     """Return the deterministic local EXP cost for the next level."""
     return max(100, max(1, int(level)) * 100)
@@ -3110,7 +3175,7 @@ def role_level_properties(role: dict[str, object]) -> dict[int, int]:
     level = max(1, min(MAX_ROLE_LEVEL, int(role.get('level', 1))))
     raw_stats = [int(value) for value in list(role.get('stats', []))]
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
-    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_hp = fuyuan.hp_limit(role, 100 + ((level - 1) * 10) + base_stats[1])
     max_mp = 50 + ((level - 1) * 5) + base_stats[2]
     return {
         11: level,
@@ -3199,7 +3264,7 @@ def character_equipment_refresh_frames(
     raw_stats = [int(value) for value in list(role.get('stats', []))]
     base_stats = [max(0, value) for value in (raw_stats + [10, 10, 10, 10, 10])[:5]]
     display_stats = effective_character_stats(role, registry)
-    max_hp = 100 + ((level - 1) * 10) + base_stats[1]
+    max_hp = fuyuan.hp_limit(role, 100 + ((level - 1) * 10) + base_stats[1])
     max_mp = 50 + ((level - 1) * 5) + base_stats[2]
 
     properties = character_appearance(role, registry)
@@ -3628,7 +3693,7 @@ def apply_battle_rewards(
 ) -> tuple[dict[str, object] | None, bool]:
     """Persist one trial victory and return the changed item plus level-up flag."""
     old_level = max(1, int(role.get('level', 1)))
-    role['experience'] = max(0, int(role.get('experience', 0))) + max(0, experience)
+    role['experience'] = max(0, int(role.get('experience', 0))) + fuyuan.experience_reward(role, experience)
     if bool(role.get('auto_level', True)):
         while int(role.get('level', 1)) < MAX_ROLE_LEVEL and apply_one_level(role):
             pass
@@ -3812,25 +3877,37 @@ def map_actor_directions_frame(items: list[tuple[int, int]]) -> bytes:
 
 
 def map_monster_frame(definition: MapDefinition) -> bytes:
-    """Return the verified 1126 actor-spawn frame for the local monster.
+    """Return the verified 1126 actor-spawn frame for local monsters.
 
     ``pmsj.work.main.e.Q`` decodes subtype 0 as a list of generic map actors:
     field 0 is the subtype, field 1 the count, then each record contains
     id/x/y/raw-model/name.  The client adds 0x200b20 to raw-model before
     loading the sprite resource.
     """
-    monster = definition.monster
-    if monster is None:
+    if not definition.monsters:
         raise ValueError(f'map {definition.id} has no monster')
-    return encode_frame(1126, [
+    fields = [
         byte(0),
-        byte(1),
-        integer(monster.id),
-        integer(monster.x),
-        integer(monster.y),
-        integer(monster.model),
-        string(monster.name),
-    ])
+        byte(len(definition.monsters)),
+    ]
+    for monster in definition.monsters:
+        fields.extend((
+            integer(monster.id),
+            integer(monster.x),
+            integer(monster.y),
+            integer(monster.model),
+            string(monster.name),
+        ))
+    return encode_frame(1126, fields)
+
+
+def map_monster_for_object_id(
+    definition: MapDefinition,
+    object_id: int,
+) -> MapActorDefinition | None:
+    """Resolve any configured monster instead of only the legacy first one."""
+    wanted = int(object_id)
+    return next((monster for monster in definition.monsters if monster.id == wanted), None)
 
 
 def map_portal_frame(portal: PortalDefinition) -> bytes:
@@ -4271,25 +4348,25 @@ def battle_actor_frames(
     trace_id: str = '',
     state: LocalBattleState | None = None,
 ) -> list[bytes]:
-    """Return one player and one monster record for the local battle probe."""
+    """Return one player and every configured monster for the local battle."""
     if isinstance(settings, MapDefinition):
-        monster = settings.monster
-        if monster is None:
+        monsters = settings.monsters
+        if not monsters:
             raise ValueError(f'map {settings.id} has no battle monster')
         default_role_model = 2000
         default_role_name = '本地侠客'
     else:
-        monster = MapActorDefinition(
+        monsters = (MapActorDefinition(
             id=int(settings.monster_id),
             name=str(settings.monster_name),
             model=int(settings.monster_model),
             x=int(settings.monster_x),
             y=int(settings.monster_y),
             direction=int(settings.monster_direction),
-        )
+        ),)
         default_role_model = settings.role_model
         default_role_name = settings.role_name
-    return [
+    frames = [
         battle_actor_frame(
             actor_id=int(role['id']),
             model=int(role.get('model', default_role_model)),
@@ -4305,19 +4382,23 @@ def battle_actor_frames(
             current_hp=state.player_hp if state is not None else 100,
             max_hp=state.player_max_hp if state is not None else 100,
             trace_id=trace_id,
-        ),
+        )
+    ]
+    frames.extend(
         battle_actor_frame(
             actor_id=monster.id,
             model=monster.model,
             name=monster.name,
             kind=2,
             side_code=1,
-            slot=1,
-            current_hp=state.monster_hp if state is not None else 100,
+            slot=slot,
+            current_hp=state.monster_hp_for(monster.id) if state is not None else 100,
             max_hp=state.monster_max_hp if state is not None else 100,
             trace_id=trace_id,
-        ),
-    ]
+        )
+        for slot, monster in enumerate(monsters, start=1)
+    )
+    return frames
 
 
 def battle_actor_update_frame(
@@ -4785,26 +4866,37 @@ def battle_round_action_frames(
     state: LocalBattleState,
     command_code: int,
     round_number: int | None = None,
+    *,
+    target_id: int | None = None,
 ) -> tuple[list[bytes], bool]:
     """Resolve one supported player command and keep wire HP effects in sync."""
     action_round = state.round if round_number is None else round_number
     if command_code == 1:
+        selected_target = state.monster_id if target_id is None else int(target_id)
+        if selected_target not in state.monster_ids or state.monster_hp_for(selected_target) <= 0:
+            return [], False
         player_damage = state.player_basic_attack_damage()
-        monster_defeated = state.apply_basic_attack(player_damage)
-        frames = [battle_action_frame(state, action_round, damage=player_damage)]
+        monster_defeated = state.apply_basic_attack(player_damage, target_id=selected_target)
+        frames = [battle_action_frame(
+            state,
+            action_round,
+            target_id=selected_target,
+            damage=player_damage,
+        )]
     elif command_code == 2:
         monster_defeated = False
         frames = [battle_defend_frame(state, action_round)]
     else:
         return [], False
 
-    if not monster_defeated:
+    counterattacker = state.monster_id if command_code == 2 else selected_target
+    if not monster_defeated and state.monster_hp_for(counterattacker) > 0:
         monster_damage = state.monster_basic_attack_damage(defending=command_code == 2)
         state.player_hp = max(0, state.player_hp - monster_damage)
         frames.append(battle_action_frame(
             state,
             action_round,
-            actor_id=state.monster_id,
+            actor_id=counterattacker,
             target_id=state.player_id,
             damage=monster_damage,
             label='妖兽攻击',
@@ -4942,7 +5034,7 @@ def map_enter_frames(definition: MapDefinition, role_id: int | None = None) -> l
         map_action(definition, 14, role_id=role_id),
         map_action(definition, 105, role_id=role_id),
     ]
-    if definition.monster is not None:
+    if definition.monsters:
         frames.append(map_monster_frame(definition))
     frames.extend(map_portal_frames(definition))
     frames.extend(map_npc_frames(definition))
@@ -4950,8 +5042,11 @@ def map_enter_frames(definition: MapDefinition, role_id: int | None = None) -> l
     # 1126 subtype=1 (local-compat extension): the client finds the actor by id in
     # the same generic container and rotates it in place.  The direction frame is
     # never appended to the subtype=0 record (that would break its fixed field read).
-    if definition.monster is not None:
-        frames.append(map_actor_direction_frame(definition.monster.id, definition.monster.direction))
+    if definition.monsters:
+        frames.append(map_actor_directions_frame([
+            (monster.id, monster.direction)
+            for monster in definition.monsters
+        ]))
     frames.extend(
         map_actor_direction_frame(portal.id, portal.direction)
         for portal in definition.portals
@@ -5246,11 +5341,17 @@ class LocalGameServer:
         cipher: GameCipher,
         send_lock: asyncio.Lock,
         peer: object,
+        active_role_getter=None,
     ) -> None:
         nonce = 0
         try:
             while True:
                 await asyncio.sleep(self.settings.heartbeat_interval_seconds)
+                active_role = active_role_getter() if active_role_getter else None
+                if active_role is not None and fuyuan.settle(active_role):
+                    self.roles.save()
+                    await self._send(writer, fuyuan_update_frame(active_role),
+                                     fuyuan.status_frame(active_role), cipher=cipher, lock=send_lock)
                 nonce = 1 if nonce >= 0x7FFFFFFF else nonce + 1
                 await self._send(
                     writer,
@@ -5340,8 +5441,8 @@ class LocalGameServer:
             )
             return
 
-        monster = current_settings.monster
-        if monster is not None and object_id == monster.id:
+        monster = map_monster_for_object_id(current_settings, object_id)
+        if monster is not None:
             if should_suppress_escape_retrigger(
                 battle_state.escape_guard,
                 current_settings.id,
@@ -5388,6 +5489,7 @@ class LocalGameServer:
                 int(role['id']),
                 object_id,
                 player_stats=combat_stats(role),
+                monster_ids=tuple(item.id for item in current_settings.monsters),
             )
             battle_state.map_id = current_settings.id
             battle_state.contact_tile = (
@@ -5466,6 +5568,7 @@ class LocalGameServer:
         current_shop_category = 0
         # Connection-level gathering state (one active 2027 gather at most).
         gathering = ConnectionGathering()
+        fuyuan_session = fuyuan.FuyuanSession()
         try:
             while True:
                 header = await reader.readexactly(2)
@@ -5489,6 +5592,11 @@ class LocalGameServer:
                     raise
                 values = field_values(fields)
                 LOG.info('received message=%d field_types=%s', message_id, [x.type_id for x in fields])
+
+                if active_role is not None and fuyuan.settle(active_role):
+                    self.roles.save()
+                    await self._send(writer, fuyuan_update_frame(active_role),
+                                     fuyuan.status_frame(active_role), cipher=game_cipher, lock=send_lock)
 
                 if message_id == 1055 and values:
                     action = int(values[0])
@@ -5563,7 +5671,7 @@ class LocalGameServer:
                     )
                     if heartbeat_task is None and game_cipher is not None:
                         heartbeat_task = asyncio.create_task(
-                            self._heartbeat_loop(writer, game_cipher, send_lock, peer)
+                            self._heartbeat_loop(writer, game_cipher, send_lock, peer, lambda: active_role)
                         )
 
                 elif message_id == 1080 and values:
@@ -5575,6 +5683,7 @@ class LocalGameServer:
                             position_dirty = False
                         last_position_checkpoint_at = time.monotonic()
                         active_role = self.roles.find(username, role_id)
+                        fuyuan_session = fuyuan.FuyuanSession()
                         if active_role is None:
                             LOG.warning('unknown role selected user=%r role_id=%d', username, role_id)
                         else:
@@ -6008,7 +6117,9 @@ class LocalGameServer:
                             if battle_state.monster_hp <= 0:
                                 reward_item = None
                                 level_up = False
+                                awarded_experience = BATTLE_EXP_REWARD
                                 if active_role is not None:
+                                    awarded_experience = fuyuan.experience_reward(active_role, BATTLE_EXP_REWARD)
                                     reward_item, level_up = apply_battle_rewards(active_role, registry=self.settings.item_registry)
                                     self.roles.save()
                                 battle_state.finish()
@@ -6025,7 +6136,7 @@ class LocalGameServer:
                                     result_frames.extend((
                                         battle_progress_frame(active_role),
                                         item_frame(reward_item, operation=3),
-                                        battle_reward_notice(BATTLE_EXP_REWARD, reward_item, level_up),
+                                        battle_reward_notice(awarded_experience, reward_item, level_up),
                                     ))
                                     if level_up:
                                         result_frames.append(level_up_effect_frame(active_role))
@@ -6037,7 +6148,7 @@ class LocalGameServer:
                                         result_frames.extend(refresh.frames)
                                     else:
                                         result_frames.append(
-                                            battle_reward_popup(BATTLE_EXP_REWARD, reward_item, level_up)
+                                            battle_reward_popup(awarded_experience, reward_item, level_up)
                                         )
                                 LOG.info(
                                     'BATTLE_1040 action=4 settlement battle_trace=%s user=%r reason=monster_dead top_protocol=%s monster_hp=%d player_hp=%d',
@@ -6129,10 +6240,19 @@ class LocalGameServer:
                         if client_round > 0:
                             battle_state.round = client_round
                         action_round = battle_state.round
+                        target_id = (
+                            battle_command_target_id(values, battle_state)
+                            if command_code == 1
+                            else None
+                        )
+                        if command_code == 1 and target_id is None:
+                            LOG.info('ignored attack with unavailable target values=%r', values)
+                            continue
                         action_frames, ended = battle_round_action_frames(
                             battle_state,
                             command_code,
                             action_round,
+                            target_id=target_id,
                         )
                         battle_state.phase = 'round_ack'
                         LOG.info(
@@ -7043,6 +7163,16 @@ class LocalGameServer:
                         )
                     else:
                         LOG.info('ignored forge message=%d values=%r', message_id, values)
+
+                elif message_id == 1054 and not is_logout_page_request(fields):
+                    if active_role is not None:
+                        before_fuyuan = copy.deepcopy(active_role.get('fuyuan'))
+                        replies = fuyuan_session.handle(active_role, fields)
+                        if replies:
+                            if active_role.get('fuyuan') != before_fuyuan:
+                                self.roles.save()
+                            await self._send(writer, fuyuan_update_frame(active_role), *replies,
+                                             cipher=game_cipher, lock=send_lock)
 
                 elif message_id == 1054 and is_logout_page_request(fields):
                     # APK logout step 1: open the logout confirmation page.

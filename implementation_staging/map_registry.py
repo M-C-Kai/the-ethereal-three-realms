@@ -10,6 +10,8 @@ NPC_APPEARANCE_MODEL_OFFSET = 2_100_000
 NPC_APPEARANCE_GALLERY_ID_BASE = 1_950_000
 NPC_APPEARANCE_GALLERY_X = tuple(range(8, 79, 10))
 NPC_APPEARANCE_GALLERY_Y = tuple(range(10, 61, 10))
+KNOWN_NPC_SERVICES = frozenset(('', 'sect_skill_mentor', 'consignment_merchant'))
+MAX_BATTLE_MONSTERS = 10
 
 
 @dataclass(frozen=True)
@@ -50,9 +52,14 @@ class MapDefinition:
     fallback_height: int
     spawn_x: int
     spawn_y: int
-    monster: MapActorDefinition | None
+    monsters: tuple[MapActorDefinition, ...]
     npcs: tuple[MapActorDefinition, ...]
     portals: tuple[PortalDefinition, ...]
+
+    @property
+    def monster(self) -> MapActorDefinition | None:
+        """Return the first monster for legacy single-monster call sites."""
+        return self.monsters[0] if self.monsters else None
 
     def with_spawn(self, x: int, y: int) -> 'MapDefinition':
         return replace(self, spawn_x=int(x), spawn_y=int(y))
@@ -108,6 +115,15 @@ def _portal(payload: dict[str, Any]) -> PortalDefinition:
 def _map_definition(map_id: int, payload: dict[str, Any]) -> MapDefinition:
     spawn = payload['spawn']
     monster_payload = payload.get('monster')
+    monsters_payload = payload.get('monsters')
+    if monster_payload is not None and monsters_payload is not None:
+        raise ValueError(f'map {map_id} cannot define both monster and monsters')
+    if monsters_payload is None:
+        monsters = (_actor(monster_payload),) if isinstance(monster_payload, dict) else ()
+    else:
+        if not isinstance(monsters_payload, list):
+            raise ValueError(f'map {map_id} monsters must be a list')
+        monsters = tuple(_actor(item) for item in monsters_payload)
     return MapDefinition(
         id=int(payload.get('id', map_id)),
         name=str(payload['name']),
@@ -117,7 +133,7 @@ def _map_definition(map_id: int, payload: dict[str, Any]) -> MapDefinition:
         fallback_height=int(payload['fallback_height']),
         spawn_x=int(spawn['x']),
         spawn_y=int(spawn['y']),
-        monster=_actor(monster_payload) if isinstance(monster_payload, dict) else None,
+        monsters=monsters,
         npcs=tuple(_actor(item) for item in payload.get('npcs', [])),
         portals=tuple(_portal(item) for item in payload.get('portals', [])),
     )
@@ -301,6 +317,9 @@ def _gallery_coordinates(definition: dict[str, Any]) -> list[tuple[int, int]]:
     monster = definition.get('monster')
     if isinstance(monster, dict):
         occupied.add((int(monster['x']), int(monster['y'])))
+    for monster in definition.get('monsters', []):
+        if isinstance(monster, dict):
+            occupied.add((int(monster['x']), int(monster['y'])))
     for portal in definition.get('portals', []):
         if isinstance(portal, dict):
             occupied.add((int(portal['x']), int(portal['y'])))
@@ -335,6 +354,9 @@ def _merge_npc_appearance_catalog(
         monster = definition.get('monster')
         if isinstance(monster, dict) and 'id' in monster:
             used_object_ids.add(int(monster['id']))
+        for monster in definition.get('monsters', []):
+            if isinstance(monster, dict) and 'id' in monster:
+                used_object_ids.add(int(monster['id']))
         for portal in definition.get('portals', []):
             if isinstance(portal, dict) and 'id' in portal:
                 used_object_ids.add(int(portal['id']))
@@ -415,15 +437,20 @@ def _validate_registry(registry: MapRegistry, map_keys: dict[int, int]) -> None:
         if not _coordinate_in_bounds(definition.spawn_x, definition.spawn_y, definition):
             raise ValueError(f'map {definition.id} spawn coordinate is out of bounds')
 
+        if len(definition.monsters) > MAX_BATTLE_MONSTERS:
+            raise ValueError(
+                f'map {definition.id} supports at most {MAX_BATTLE_MONSTERS} monsters per encounter'
+            )
+
         object_ids: set[int] = set()
-        actors = (() if definition.monster is None else (definition.monster,)) + definition.npcs
+        actors = definition.monsters + definition.npcs
         for actor in actors:
             if actor.id in object_ids:
                 raise ValueError(f'duplicate object id {actor.id} on map {definition.id}')
             object_ids.add(actor.id)
             if not _coordinate_in_bounds(actor.x, actor.y, definition):
                 raise ValueError(f'actor {actor.id} coordinate is out of bounds on map {definition.id}')
-            if actor.service not in ('', 'sect_skill_mentor'):
+            if actor.service not in KNOWN_NPC_SERVICES:
                 raise ValueError(f'unknown NPC service {actor.service!r} on actor {actor.id}')
             if actor.service == 'sect_skill_mentor':
                 if actor.sect_id is None:

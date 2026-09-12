@@ -1,5 +1,7 @@
-# Kill every process bound to the game port, close leftover launcher windows,
-# then start a fresh local server in this console.
+# Close the previous game server, then start a fresh one in this console.
+# Repeated clicks are serialized by a mutex: each click stops the old Python
+# process and starts a new one. Launcher cmd windows are never killed, because
+# taskkill /T on those trees also aborted the click that was still starting.
 param(
     [int]$Port = 6805,
     [string]$AdvertiseHost = '192.168.0.104',
@@ -31,17 +33,6 @@ function Get-ServerPyPids {
     $found | Where-Object { $_ -gt 0 } | Select-Object -Unique
 }
 
-function Get-LauncherCmdPids {
-    $found = @()
-    Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and ($_.CommandLine -match 'start_server\.bat') } |
-        ForEach-Object { $found += [int]$_.ProcessId }
-    Get-Process -Name cmd -ErrorAction SilentlyContinue |
-        Where-Object { $_.MainWindowTitle -eq 'PiaomiaoLocalServer' } |
-        ForEach-Object { $found += [int]$_.Id }
-    $found | Where-Object { $_ -gt 0 } | Select-Object -Unique
-}
-
 function Get-ParentPid {
     param([int]$ProcessId)
     $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
@@ -49,12 +40,42 @@ function Get-ParentPid {
     return [int]$proc.ParentProcessId
 }
 
-function Stop-PidTree {
+function Get-ProtectedPids {
+    param([int]$ProcessId)
+    $found = @()
+    $current = [int]$ProcessId
+    $seen = @{}
+    while ($current -gt 0 -and -not $seen.ContainsKey($current)) {
+        $seen[$current] = $true
+        $found += $current
+        $current = Get-ParentPid -ProcessId $current
+    }
+    $found
+}
+
+function Stop-Pid {
     param([int]$ProcessId)
     Write-Host "Stopping PID $ProcessId"
-    & taskkill.exe /PID $ProcessId /T /F 2>$null | Out-Null
+    & taskkill.exe /PID $ProcessId /F 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Wait-PortFree {
+    param(
+        [int]$PortNumber,
+        [int]$TimeoutSeconds = 8
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $still = @(Get-ListeningPids -PortNumber $PortNumber)
+        if ($still.Count -eq 0) { return }
+        Start-Sleep -Milliseconds 200
+    } while ((Get-Date) -lt $deadline)
+    $still = @(Get-ListeningPids -PortNumber $PortNumber)
+    if ($still.Count -gt 0) {
+        throw "Port $PortNumber still LISTENING after close: $($still -join ', ')"
     }
 }
 
@@ -65,7 +86,7 @@ $hasMutex = $false
 try {
     $mutex = New-Object System.Threading.Mutex($false, 'Global\PiaomiaoSanJieLocalServerLaunch')
     try {
-        $hasMutex = $mutex.WaitOne(15000)
+        $hasMutex = $mutex.WaitOne(30000)
     } catch [System.Threading.AbandonedMutexException] {
         $hasMutex = $true
     }
@@ -73,28 +94,18 @@ try {
         Write-Host "Another launcher is already restarting the server. This extra window will close."
         $launchExit = 2
     } else {
-        $selfPid = $PID
-        $parentPid = Get-ParentPid -ProcessId $selfPid
+        $protected = @(Get-ProtectedPids -ProcessId $PID)
         $ids = @()
         $ids += @(Get-ListeningPids -PortNumber $Port)
         $ids += @(Get-ServerPyPids)
-        $ids += @(Get-LauncherCmdPids)
-        $ids = $ids | Where-Object { $_ -gt 0 -and $_ -ne $selfPid -and $_ -ne $parentPid } | Select-Object -Unique
-        foreach ($procId in $ids) {
-            Stop-PidTree -ProcessId $procId
+        $ids = @($ids | Where-Object { $_ -gt 0 -and $protected -notcontains $_ } | Select-Object -Unique)
+        if ($ids.Count -gt 0) {
+            Write-Host "Closing previous server on port $Port"
+            foreach ($procId in $ids) {
+                Stop-Pid -ProcessId $procId
+            }
         }
-
-        $deadline = (Get-Date).AddSeconds(8)
-        do {
-            $still = @(Get-ListeningPids -PortNumber $Port)
-            if ($still.Count -eq 0) { break }
-            Start-Sleep -Milliseconds 200
-        } while ((Get-Date) -lt $deadline)
-
-        $still = @(Get-ListeningPids -PortNumber $Port)
-        if ($still.Count -gt 0) {
-            throw "Port $Port still LISTENING after kill: $($still -join ', ')"
-        }
+        Wait-PortFree -PortNumber $Port
 
         Write-Host "Starting $Python server_pets.py on 0.0.0.0:$Port advertising ${AdvertiseHost}:$Port"
         $pythonProcess = Start-Process -FilePath $Python -ArgumentList @(
@@ -116,6 +127,8 @@ try {
             $launchExit = $pythonProcess.ExitCode
             if ($launchExit -eq 0) { $launchExit = 1 }
             Write-Host "server_pets.py exited before binding port $Port (code $launchExit)"
+        } else {
+            Write-Host "Server is listening on port $Port"
         }
     }
 } catch {
@@ -138,4 +151,6 @@ if ($null -eq $pythonProcess) {
     exit 1
 }
 $pythonProcess.WaitForExit()
-exit $pythonProcess.ExitCode
+# The replacement click already started a new window. Close this one instead of
+# pausing on the taskkill exit code from the previous Python process.
+exit 0

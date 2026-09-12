@@ -134,6 +134,37 @@ LEGACY_CONFIG = {
 
 
 class MapRegistryTests(unittest.TestCase):
+    def test_registry_loads_ten_monsters_for_one_encounter(self):
+        payload = deepcopy(NEW_CONFIG)
+        first = payload['maps']['58'].pop('monster')
+        payload['maps']['58']['monsters'] = [
+            {
+                **first,
+                'id': 700001 + index,
+                'name': f'试炼妖兽{index + 1}',
+                'x': 9 + (index % 5),
+                'y': 28 + ((index // 5) * 2),
+            }
+            for index in range(10)
+        ]
+
+        changan = load_map_registry(payload).require(58)
+
+        self.assertEqual(len(changan.monsters), 10)
+        self.assertEqual([monster.id for monster in changan.monsters], list(range(700001, 700011)))
+        self.assertEqual(changan.monster.id, 700001)
+
+    def test_registry_rejects_more_than_ten_battle_monsters(self):
+        payload = deepcopy(NEW_CONFIG)
+        first = payload['maps']['58'].pop('monster')
+        payload['maps']['58']['monsters'] = [
+            {**first, 'id': 700001 + index}
+            for index in range(11)
+        ]
+
+        with self.assertRaisesRegex(ValueError, 'at most 10 monsters'):
+            load_map_registry(payload)
+
     def test_registry_loads_changan_and_all_portals(self):
         self.assertIsNotNone(load_map_registry, 'map registry module is missing')
         if load_map_registry is None:
@@ -239,6 +270,21 @@ class MapRegistryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     load_map_registry(invalid)
 
+    def test_consignment_merchant_service_is_accepted_without_sect_id(self):
+        payload = deepcopy(NEW_CONFIG)
+        payload['maps']['58']['npcs'] = [{
+            'id': 1900004,
+            'name': '赵公明',
+            'x': 11,
+            'y': 21,
+            'service': 'consignment_merchant',
+        }]
+
+        merchant = load_map_registry(payload).require(58).npcs[0]
+
+        self.assertEqual(merchant.service, 'consignment_merchant')
+        self.assertIsNone(merchant.sect_id)
+
     def test_default_registry_uses_changan_and_rejects_unknown_maps(self):
         self.assertIsNotNone(default_map_registry, 'map registry module is missing')
         if default_map_registry is None:
@@ -267,6 +313,16 @@ class MapRegistryTests(unittest.TestCase):
 
 
 class SettingsRegistryTests(unittest.TestCase):
+    def test_project_config_loads_ten_distinct_changan_monsters(self):
+        config_path = Path(__file__).resolve().parents[1] / 'config.json'
+
+        settings = Settings.load(config_path)
+        monsters = settings.map_registry.require(58).monsters
+
+        self.assertEqual(len(monsters), 10)
+        self.assertEqual([monster.id for monster in monsters], list(range(700001, 700011)))
+        self.assertEqual(len({(monster.x, monster.y) for monster in monsters}), 10)
+
     def test_project_config_uses_nested_changan_registry(self):
         config_path = Path(__file__).resolve().parents[1] / 'config.json'
         payload = json.loads(config_path.read_text(encoding='utf-8'))
@@ -277,6 +333,8 @@ class SettingsRegistryTests(unittest.TestCase):
         self.assertTrue(payload['maps']['58']['npc_appearance_gallery'])
         self.assertTrue(all('appearance_key' in npc for npc in payload['maps']['58']['npcs']))
         self.assertTrue(all('dat_id' not in npc for npc in payload['maps']['58']['npcs']))
+        changan_npcs = {npc['id']: npc for npc in payload['maps']['58']['npcs']}
+        self.assertEqual(changan_npcs[1900004]['service'], 'consignment_merchant')
         self.assertEqual(
             [portal['id'] for portal in payload['maps']['58']['portals']],
             [580001, 580003, 580005],

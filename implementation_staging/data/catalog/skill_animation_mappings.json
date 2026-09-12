@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "purpose": "按技能目录建立动画映射索引；null 表示未知或不适用，不等于特效编号 0",
+  "mappings": [
+    {"skill_id": 10001, "name": "协议测试技能", "catalog": "sect_skills.json", "domain": "sect", "status": "pending", "profile_id": null, "sender_fx": null, "target_fx": null, "resource_paths": [], "evidence": ["data/catalog/sect_skills.json"], "note": "本地兼容测试技能；未找到可证明其专属动画的证据。"},
+    {"skill_id": 2001, "name": "采药术", "catalog": "life_skills.json", "domain": "life", "status": "not_applicable_to_battle", "profile_id": null, "sender_fx": null, "target_fx": null, "resource_paths": [], "evidence": ["data/catalog/life_skills.json", "docs/protocol/life-skills.md"], "note": "走采集流程；此状态仅表示不绑定 1042 战斗特效，不表示没有采集动画。"},
+    {"skill_id": 2002, "name": "采矿术", "catalog": "life_skills.json", "domain": "life", "status": "not_applicable_to_battle", "profile_id": null, "sender_fx": null, "target_fx": null, "resource_paths": [], "evidence": ["data/catalog/life_skills.json", "docs/protocol/life-skills.md"], "note": "走采集流程；采集对象 model_id 与技能特效编号分别管理。"},
+    {"skill_id": 2003, "name": "炼药术", "catalog": "life_skills.json", "domain": "life", "status": "not_applicable_to_battle", "profile_id": null, "sender_fx": null, "target_fx": null, "resource_paths": [], "evidence": ["data/catalog/life_skills.json", "docs/protocol/life-skills.md"], "note": "走制作流程；制作界面表现待单独核对。"},
+    {"skill_id": 2004, "name": "炼器术", "catalog": "life_skills.json", "domain": "life", "status": "not_applicable_to_battle", "profile_id": null, "sender_fx": null, "target_fx": null, "resource_paths": [], "evidence": ["data/catalog/life_skills.json", "docs/protocol/life-skills.md"], "note": "走制作及锻造流程；界面表现待单独核对。"}
+  ]
+}

@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from map_o import decode_tile_rle
+from map_registry import load_map_registry
 from protocol import GameCipher, binary, byte, decode_frame, encode_frame, field_debug_entries, field_debug_value, field_type_name, field_values, integer, long_integer, short, string
 import server as server_module
 import test_client as test_client_module
@@ -79,6 +80,35 @@ from server import (
 
 
 class ProtocolTests(unittest.TestCase):
+    @staticmethod
+    def _ten_monster_map():
+        return load_map_registry({
+            'default_map_id': 58,
+            'maps': {
+                '58': {
+                    'name': '十怪测试场',
+                    'map_o_file': 'maps/58.map.o',
+                    'map_ref_available': True,
+                    'fallback_width': 96,
+                    'fallback_height': 96,
+                    'spawn': {'x': 60, 'y': 67},
+                    'monsters': [
+                        {
+                            'id': 700001 + index,
+                            'name': f'试炼妖兽{index + 1}',
+                            'model': -2004250,
+                            'x': 9 + (index % 5),
+                            'y': 28 + ((index // 5) * 2),
+                            'direction': 0,
+                        }
+                        for index in range(10)
+                    ],
+                    'npcs': [],
+                    'portals': [],
+                }
+            },
+        }).require(58)
+
     def test_round_trip(self):
         frame = encode_frame(1077, [short(2000), byte(53), string('测试'), integer(123), long_integer(456)])
         message_id, fields = decode_frame(frame)
@@ -800,6 +830,66 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(remove_id, 1010)
         self.assertEqual(field_values(remove_fields), [changan.monster.id, 0, 0, 0, 0, 18])
         self.assertEqual([field.type_id for field in remove_fields], [4, 3, 3, 4, 4, 3])
+
+    def test_map_and_battle_frames_fill_all_ten_monster_slots(self):
+        definition = self._ten_monster_map()
+
+        map_id, map_fields = decode_frame(map_monster_frame(definition))
+        map_values = field_values(map_fields)
+        self.assertEqual(map_id, 1126)
+        self.assertEqual(map_values[:2], [0, 10])
+        self.assertEqual(map_values[2::5], list(range(700001, 700011)))
+
+        role = default_role(Settings())
+        actor_frames = battle_actor_frames(role, definition)
+        actors = [field_values(decode_frame(frame)[1]) for frame in actor_frames]
+        self.assertEqual(len(actors), 11)
+        self.assertEqual([actor[9] for actor in actors[1:]], list(range(700001, 700011)))
+        self.assertEqual([actor[8] for actor in actors[1:]], list(range(1, 11)))
+        self.assertTrue(all(actor[7] == 2 and actor[5] == 1 for actor in actors[1:]))
+
+    def test_every_configured_map_monster_is_an_interaction_target(self):
+        definition = self._ten_monster_map()
+
+        self.assertTrue(hasattr(server_module, 'map_monster_for_object_id'))
+        resolved = [
+            server_module.map_monster_for_object_id(definition, monster_id)
+            for monster_id in range(700001, 700011)
+        ]
+
+        self.assertEqual([monster.id for monster in resolved], list(range(700001, 700011)))
+        self.assertIsNone(server_module.map_monster_for_object_id(definition, 799999))
+
+    def test_tenth_monster_can_be_targeted_independently(self):
+        state = LocalBattleState()
+        monster_ids = tuple(range(700001, 700011))
+        state.begin(10001, monster_ids[0], monster_ids=monster_ids)
+
+        frames, encounter_ended = server_module.battle_round_action_frames(
+            state,
+            1,
+            1,
+            target_id=monster_ids[-1],
+        )
+
+        self.assertFalse(encounter_ended)
+        self.assertEqual(state.monster_hp_for(monster_ids[0]), 100)
+        self.assertEqual(state.monster_hp_for(monster_ids[-1]), 90)
+        player_action = field_values(decode_frame(frames[0])[1])
+        counter_action = field_values(decode_frame(frames[1])[1])
+        self.assertEqual(player_action[1:3], [10001, 700010])
+        self.assertEqual(counter_action[1:3], [700010, 10001])
+
+    def test_attack_command_reads_target_from_confirmed_1041_field_four(self):
+        state = LocalBattleState()
+        state.begin(10001, 700001, monster_ids=tuple(range(700001, 700011)))
+        values = [1, 7, 10001, 1, 700010, 2, 0, 0]
+
+        self.assertTrue(hasattr(server_module, 'battle_command_target_id'))
+        self.assertEqual(server_module.battle_command_target_id(values, state), 700010)
+        self.assertIsNone(
+            server_module.battle_command_target_id([1, 7, 10001, 1, 799999, 2, 0, 0], state)
+        )
 
     def test_current_map_definition_drives_battle_monster(self):
         settings = Settings()

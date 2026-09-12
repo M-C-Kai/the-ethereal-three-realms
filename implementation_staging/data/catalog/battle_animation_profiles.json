@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "purpose": "离线映射资料；尚未接入运行时战斗分发",
+  "protocol": {
+    "queue_message_id": 1042,
+    "play_message_id": 1040,
+    "play_action": 2,
+    "fields": {"action_type": 3, "repeat": 4, "flags": 5, "sender_fx": 6, "target_fx": 7},
+    "field_index_base": 0,
+    "evidence": ["APK_BATTLE_CATALOG.md#战斗状态", "server.py:battle_action_frame", "server.py:battle_action_show_frame"]
+  },
+  "profiles": [
+    {
+      "profile_id": "basic_attack",
+      "name": "普通攻击",
+      "status": "confirmed_local_implementation",
+      "action_type": 1,
+      "repeat": 1,
+      "flags": 0,
+      "sender_fx": 0,
+      "target_fx": 0,
+      "motion": "靠近目标、攻击、归位",
+      "attribute_effect_type": 22,
+      "note": "22 是扣血效果类型，不是动画资源编号；0 特效值表示当前动作不指定附加特效。",
+      "evidence": ["server.py:battle_action_frame", "APK_BATTLE_CATALOG.md#战斗状态"]
+    },
+    {
+      "profile_id": "defend",
+      "name": "防御",
+      "status": "confirmed_local_implementation",
+      "action_type": 2,
+      "repeat": 1,
+      "flags": 0,
+      "sender_fx": 0,
+      "target_fx": 0,
+      "motion": "原生防御动作",
+      "attribute_effect_type": null,
+      "evidence": ["server.py:battle_defend_frame"]
+    }
+  ],
+  "effect_resource_resolution": {
+    "status": "pending",
+    "sender_consumer": "build/apk_decoded/smali/pmsj/work/main/b.smali:1371",
+    "target_consumer": "build/apk_decoded/smali/pmsj/work/main/b.smali:1702",
+    "next_method": "pmsj/work/b/h.i(I)",
+    "note": "已发现特效字段传入 h.i(I)；尚未确认资源寻址、动作索引、图集和具体技能名称关系。不能把 skill_id 或 icon 当作特效资源编号。"
+  }
+}

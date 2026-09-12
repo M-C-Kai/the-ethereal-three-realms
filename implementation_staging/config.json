@@ -19,14 +19,18 @@
       "fallback_width": 96,
       "fallback_height": 96,
       "spawn": {"x": 60, "y": 67},
-      "monster": {
-        "id": 700001,
-        "name": "试炼妖兽",
-        "model": -2004250,
-        "x": 9,
-        "y": 28,
-        "direction": 0
-      },
+      "monsters": [
+        {"id": 700001, "name": "试炼妖兽一", "model": -2004250, "x": 9, "y": 28, "direction": 0},
+        {"id": 700002, "name": "试炼妖兽二", "model": -2004250, "x": 10, "y": 28, "direction": 0},
+        {"id": 700003, "name": "试炼妖兽三", "model": -2004250, "x": 11, "y": 28, "direction": 0},
+        {"id": 700004, "name": "试炼妖兽四", "model": -2004250, "x": 12, "y": 28, "direction": 0},
+        {"id": 700005, "name": "试炼妖兽五", "model": -2004250, "x": 13, "y": 28, "direction": 0},
+        {"id": 700006, "name": "试炼妖兽六", "model": -2004250, "x": 9, "y": 30, "direction": 0},
+        {"id": 700007, "name": "试炼妖兽七", "model": -2004250, "x": 10, "y": 30, "direction": 0},
+        {"id": 700008, "name": "试炼妖兽八", "model": -2004250, "x": 11, "y": 30, "direction": 0},
+        {"id": 700009, "name": "试炼妖兽九", "model": -2004250, "x": 12, "y": 30, "direction": 0},
+        {"id": 700010, "name": "试炼妖兽十", "model": -2004250, "x": 13, "y": 30, "direction": 0}
+      ],
       "npcs": [
         {"id": 1900002, "name": "孙思邈", "label": "药王", "appearance_key": "npc_95750", "x": 50, "y": 64},
         {"id": 1900003, "name": "接引真人", "label": "接引", "appearance_key": "npc_96010", "x": 34, "y": 50},

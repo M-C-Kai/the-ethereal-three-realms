@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "rules_source": "福缘等阶和权益来自APK帮助；赠送及补充价格为本地兼容服规则",
+  "initial_points": 1000,
+  "silver_per_point": 1,
+  "topup_packages": [1000, 5000, 15000],
+  "quote_lifetime_seconds": 120,
+  "benefits": [
+    {"id": 1, "name": "在线经验", "tier": 1, "implemented": false, "description": "APK权益：获取在线经验。当前尚未开放在线经验领取。"},
+    {"id": 2, "name": "窃取溢出经验", "tier": 1, "implemented": false, "description": "APK权益：窃取溢出经验。当前尚未开放。"},
+    {"id": 3, "name": "自动遇怪", "tier": 1, "implemented": false, "description": "APK权益：自动遇怪。福缘自动遇怪开关尚未接入。"},
+    {"id": 4, "name": "门派任务BUFF", "tier": 1, "implemented": false, "description": "APK权益：门派任务BUFF。当前尚未开放。"},
+    {"id": 5, "name": "刷怪经验增加5%", "tier": 1, "implemented": true, "description": "战斗胜利经验增加5%，每次向下取整；例如基础50点实际获得52点。自动生效，无需领取。"},
+    {"id": 6, "name": "原地复活", "tier": 1, "implemented": false, "description": "APK权益：原地复活。福缘复活操作尚未接入。"},
+    {"id": 7, "name": "死亡不掉经验", "tier": 1, "implemented": false, "description": "APK权益：死亡不掉经验。当前尚无死亡扣经验结算，未单独实现此权益。"},
+    {"id": 8, "name": "装备不耗耐久", "tier": 1, "implemented": false, "description": "APK权益：装备不耗耐久。当前尚无耐久消耗结算，未单独实现此权益。"},
+    {"id": 9, "name": "上线光效", "tier": 1, "implemented": false, "description": "APK权益：绚丽上线光效。福缘专属光效尚未确认，暂未开放。"},
+    {"id": 10, "name": "离线经验", "tier": 2, "implemented": false, "description": "APK权益：获取离线经验。当前尚未开放离线经验领取。"},
+    {"id": 11, "name": "免费领取灵珠", "tier": 2, "implemented": false, "description": "APK权益：免费领取灵珠。奖励模板和数量尚未确认，暂未开放。"},
+    {"id": 12, "name": "血量上限增加20%", "tier": 2, "implemented": true, "description": "血量上限提高20%，向下取整；人物面板和新战斗使用同一上限。已开始的战斗保留开战时血量。自动生效，无需领取。"},
+    {"id": 13, "name": "主灵力双倍增速", "tier": 2, "implemented": false, "description": "APK权益：主灵力双倍增速。当前尚未开放修真灵力定时结算。"},
+    {"id": 14, "name": "宠物不耗寿命", "tier": 2, "implemented": false, "description": "APK权益：宠物不耗寿命。当前尚未开放宠物寿命结算。"},
+    {"id": 15, "name": "随身仓库", "tier": 3, "implemented": false, "description": "APK权益：随身使用仓库。当前尚未开放仓库存取。"},
+    {"id": 16, "name": "背包增加20格", "tier": 3, "implemented": true, "description": "在角色原有背包容量上额外增加20格；到期后恢复原容量。超额物品会保留，但需腾出空间才能继续放入物品。"},
+    {"id": 17, "name": "宠物背包增加5格", "tier": 3, "implemented": false, "description": "APK权益：宠物背包增加5格。当前尚未开放宠物背包容量结算。"}
+  ]
+}
