@@ -89,7 +89,7 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(frame, b'original')
         original.assert_called_once_with(definition, npc)
 
-    def test_roaming_boss_spawn_uses_native_2028_q_layout(self):
+    def test_roaming_boss_spawn_uses_native_2028_q_layout_with_attached_ring_flag(self):
         definition = SimpleNamespace(
             id=58,
             monster=SimpleNamespace(id=700_001, model=-2_004_250, x=9, y=28),
@@ -98,8 +98,25 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         message_id, fields = decode_frame(dynamic.roaming_boss_spawn_frame(definition))
 
         self.assertEqual(message_id, 2028)
-        self.assertEqual(field_values(fields), [700_001, 9, 28, 95_750])
-        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4])
+        self.assertEqual(
+            field_values(fields),
+            [700_001, 9, 28, 95_750, 0, 0, 0x800000],
+        )
+        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4, 4, 4, 4])
+
+    def test_roaming_boss_effect_image_70600_reuses_verified_apk_70000_pixels(self):
+        marker = object()
+        with patch.object(dynamic, '_ORIGINAL_BATTLE_IMAGE_RESOURCE', return_value=marker) as original:
+            self.assertIs(dynamic.roaming_boss_image_resource(70_600), marker)
+
+        original.assert_called_once_with(70_000)
+
+    def test_non_boss_effect_image_keeps_original_resolution(self):
+        marker = object()
+        with patch.object(dynamic, '_ORIGINAL_BATTLE_IMAGE_RESOURCE', return_value=marker) as original:
+            self.assertIs(dynamic.roaming_boss_image_resource(70_500), marker)
+
+        original.assert_called_once_with(70_500)
 
     def test_roaming_boss_move_uses_native_1005_target_short_layout(self):
         message_id, fields = decode_frame(
@@ -138,7 +155,10 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(frames[0], b'action-13')
         message_id, fields = decode_frame(frames[1])
         self.assertEqual(message_id, 2028)
-        self.assertEqual(field_values(fields), [700_001, 9, 28, 95_750])
+        self.assertEqual(
+            field_values(fields),
+            [700_001, 9, 28, 95_750, 0, 0, 0x800000],
+        )
 
 
 if __name__ == '__main__':
