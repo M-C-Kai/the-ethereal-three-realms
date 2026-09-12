@@ -56,7 +56,7 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(frames, [b'new-13', b'ref-chunk', b'old-14', b'old-105'])
         map_action.assert_called_once_with(definition, 13, status=1, role_id=10001)
 
-    def test_boss_effect_carrier_uses_native_2030_field5_attachment(self):
+    def test_boss_effect_carrier_uses_render_only_2030_bucket(self):
         definition = SimpleNamespace(id=58)
         carrier = SimpleNamespace(
             id=1_900_099,
@@ -73,7 +73,7 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(message_id, 2030)
         self.assertEqual(
             field_values(fields),
-            [1_900_099, 9, 28, 3_000_100, 0, 3_000_000, '', 0, ''],
+            [1_900_099, 9, 28, 3_000_100, 0, 3_000_000, '', 2, ''],
         )
         self.assertEqual(
             [field.type_id for field in fields],
