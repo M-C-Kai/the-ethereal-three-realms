@@ -1,0 +1,59 @@
+name: apply-battle-consolidation
+
+on:
+  push:
+    branches:
+      - refactor/battle-system-consolidation
+    paths:
+      - 'implementation_staging/refactor_battle_server.py'
+      - '.github/workflows/apply-battle-consolidation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/battle-system-consolidation
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply deterministic battle consolidation
+        working-directory: implementation_staging
+        run: python refactor_battle_server.py
+      - name: Check rewritten files
+        run: git diff --check
+      - name: Compile consolidated server
+        working-directory: implementation_staging
+        run: python -m py_compile battle/*.py server.py server_pets.py
+      - name: Battle subsystem tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests/battle -v
+      - name: Consolidation structure tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_battle_consolidation_structure.py' -v
+      - name: Escape guard state tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_battle_escape_guard.py' -v
+      - name: Roaming Boss integration tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_roaming_boss_interaction.py' -v
+      - name: Server protocol regression tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_protocol.py' -v
+      - name: Commit consolidation
+        run: |
+          if git diff --quiet; then
+            echo 'No consolidation changes produced.'
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: consolidate battle system'
+          git push origin HEAD:refactor/battle-system-consolidation
