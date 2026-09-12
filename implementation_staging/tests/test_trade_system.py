@@ -24,8 +24,12 @@ class FakeRoleStore:
     def __init__(self, path: Path, roles: list[dict[str, object]]):
         self.path = path
         self.data = {'next_role_id': 20000, 'accounts': {'trade-test': roles}}
+        self.fail_next_save = False
 
     def save(self):
+        if self.fail_next_save:
+            self.fail_next_save = False
+            raise OSError('forced trade save failure')
         self.path.write_text(json.dumps(self.data, ensure_ascii=False), encoding='utf-8')
 
 
@@ -160,6 +164,23 @@ class TradeSystemTests(unittest.TestCase):
         self.assertEqual(self.service.trade_history(99999), [])
         with self.assertRaises(ValueError):
             self.service.trade_history(10001, side='invalid')
+
+    def test_buy_save_failure_rolls_back_every_part_of_transaction(self):
+        item, listed = self._list_material(item_id=507, quantity=1, unit_price=400)
+        item_id = int(listed.listing['item_instance_id'])
+        self.store.fail_next_save = True
+
+        with self.assertRaises(OSError):
+            self.service.buy(self.buyer, item_id)
+
+        self.assertEqual(self.seller['currencies']['silver'], 10_000)
+        self.assertEqual(self.buyer['currencies']['silver'], 10_000)
+        self.assertIn(item, self.seller['items'])
+        self.assertNotIn(item, self.buyer['items'])
+        self.assertEqual(item['location'], 'consignment')
+        self.assertEqual([row['item_instance_id'] for row in self.service.search(27)], [item_id])
+        self.assertEqual(self.service.trade_history(10001), [])
+        self.assertEqual(self.service.trade_history(10002), [])
 
 
 if __name__ == '__main__':
