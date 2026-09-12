@@ -44,7 +44,10 @@ def request_encounter(
     if state.active:
         return EncounterDecision(False, True, 'battle_active')
 
-    if state.monster_defeated and state.monster_id == int(request.monster_id):
+    # ``monster_defeated`` means the current map encounter has already been
+    # settled. The legacy server suppressed every stale monster tap until the
+    # map-entry boundary reset this flag; preserve that behavior during split.
+    if state.monster_defeated:
         return EncounterDecision(False, True, 'monster_defeated')
 
     if state.should_suppress_retrigger(
