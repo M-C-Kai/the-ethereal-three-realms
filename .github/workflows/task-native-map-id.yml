@@ -6,19 +6,39 @@ on:
     paths:
       - 'implementation_staging/server.py'
       - 'implementation_staging/tests/test_task_minimum_flow.py'
+      - 'implementation_staging/tools/apply_task_native_map_id_fix.py'
       - '.github/workflows/task-native-map-id.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: fix/task-native-map-id
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Apply native 1110 map-id fix
+        working-directory: implementation_staging
+        run: python tools/apply_task_native_map_id_fix.py
       - name: Native task map-id regression
         working-directory: implementation_staging
         run: python -m unittest tests.test_task_minimum_flow -v
+      - name: Task regression suite
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_task_*.py' -v
+      - name: Commit verified server fix
+        run: |
+          if git diff --quiet -- implementation_staging/server.py; then
+            echo 'server.py already patched'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add implementation_staging/server.py
+          git commit -m 'fix(map): send native logical map id in 1110 field zero'
+          git push origin HEAD:fix/task-native-map-id
