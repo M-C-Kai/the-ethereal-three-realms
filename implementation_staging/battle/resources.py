@@ -143,7 +143,7 @@ def _image_dirs() -> tuple[Path, Path]:
 
 
 def _find_image_record(image_id: int) -> tuple[int, Path, tuple[int, int]] | None:
-    """Return source id, directory and (container, offset) for one image."""
+    """Mirror the server's established exact-id then minus-100 lookup order."""
     for candidate_id in (image_id, image_id - 100):
         if candidate_id < 0:
             continue
@@ -162,17 +162,7 @@ def _find_image_record(image_id: int) -> tuple[int, Path, tuple[int, int]] | Non
                     continue
                 container_path = candidate_dir / f'png{container_number}.p'
                 if not container_path.is_file():
-                    # Some JAR index records reuse a container bundled by APK.
-                    fallback = next(
-                        (
-                            directory / f'png{container_number}.p'
-                            for directory in _image_dirs()
-                            if (directory / f'png{container_number}.p').is_file()
-                        ),
-                        None,
-                    )
-                    if fallback is None:
-                        continue
+                    continue
                 return candidate_id, candidate_dir, (container_number, data_offset)
     return None
 
@@ -193,17 +183,15 @@ def battle_image_resource(
     container_number, data_offset = record
     container_path = image_dir / f'png{container_number}.p'
     if not container_path.is_file():
-        fallback = next(
-            (
-                directory / f'png{container_number}.p'
-                for directory in _image_dirs()
-                if (directory / f'png{container_number}.p').is_file()
-            ),
-            None,
-        )
-        if fallback is None:
+        # Retained for compatibility with the old helper even though record
+        # discovery normally guarantees the local container exists.
+        for candidate_dir in _image_dirs():
+            candidate_path = candidate_dir / f'png{container_number}.p'
+            if candidate_path.is_file():
+                container_path = candidate_path
+                break
+        else:
             return None
-        container_path = fallback
 
     container = container_path.read_bytes()
     if data_offset + 24 > len(container):
@@ -275,15 +263,6 @@ def battle_image_resolve_debug(image_id: int) -> dict[str, object]:
     candidate_id, candidate_dir, record = found
     container_number, _data_offset = record
     container_path = candidate_dir / f'png{container_number}.p'
-    if not container_path.is_file():
-        container_path = next(
-            (
-                directory / f'png{container_number}.p'
-                for directory in _image_dirs()
-                if (directory / f'png{container_number}.p').is_file()
-            ),
-            container_path,
-        )
     jar_fallback = 'jar-images' in candidate_dir.parts
     aliased = candidate_id != image_id
     if aliased and jar_fallback:
