@@ -12,6 +12,7 @@ from task_protocol import (
     is_active_list_request,
     is_available_list_request,
     parse_task_1145_request,
+    parse_task_accept_request,
     parse_task_operation_request,
     safe_detail_ack_frame,
 )
@@ -69,12 +70,7 @@ class TaskRuntime:
         *,
         today: str | None = None,
     ) -> tuple[tuple[TaskDefinition, int], ...]:
-        """Return rows with the status numbers consumed by e/en and e/ca.
-
-        APK meanings are 0=locked, 1=claimable, 2=active, 3=ready to submit,
-        4=delivered. Repeatable tasks become claimable again after a claim, so
-        availability takes precedence over historical completion.
-        """
+        """Return rows with the status numbers consumed by e/en and e/ca."""
         ensure_task_state(role, today=today)
         state = role.get('tasks')
         assert isinstance(state, dict)
@@ -120,8 +116,33 @@ class TaskRuntime:
         role: dict[str, object],
         fields: Sequence[Field],
         *,
+        now: int | float = 0,
         today: str | None = None,
     ) -> TaskRuntimeResult:
+        # Native acceptance must validate the role id before even migrating
+        # state: a packet naming another player must have no side effects.
+        accept_request = parse_task_accept_request(fields)
+        if accept_request is not None:
+            if accept_request.player_id != int(role.get('id', 0)):
+                return TaskRuntimeResult(
+                    (safe_detail_ack_frame(),),
+                    False,
+                    reason='player_mismatch',
+                )
+            migrated = ensure_task_state(role, today=today)
+            action = accept_task(
+                role,
+                self.registry,
+                accept_request.task_id,
+                now=now,
+                today=today,
+            )
+            return TaskRuntimeResult(
+                self.snapshot_frames(role, today=today),
+                migrated or action.changed,
+                reason=action.reason,
+            )
+
         migrated = ensure_task_state(role, today=today)
         if is_available_list_request(fields):
             return TaskRuntimeResult(
@@ -136,6 +157,23 @@ class TaskRuntime:
             return TaskRuntimeResult((safe_detail_ack_frame(),), migrated, reason='operation_1403_untraced')
         return TaskRuntimeResult((safe_detail_ack_frame(),), migrated, reason='unknown_1403_action')
 
+    def matches_path_target(self, map_id: int, x: int, y: int) -> bool:
+        """Return whether native task navigation may walk to this coordinate.
+
+        The APK's task list sends ordinary 1145/action-0 map path requests
+        using the map/x/y stored in the 1403 task row.  Accept and submit NPC
+        positions are therefore legitimate path targets alongside gathering
+        targets handled by the main server.
+        """
+        needle = (int(map_id), int(x), int(y))
+        for task in self.registry.all_tasks():
+            route = task.client_route
+            if needle == (route.accept_map_id, route.accept_x, route.accept_y):
+                return route.accept_map_id > 0
+            if needle == (route.submit_map_id, route.submit_x, route.submit_y):
+                return route.submit_map_id > 0
+        return False
+
     def _route_task(self, route_id: int, category: int, route_kind: int | None = None) -> TaskDefinition | None:
         for task in self.registry.all_tasks():
             if task.client_route.route_id != int(route_id):
@@ -148,12 +186,7 @@ class TaskRuntime:
         return None
 
     def matches_1145(self, fields: Sequence[Field]) -> bool:
-        """Return True only when an ambiguous 1145 payload names a real task route.
-
-        Gathering pathfinding uses the same four TLV types as the historical
-        compatibility task route. Wire shape alone therefore cannot own the
-        message; route/category values must resolve against this catalog.
-        """
+        """Return True only when an ambiguous 1145 payload names a legacy task route."""
         request = parse_task_1145_request(fields)
         if request is None:
             return False
@@ -177,6 +210,7 @@ class TaskRuntime:
         now: int | float = 0,
         today: str | None = None,
     ) -> TaskRuntimeResult | None:
+        """Keep older compatibility route handling without owning normal pathfinding."""
         request = parse_task_1145_request(fields)
         if request is None or not self.matches_1145(fields):
             return None
