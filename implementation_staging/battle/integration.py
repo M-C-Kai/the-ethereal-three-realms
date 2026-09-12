@@ -162,10 +162,13 @@ def _install_map_encounter_adapter(server_module: ModuleType | Any) -> None:
             if role is not None
             else battle_state.player_tile
         )
+        # Preserve the old q-action behavior when 2029 carries no object tile:
+        # keep contact_tile unset so escape falls back to the last real player
+        # tile. Proximity 1005->2031 carries the Boss tile explicitly.
         monster_tile = (
             (int(object_x), int(object_y))
             if object_x is not None and object_y is not None
-            else (int(monster.x), int(monster.y))
+            else None
         )
         request = encounter.EncounterRequest(
             map_id=int(current_settings.id),
