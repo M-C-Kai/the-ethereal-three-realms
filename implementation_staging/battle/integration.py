@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import ModuleType
 from typing import Any
 
-from . import encounter, engine, protocol, rewards, state
+from . import encounter, engine, protocol, resources, rewards, state
 
 
 def _legacy_should_suppress_escape_retrigger(
@@ -116,3 +116,19 @@ def install(server_module: ModuleType | Any) -> None:
         'is_player_escape_command',
     ):
         setattr(server_module, name, getattr(protocol, name))
+
+    for name in (
+        'battle_resource_resolution',
+        'format_battle_resource_query_log',
+        'battle_resource_path',
+        'battle_resource_frames',
+        'battle_image_resource',
+        'battle_image_resolve_debug',
+        'battle_image_frames',
+    ):
+        setattr(server_module, name, getattr(resources, name))
+    server_module.BATTLE_RESOURCE_MODEL_OFFSET = resources.BATTLE_RESOURCE_MODEL_OFFSET
+    server_module.BATTLE_RESOURCE_ALIASES = resources.BATTLE_RESOURCE_ALIASES
+    server_module.BATTLE_EMPTY_RESOURCE_IDS = resources.BATTLE_EMPTY_RESOURCE_IDS
+    server_module.PNG_QUERY_MAIN_CACHE = resources.PNG_QUERY_MAIN_CACHE
+    server_module.PNG_QUERY_ROLE_CACHE = resources.PNG_QUERY_ROLE_CACHE
