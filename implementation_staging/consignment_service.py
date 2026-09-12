@@ -50,7 +50,10 @@ def _role_items(role: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(items, list):
         items = []
         role['items'] = items
-    return [item for item in items if isinstance(item, dict)]
+    if any(not isinstance(item, dict) for item in items):
+        items = [item for item in items if isinstance(item, dict)]
+        role['items'] = items
+    return items
 
 
 def _bag_capacity(role: dict[str, Any]) -> int:
