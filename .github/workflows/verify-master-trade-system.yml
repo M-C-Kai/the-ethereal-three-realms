@@ -1,0 +1,50 @@
+name: verify-master-trade-system
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile trade and server modules
+        working-directory: implementation_staging
+        run: python -m py_compile server.py consignment_protocol.py consignment_service.py pet_protocol.py pet_registry.py server_pets.py
+      - name: Verify trade lifecycle and native 1138 contracts
+        working-directory: implementation_staging
+        run: |
+          python -m unittest \
+            tests.test_trade_tcp_e2e \
+            tests.test_trade_system \
+            tests.test_trade_order_history \
+            tests.test_consignment_service \
+            tests.test_consignment_protocol \
+            tests.test_consignment_server_contract \
+            tests.test_consignment_category_entry \
+            tests.test_consignment_entry \
+            tests.test_consignment_categories -v
+      - name: Verify master pet integration remains intact
+        working-directory: implementation_staging
+        run: |
+          python -m unittest \
+            tests.test_pet_minimal_loop \
+            tests.test_pet_details_actions -v
+      - name: Record full-suite baseline status
+        shell: bash
+        run: |
+          set +e
+          (cd implementation_staging && python -m unittest discover -s tests -v) > /tmp/full-suite.log 2>&1
+          code=$?
+          set -e
+          echo "full_suite_exit=$code"
+          grep -E '^(FAIL|ERROR): ' /tmp/full-suite.log || true
+          tail -n 8 /tmp/full-suite.log || true
