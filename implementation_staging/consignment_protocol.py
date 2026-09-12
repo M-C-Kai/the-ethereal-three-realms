@@ -21,6 +21,15 @@ CONSIGNMENT_MESSAGE_ID = 1138
 CONSIGNMENT_SCREEN_ID = 613
 CONSIGNMENT_OPEN_ACTION = 69
 
+# APK pmsj/work/e/ev.c() installs exactly these two tab modes in M[]:
+#   2809 -> 购买物品
+#   2500 -> 购买宠物
+# ev.y(mode) only sends C->S 1138/action=3 when mode == 2809. Opening screen
+# 613 with mode=0 therefore builds the chrome/tabs but leaves the item list
+# uninitialised, which appears on-device as one empty highlighted row.
+CONSIGNMENT_ITEM_MODE = 2809
+CONSIGNMENT_PET_MODE = 2500
+
 CONSIGNMENT_ACTION_BUY = 4
 CONSIGNMENT_ACTION_UNLIST = 2
 CONSIGNMENT_ACTION_REFRESH_MERCHANT = 3
@@ -69,8 +78,8 @@ def is_consignment_browse_request(fields: list[Field]) -> bool:
     )
 
 
-def consignment_screen_frame(*, mode: int = 0) -> bytes:
-    """Open the APK's original screen 613 (pmsj.work.e.ev / 寄售商人)."""
+def consignment_screen_frame(*, mode: int = CONSIGNMENT_ITEM_MODE) -> bytes:
+    """Open screen 613 directly in the APK's native 购买物品 mode."""
     return encode_frame(
         1010,
         [
