@@ -160,6 +160,32 @@ class BattleIntegrationTests(unittest.TestCase):
         self.assertEqual(field_values(decode_frame(sent_frames[0])[1]), [0])
         self.assertEqual(field_values(decode_frame(sent_frames[-1])[1])[0], 1)
 
+    def test_q_action_without_tile_keeps_contact_unset_and_player_tile_real(self):
+        server, _definition = self.make_server_module_with_map()
+        integration.install(server)
+        app = server.LocalGameServer()
+        battle = server.LocalBattleState()
+        role = {'id': 10001, 'map_x': 11, 'map_y': 28}
+
+        asyncio.run(app._handle_map_object_interaction(
+            username='tester',
+            active_role=role,
+            object_id=700001,
+            object_x=None,
+            object_y=None,
+            action=None,
+            source='2031',
+            writer='writer',
+            cipher=None,
+            send_lock='lock',
+            battle_state=battle,
+            npc_dialogue_state=object(),
+        ))
+
+        self.assertTrue(battle.active)
+        self.assertIsNone(battle.contact_tile)
+        self.assertEqual(battle.player_tile, (11, 28))
+
     def test_non_monster_interaction_still_delegates_to_map_layer(self):
         server, _definition = self.make_server_module_with_map()
         integration.install(server)
