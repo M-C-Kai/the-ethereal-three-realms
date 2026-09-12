@@ -7,6 +7,7 @@ import server as _server
 import server_dynamic_maps as _dynamic
 from pet_protocol import apply_pet_state_request, ensure_role_pets, role_pet_frames
 from pet_registry import default_pet_registry
+from protocol import TYPE_BYTE, TYPE_INT, integer
 
 
 LOG = logging.getLogger('piaomiao-local')
@@ -75,15 +76,45 @@ def pet_role_entry_frames(settings, role: dict[str, object]) -> tuple[bytes, ...
     return (*frames, *pet_frames)
 
 
+def _translate_roaming_boss_fight_request(message_id: int, fields):
+    """Bridge the APK-native q-monster fight request into the server's battle route.
+
+    Reverse-engineered client path:
+      map q actor -> action menu "战斗" -> main/w.a(2029, 1, selectedActorId)
+      -> wire fields [BYTE 1, INT actorId].
+
+    The existing local battle implementation is intentionally centralized in
+    the 2031 map-object interaction branch. Rewrite only the dedicated map-58
+    roaming Boss request into the minimal 2031 shape [INT objectId], which the
+    existing tolerant decoder accepts with x/y/action omitted. Other 2029
+    actions and actor ids remain untouched.
+    """
+    if (
+        message_id == 2029
+        and len(fields) >= 2
+        and fields[0].type_id == TYPE_BYTE
+        and int(fields[0].value) == 1
+        and fields[1].type_id == TYPE_INT
+        and int(fields[1].value) == _dynamic.ROAMING_BOSS_ID
+    ):
+        LOG.info(
+            'MAP_BOSS_NATIVE_FIGHT_BRIDGE protocol=2029 action=1 actor=%d -> protocol=2031',
+            _dynamic.ROAMING_BOSS_ID,
+        )
+        return 2031, [integer(_dynamic.ROAMING_BOSS_ID)]
+    return message_id, fields
+
+
 def pet_decode_payload(payload: bytes):
-    """Persist confirmed C->S 1130 state toggles while preserving core routing.
+    """Observe launcher-specific client requests while preserving core routing.
 
     APK ``e/cn`` sends exactly ``[BYTE action, INT petId, BYTE enabled]`` for
-    action 10 (出战/待命) and 48 (溜宠/隐藏).  The base server does not yet own a
-    1130 branch, so the launcher observes those two verified requests here and
-    still returns the untouched decoded message to the normal handler.
+    1130 action 10 (出战/待命) and 48 (溜宠/隐藏). The native roaming q monster
+    uses 2029 ``[BYTE 1, INT actorId]`` when the player chooses "战斗"; bridge
+    only our dedicated Boss id into the server's existing 2031 battle path.
     """
     message_id, fields = _ORIGINAL_DECODE_PAYLOAD(payload)
+    message_id, fields = _translate_roaming_boss_fight_request(message_id, fields)
     if message_id != 1130:
         return message_id, fields
 
