@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Sequence
+from typing import Callable, Dict, Sequence
 
 from protocol import Field
 from task_protocol import (
@@ -34,7 +34,7 @@ class TaskRuntimeResult:
     reason: str = ''
 
 
-RewardApplier = Callable[[dict[str, object], TaskDefinition], bool]
+RewardApplier = Callable[[Dict[str, object], TaskDefinition], bool]
 
 
 class TaskRuntime:
