@@ -11,30 +11,52 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Discover 2.0.0 APK URL
+      - name: Download and inspect 2.0.0 client
         shell: bash
         run: |
+          set -e
+          curl -L --fail --retry 3 -A 'Mozilla/5.0' -o /tmp/pmsj.apk http://download.yoyou.com/apk/pmsj.apk
+          ls -lh /tmp/pmsj.apk
+          sha256sum /tmp/pmsj.apk
+          python -m pip install --quiet androguard
           python - <<'PY'
-          import re, urllib.request
-          urls = [
-              'https://www.yoyou.com/shouji/piaomiaosanjieshou_36512.html',
-              'https://www.1ting.com/youxi/207465.html',
-          ]
-          for url in urls:
-              print('PAGE', url)
-              try:
-                  req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
-                  html = urllib.request.urlopen(req, timeout=20).read().decode('utf-8','ignore')
-              except Exception as exc:
-                  print('ERR', type(exc).__name__, exc)
-                  continue
-              print('LEN', len(html))
-              candidates = sorted(set(re.findall(r'https?://[^\"\'<> ]+?\.apk(?:\?[^\"\'<> ]*)?', html, re.I)))
-              for candidate in candidates:
-                  print('APKURL', candidate)
-              for match in re.finditer(r'<a[^>]+href=[\"\']([^\"\']+)[\"\'][^>]*>(.*?)</a>', html, re.I|re.S):
-                  href, text = match.groups()
-                  text = re.sub('<.*?>','',text).strip()
-                  if '下载' in text or '.apk' in href.lower():
-                      print('LINK', text[:40], href)
+          from androguard.misc import AnalyzeAPK
+
+          apk, dexes, analysis = AnalyzeAPK('/tmp/pmsj.apk')
+          print('PACKAGE', apk.get_package(), 'VERSION', apk.get_androidversion_name())
+
+          targets = {
+              'Lpmsj/work/main/e;': {'al'},
+              'Lpmsj/work/e/ev;': None,
+              'Lpmsj/work/e/p;': None,
+              'Lpmsj/work/e/t;': None,
+              'Lpmsj/work/e/au;': None,
+              'Lpmsj/work/e/q;': None,
+              'Lpmsj/work/e/r;': None,
+              'Lpmsj/work/e/s;': None,
+          }
+
+          for dex in dexes:
+              for cls in dex.get_classes():
+                  cname = cls.get_name()
+                  if cname not in targets:
+                      continue
+                  wanted = targets[cname]
+                  print('\n===== CLASS', cname, '=====')
+                  for method in cls.get_methods():
+                      if wanted is not None and method.get_name() not in wanted:
+                          continue
+                      code = method.get_code()
+                      if code is None:
+                          continue
+                      print('\n--- METHOD', method.get_name(), method.get_descriptor(), '---')
+                      offset = 0
+                      for ins in code.get_bc().get_instructions():
+                          text = f'{offset:04x}: {ins.get_name()} {ins.get_output()}'
+                          if cname == 'Lpmsj/work/main/e;' or '1138' in text or '0x472' in text or '寄售' in text or '下架' in text or '购买' in text:
+                              print(text)
+                          elif cname in {'Lpmsj/work/e/p;','Lpmsj/work/e/t;','Lpmsj/work/e/au;'}:
+                              # These classes contain the request constructors; dump all instructions.
+                              print(text)
+                          offset += ins.get_length()
           PY
