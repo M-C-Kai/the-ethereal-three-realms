@@ -2,14 +2,10 @@ import unittest
 
 from pet_core_bridge import handle_pet_core_action, translate_pet_core_request
 from pet_model import ensure_pet_schema
-from pet_protocol_core import (
-    _PET_PROPERTY_UPDATE_ACTION if False else PET_PROPERTY_UPDATE_ACTION,
-)
 from pet_registry import default_pet_registry
 from protocol import (
     TYPE_BYTE,
     TYPE_INT,
-    TYPE_SHORT,
     TYPE_STRING,
     byte,
     decode_frame,
