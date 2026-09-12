@@ -23,7 +23,7 @@ class PetMinimalLoopTests(unittest.TestCase):
         registry = pet_registry.default_pet_registry()
         definition = registry.require(50100)
         self.assertEqual(definition.name, '测试灵宠')
-        self.assertEqual(definition.model_dat_id, 50100)
+        self.assertEqual(definition.model_dat_id, 5860000)
         self.assertEqual(definition.pet_type, 1)
 
     def test_starter_pet_is_idempotent_and_persistable(self):
@@ -54,7 +54,7 @@ class PetMinimalLoopTests(unittest.TestCase):
         self.assertEqual(fields[1].type_id, TYPE_INT)
         self.assertEqual(fields[1].value, role['pets'][0]['id'])
         self.assertEqual(fields[2].type_id, TYPE_INT)
-        self.assertEqual(fields[2].value, 50100)
+        self.assertEqual(fields[2].value, 5860000)
         self.assertEqual(fields[3].type_id, TYPE_STRING)
         self.assertEqual(fields[3].value, '测试灵宠')
         self.assertEqual(fields[7].type_id, TYPE_INT)
