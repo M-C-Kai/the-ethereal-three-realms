@@ -4,6 +4,7 @@ import contextvars
 import logging
 import time
 
+from battle import integration as _battle_integration
 from battle import state as _battle_state
 import server as _server
 import server_dynamic_maps as _dynamic
@@ -132,20 +133,6 @@ def _roaming_boss_current_tile(*, now: float | None = None) -> tuple[int, int] |
     return int(_dynamic.ROAMING_BOSS_TARGET_X), int(_dynamic.ROAMING_BOSS_TARGET_Y)
 
 
-def battle_should_suppress_escape_retrigger(
-    guard: dict[str, object] | None,
-    map_id: int,
-    monster_id: int,
-) -> bool:
-    """Compatibility adapter while server.py moves to battle.encounter."""
-    return _battle_state.should_suppress_guard(guard, map_id, monster_id)
-
-
-def battle_update_escape_guard_for_movement(state, x: int, y: int) -> bool:
-    """Delegate movement release policy to the authoritative battle state."""
-    return state.update_player_tile(x, y)
-
-
 def _translate_roaming_boss_fight_request(message_id: int, fields):
     if (
         message_id == 2029 and len(fields) >= 2
@@ -162,11 +149,11 @@ def _translate_roaming_boss_fight_request(message_id: int, fields):
 
 
 def _translate_roaming_boss_contact_request(message_id: int, fields, *, now: float | None = None):
-    """Route every in-range movement attempt through the existing battle entry.
+    """Route every in-range movement attempt through the shared battle entry.
 
     The synthetic 2031 record carries the Boss tile, not the player's tile, so
-    the consolidated battle state uses that tile as the contact-radius anchor.
-    The player's real position is still persisted from the decoded 1005 path.
+    the battle subsystem uses that tile as the contact-radius anchor. The
+    player's real position is still persisted from the decoded 1005 path.
     """
     if message_id != 1005:
         return message_id, fields
@@ -275,20 +262,15 @@ def pet_handle_sect_skill_request(
 
 
 def install_pet_support() -> None:
+    # Keep battle compatibility inside the battle subsystem, not the pet layer.
+    _battle_integration.install(_server)
+
     _server.default_role = pet_default_role
     _server.RoleStore.roles_for = pet_roles_for
     _server.RoleStore.create = pet_create_role
     _server.role_entry_frames = pet_role_entry_frames
     _server.decode_payload = pet_decode_payload
     _server.LocalGameServer.handle_sect_skill_request = pet_handle_sect_skill_request
-
-    # Transitional compatibility: all new connections now instantiate the
-    # battle package's authoritative state class. The remaining two function
-    # aliases disappear when server.py's map-entry adapter moves to encounter.py.
-    _server.LocalBattleState = _battle_state.LocalBattleState
-    _server.should_suppress_escape_retrigger = battle_should_suppress_escape_retrigger
-    _server.update_escape_guard_for_movement = battle_update_escape_guard_for_movement
-
     _dynamic.dynamic_map_enter_frames = pet_dynamic_map_enter_frames
 
 
