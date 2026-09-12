@@ -34,7 +34,7 @@ class TaskServerIntegrationTests(unittest.TestCase):
         self.assertTrue(self.server.roles.path.exists())
         self.assertIn('"tasks"', self.server.roles.path.read_text(encoding='utf-8'))
 
-    def test_1403_available_list_uses_task_runtime(self):
+    def test_1403_available_list_uses_task_runtime_and_real_npc_route(self):
         role = default_role(self.settings)
         frames = self.server.handle_task_1403(
             role,
@@ -44,7 +44,14 @@ class TaskServerIntegrationTests(unittest.TestCase):
         message_id, fields = decode_frame(frames[0])
         self.assertEqual(1403, message_id)
         self.assertEqual(50, fields[0].value)
-        self.assertGreaterEqual(fields[1].value, 1)
+        self.assertEqual(0, fields[1].value)
+        self.assertGreaterEqual(fields[2].value, 1)
+        # First catalog row is the minimum main task.  The APK's native task
+        # row can now pathfind its “领取任务” action to 接引真人 in 长安.
+        self.assertEqual(
+            [900001, '试炼启程', 1, 58, 34, 50, 1900003],
+            [field.value for field in fields[3:10]],
+        )
 
     def test_accept_progress_claim_round_trip_persists_state_and_rewards(self):
         role = default_role(self.settings)
@@ -98,9 +105,6 @@ class TaskServerIntegrationTests(unittest.TestCase):
 
     def test_live_pathfind_1145_payload_still_falls_through(self):
         role = default_role(self.settings)
-        # The live gathering pathfinder shares BYTE,INT,BYTE,BYTE with task
-        # navigation.  Map id 58 is not a task route and must remain owned by
-        # the pre-existing pathfinding branch in the game dispatcher.
         result = self.server.handle_task_1145(
             role,
             [
