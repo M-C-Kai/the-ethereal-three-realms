@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import ModuleType
 from typing import Any
 
-from . import encounter, engine, protocol, state
+from . import encounter, engine, protocol, rewards, state
 
 
 def _legacy_should_suppress_escape_retrigger(
@@ -73,6 +73,30 @@ def install(server_module: ModuleType | Any) -> None:
 
     server_module.battle_command_target_id = engine.battle_command_target_id
     server_module.battle_round_action_frames = _legacy_battle_round_action_frames
+
+    reward_services = rewards.RewardServices(
+        role_items=server_module.role_items,
+        bag_item_count=server_module.bag_item_count,
+        bag_capacity=server_module.bag_capacity,
+        apply_one_level=server_module.apply_one_level,
+        max_role_level=server_module.MAX_ROLE_LEVEL,
+    )
+
+    def legacy_apply_battle_rewards(
+        role: dict[str, object],
+        experience: int = rewards.BATTLE_EXP_REWARD,
+        registry=None,
+    ):
+        return rewards.apply_battle_rewards(
+            role,
+            reward_services,
+            experience=experience,
+            registry=registry,
+        )
+
+    server_module.apply_battle_rewards = legacy_apply_battle_rewards
+    server_module.BATTLE_EXP_REWARD = rewards.BATTLE_EXP_REWARD
+    server_module.BATTLE_DROP_TEMPLATE_ID = rewards.BATTLE_DROP_TEMPLATE_ID
 
     for name in (
         'battle_reset_frame',
