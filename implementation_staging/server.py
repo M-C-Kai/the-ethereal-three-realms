@@ -3741,9 +3741,9 @@ def notice_and_world(settings: Settings, role: dict[str, object] | None = None) 
     # APK carries the matching 50000.map.ref alias for the target map.
     client_map_id = current_map.id
     world = encode_frame(1110, [
+        integer(client_map_id),
+        integer(client_map_id),
         integer(0),
-        integer(client_map_id),
-        integer(client_map_id),
         string(current_map.name),
     ])
     return [notice, world]
