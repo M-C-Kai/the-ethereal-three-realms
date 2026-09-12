@@ -5104,12 +5104,24 @@ class LocalGameServer:
         role: dict[str, object],
         fields: list[Field],
         *,
+        now: int | float = 0,
         today: str | None = None,
     ) -> tuple[bytes, ...]:
-        result = self.task_runtime.handle_1403(role, fields, today=today)
+        result = self.task_runtime.handle_1403(role, fields, now=now, today=today)
         if result.changed:
             self.roles.save()
         return result.frames
+
+    def is_known_pathfind_target(self, map_id: int, x: int, y: int) -> bool:
+        """Allow the shared 1145 pathfinder to target gathers or task NPCs."""
+        if self.task_runtime.matches_path_target(map_id, x, y):
+            return True
+        return any(
+            target.map_id == int(map_id)
+            and target.x == int(x)
+            and target.y == int(y)
+            for target in self.settings.life_registry.gather_targets
+        )
 
     def handle_task_1145(
         self,
@@ -6579,7 +6591,9 @@ class LocalGameServer:
                     else:
                         LOG.info('ignored skill message=%d values=%r', message_id, values)
                 elif message_id == 1403 and active_role is not None:
-                    response_frames = self.handle_task_1403(active_role, fields)
+                    response_frames = self.handle_task_1403(
+                        active_role, fields, now=time.time(),
+                    )
                     LOG.info(
                         'task protocol 1403 user=%r role_id=%d values=%r replies=%d',
                         username,
@@ -7251,13 +7265,10 @@ class LocalGameServer:
                     target_x = int(fields[2].value)
                     target_y = int(fields[3].value)
                     current_map = int(active_role.get('map_id', self.settings.default_map_id))
-                    known = any(
-                        target.map_id == map_id and target.x == target_x and target.y == target_y
-                        for target in self.settings.life_registry.gather_targets
-                    )
+                    known = self.is_known_pathfind_target(map_id, target_x, target_y)
                     if map_id != current_map or not known:
                         LOG.info(
-                            'GATHER_REJECT user=%r pathfind map=%d tile=%d,%d reason=unknown_target',
+                            'PATHFIND_REJECT user=%r map=%d tile=%d,%d reason=unknown_target',
                             username,
                             map_id,
                             target_x,
