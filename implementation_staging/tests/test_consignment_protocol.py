@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 import consignment_protocol as c
-from protocol import byte, decode_frame, field_values, integer
+from protocol import TYPE_BYTE, TYPE_INT, byte, decode_frame, field_values, integer
 
 
 class ConsignmentProtocolTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class ConsignmentProtocolTests(unittest.TestCase):
         self.assertTrue(c.is_consignment_market_list_request([byte(23)]))
 
         # Numeric values with the wrong TLV type are invalid. The APK uses
-        # concrete BYTE/INT readers; accepting a SHORT here hides wire bugs.
+        # concrete BYTE/INT readers; accepting a different numeric TLV hides bugs.
         self.assertFalse(c.is_consignment_browse_request([byte(13), integer(27)]))
         self.assertFalse(c.is_consignment_my_listings_request([byte(7), byte(1)]))
         self.assertFalse(c.is_consignment_buy_request([byte(4), integer(1234), byte(2)]))
@@ -51,7 +51,7 @@ class ConsignmentProtocolTests(unittest.TestCase):
         mid, fields = decode_frame(c.consignment_category_counts_frame([0]))
         self.assertEqual(mid, 1138)
         self.assertEqual(field_values(fields), [13, 1, 0])
-        self.assertEqual([f.type_id for f in fields], [1, 1, 4])
+        self.assertEqual([f.type_id for f in fields], [TYPE_BYTE, TYPE_BYTE, TYPE_INT])
 
     def test_market_and_own_rows_match_native_record_widths(self):
         row = c.ConsignmentWireRecord(
