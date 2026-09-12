@@ -70,15 +70,34 @@ class TaskProtocolTests(unittest.TestCase):
         task = self.make_task()
         message_id, fields = decode_frame(available_task_list_frame([task]))
         self.assertEqual(1403, message_id)
-        self.assertEqual([(TYPE_BYTE, 50), (TYPE_SHORT, 1), (TYPE_BYTE, 6)], [(f.type_id, f.value) for f in fields[:3]])
+        # APK main/e.ad reads field1 as SHORT page/selection and field2 as
+        # BYTE record count; record width is inferred from remaining fields.
+        self.assertEqual([(TYPE_BYTE, 50), (TYPE_SHORT, 0), (TYPE_BYTE, 1)], [(f.type_id, f.value) for f in fields[:3]])
         self.assertEqual([10001, '试炼起步', 0, 11001, 1, 7], [f.value for f in fields[3:]])
+
+    def test_available_frame_count_is_number_of_records_not_record_width(self):
+        task = self.make_task()
+        _, fields = decode_frame(available_task_list_frame([task, task]))
+        self.assertEqual(0, fields[1].value)
+        self.assertEqual(2, fields[2].value)
+        self.assertEqual(12, len(fields) - 3)
 
     def test_active_frame_matches_apk_action_6_header_and_record_layout(self):
         task = self.make_task()
         message_id, fields = decode_frame(active_task_list_frame(1, [(task, 'ready')]))
         self.assertEqual(1403, message_id)
-        self.assertEqual([(TYPE_BYTE, 6), (TYPE_SHORT, 1), (TYPE_BYTE, 9), (TYPE_BYTE, 1)], [(f.type_id, f.value) for f in fields[:4]])
+        # APK main/e.ad reads SHORT field1, BYTE record-count field2 and BYTE
+        # category field3; it derives the 9-field record width itself.
+        self.assertEqual([(TYPE_BYTE, 6), (TYPE_SHORT, 0), (TYPE_BYTE, 1), (TYPE_BYTE, 1)], [(f.type_id, f.value) for f in fields[:4]])
         self.assertEqual([10001, '试炼起步', 0, 2, 4, 11001, 2, 1, 10001], [f.value for f in fields[4:]])
+
+    def test_active_frame_count_is_number_of_records_not_record_width(self):
+        task = self.make_task()
+        _, fields = decode_frame(active_task_list_frame(1, [(task, 'active'), (task, 'ready')]))
+        self.assertEqual(0, fields[1].value)
+        self.assertEqual(2, fields[2].value)
+        self.assertEqual(1, fields[3].value)
+        self.assertEqual(18, len(fields) - 4)
 
     def test_detail_ack_is_safe_unhandled_action(self):
         message_id, fields = decode_frame(safe_detail_ack_frame())
