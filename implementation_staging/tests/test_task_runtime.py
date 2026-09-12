@@ -76,15 +76,27 @@ class TaskRuntimeTests(unittest.TestCase):
         self.assertTrue(claimed.changed)
         self.assertEqual(1, role['tasks']['completed']['101'])
 
-    def test_wrong_route_does_not_mutate_role(self):
+    def test_unknown_four_field_route_falls_through_without_mutating_role(self):
         runtime = self.make_runtime()
         role = {'level': 1}
         runtime.migrate_role(role, today='2026-09-12')
         result = runtime.handle_1145(role, [
             Field(TYPE_BYTE, 0), Field(TYPE_INT, 9999), Field(TYPE_BYTE, 1), Field(TYPE_BYTE, 7)
         ], today='2026-09-12')
-        self.assertTrue(result.handled)
-        self.assertFalse(result.changed)
+        self.assertIsNone(result)
+        self.assertEqual({}, role['tasks']['active'])
+
+    def test_live_map_pathfind_shape_is_not_consumed_as_task_route(self):
+        runtime = self.make_runtime()
+        role = {'level': 1}
+        runtime.migrate_role(role, today='2026-09-12')
+        # Gathering pathfinding uses the same BYTE,INT,BYTE,BYTE wire shape as
+        # task navigation. A map id that is not a registered task route must
+        # fall through to the existing 1145 pathfinding handler.
+        result = runtime.handle_1145(role, [
+            Field(TYPE_BYTE, 0), Field(TYPE_INT, 58), Field(TYPE_BYTE, 10), Field(TYPE_BYTE, 11)
+        ], today='2026-09-12')
+        self.assertIsNone(result)
         self.assertEqual({}, role['tasks']['active'])
 
     def test_non_task_1145_shape_falls_through(self):
