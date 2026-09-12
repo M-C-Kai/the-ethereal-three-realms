@@ -17,10 +17,8 @@ class RoamingBossInteractionTests(unittest.TestCase):
         self.role_token = pets._ACTIVE_ROLE.set(self.role)
         self.entered_token = pets._ROAMING_BOSS_ENTERED_AT.set(100.0)
         self.spawn_token = pets._ROAMING_BOSS_SPAWN_TILE.set((9, 28))
-        self.inside_token = pets._ROAMING_BOSS_CONTACT_INSIDE.set(False)
 
     def tearDown(self):
-        pets._ROAMING_BOSS_CONTACT_INSIDE.reset(self.inside_token)
         pets._ROAMING_BOSS_SPAWN_TILE.reset(self.spawn_token)
         pets._ROAMING_BOSS_ENTERED_AT.reset(self.entered_token)
         pets._ACTIVE_ROLE.reset(self.role_token)
@@ -81,36 +79,21 @@ class RoamingBossInteractionTests(unittest.TestCase):
 
         self.assertEqual(message_id, 1005)
         self.assertIs(fields, original_fields)
-        self.assertFalse(pets._ROAMING_BOSS_CONTACT_INSIDE.get())
 
-    def test_contact_is_edge_triggered_until_player_moves_away(self):
+    def test_contact_attempt_is_not_latched_outside_battle_state(self):
         first_message_id, _ = pets._translate_roaming_boss_contact_request(
             1005,
             [integer(11), integer(28)],
             now=104.0,
         )
-        second_fields = [integer(12), integer(28)]
-        second_message_id, returned_fields = pets._translate_roaming_boss_contact_request(
+        second_message_id, _ = pets._translate_roaming_boss_contact_request(
             1005,
-            second_fields,
+            [integer(12), integer(28)],
             now=104.1,
         )
 
         self.assertEqual(first_message_id, 2031)
-        self.assertEqual(second_message_id, 1005)
-        self.assertIs(returned_fields, second_fields)
-
-        pets._translate_roaming_boss_contact_request(
-            1005,
-            [integer(20), integer(20)],
-            now=104.2,
-        )
-        third_message_id, _ = pets._translate_roaming_boss_contact_request(
-            1005,
-            [integer(11), integer(28)],
-            now=104.3,
-        )
-        self.assertEqual(third_message_id, 2031)
+        self.assertEqual(second_message_id, 2031)
 
 
 if __name__ == '__main__':
