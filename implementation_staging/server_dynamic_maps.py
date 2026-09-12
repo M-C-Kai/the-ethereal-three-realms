@@ -21,6 +21,9 @@ BOSS_EFFECT_RESOURCE_ID = 3_000_000
 ROAMING_BOSS_MAP_ID = 58
 ROAMING_BOSS_ID = 700_001
 ROAMING_BOSS_MODEL_OFFSET = 2_100_000
+ROAMING_BOSS_EFFECT_MASK = 0x800000
+ROAMING_BOSS_EFFECT_REQUEST_IMAGE_ID = 70_600
+ROAMING_BOSS_EFFECT_SOURCE_IMAGE_ID = 70_000
 ROAMING_BOSS_MOVE_DELAY_SECONDS = 3.0
 ROAMING_BOSS_TARGET_X = 12
 ROAMING_BOSS_TARGET_Y = 28
@@ -30,6 +33,7 @@ _ORIGINAL_LOAD_MAP_REGISTRY = _server.load_map_registry
 _ORIGINAL_MAP_NPC_FRAME = _server.map_npc_frame
 _ORIGINAL_MAP_NPC_DIALOGUE_FRAMES = _server.map_npc_dialogue_frames
 _ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES = _server.npc_dialogue_option_frames
+_ORIGINAL_BATTLE_IMAGE_RESOURCE = _server.battle_image_resource
 _ORIGINAL_SEND = _server.LocalGameServer._send
 
 
@@ -85,6 +89,30 @@ def map_ref_transfer_frames(
     return frames
 
 
+def roaming_boss_image_resource(image_id: int):
+    """Resolve q's native 40000 foot-ring image to the verified APK 70000 pixels.
+
+    APK ``role/40000.dat`` is the native q-actor ground-ring resource selected
+    by property-6 bit ``0x800000``.  Its three mirrored sprite bands are laid
+    out for image 70600, but this thin APK does not index 70600 while bundled
+    image 70000 has the exact 44x73 / 43x23 / 42x22 geometry already verified
+    on-device through 3000000.dat.  Reply to a 70600 cache miss with the 70000
+    payload while the outer 1501 frame keeps the requested id 70600.
+    """
+    source_id = (
+        ROAMING_BOSS_EFFECT_SOURCE_IMAGE_ID
+        if int(image_id) == ROAMING_BOSS_EFFECT_REQUEST_IMAGE_ID
+        else int(image_id)
+    )
+    if source_id != int(image_id):
+        LOG.info(
+            'MAP_BOSS_EFFECT_IMAGE_ALIAS requested=%d source=%d',
+            int(image_id),
+            source_id,
+        )
+    return _ORIGINAL_BATTLE_IMAGE_RESOURCE(source_id)
+
+
 def roaming_boss_spawn_frame(definition) -> bytes:
     """Create the map-58 Boss through APK-native 2028 / ``b/q``.
 
@@ -93,6 +121,11 @@ def roaming_boss_spawn_frame(definition) -> bytes:
     preserve the same visible resource by applying that offset server-side.
     Fields 1/2 are map coordinates; ``W(w)`` stores them as actor properties
     and immediately seeds the q actor position from those properties.
+
+    q.a(mask) reads integer property 6.  ``main/e.W`` checks bit 0x800000 and,
+    when set, calls ``q.c(40000, true)``.  Because that display is attached to
+    the q actor itself, it shares the actor's interpolated coordinates while
+    protocol 1005 moves the Boss.
     """
     monster = getattr(definition, 'monster', None)
     if monster is None:
@@ -103,6 +136,9 @@ def roaming_boss_spawn_frame(definition) -> bytes:
         short(int(monster.x)),
         short(int(monster.y)),
         integer(resource_id),
+        integer(0),
+        integer(0),
+        integer(ROAMING_BOSS_EFFECT_MASK),
     ])
 
 
@@ -366,6 +402,7 @@ def dynamic_load_map_registry(payload, npc_catalog=None, appearance_catalog=None
 def install_dynamic_map_support() -> None:
     """Install launcher-only hooks without polluting modules that merely import us."""
     _server.LocalGameServer._send = dynamic_send
+    _server.battle_image_resource = roaming_boss_image_resource
     _server.map_npc_frame = map_npc_frame_with_effect
     _server.map_enter_frames = dynamic_map_enter_frames
     _server.load_map_registry = dynamic_load_map_registry
