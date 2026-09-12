@@ -52,7 +52,7 @@ class RoamingBossInteractionTests(unittest.TestCase):
         self.assertEqual(message_id, 2031)
         self.assertEqual(
             field_values(fields),
-            [pets._dynamic.ROAMING_BOSS_ID, 0, 8, 28, 6, 0],
+            [pets._dynamic.ROAMING_BOSS_ID, 0, 9, 28, 6, 0],
         )
         self.assertEqual((self.role['map_x'], self.role['map_y']), (8, 28))
 
@@ -66,7 +66,7 @@ class RoamingBossInteractionTests(unittest.TestCase):
         self.assertEqual(message_id, 2031)
         self.assertEqual(
             field_values(fields),
-            [pets._dynamic.ROAMING_BOSS_ID, 0, 11, 28, 6, 0],
+            [pets._dynamic.ROAMING_BOSS_ID, 0, 12, 28, 6, 0],
         )
 
     def test_far_player_movement_stays_normal_1005(self):
