@@ -11,52 +11,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Download and inspect 2.0.0 client
+      - name: Discover alternate APK mirror
         shell: bash
         run: |
-          set -e
-          curl -L --fail --retry 3 -A 'Mozilla/5.0' -o /tmp/pmsj.apk http://download.yoyou.com/apk/pmsj.apk
-          ls -lh /tmp/pmsj.apk
-          sha256sum /tmp/pmsj.apk
-          python -m pip install --quiet androguard
           python - <<'PY'
-          from androguard.misc import AnalyzeAPK
-
-          apk, dexes, analysis = AnalyzeAPK('/tmp/pmsj.apk')
-          print('PACKAGE', apk.get_package(), 'VERSION', apk.get_androidversion_name())
-
-          targets = {
-              'Lpmsj/work/main/e;': {'al'},
-              'Lpmsj/work/e/ev;': None,
-              'Lpmsj/work/e/p;': None,
-              'Lpmsj/work/e/t;': None,
-              'Lpmsj/work/e/au;': None,
-              'Lpmsj/work/e/q;': None,
-              'Lpmsj/work/e/r;': None,
-              'Lpmsj/work/e/s;': None,
-          }
-
-          for dex in dexes:
-              for cls in dex.get_classes():
-                  cname = cls.get_name()
-                  if cname not in targets:
-                      continue
-                  wanted = targets[cname]
-                  print('\n===== CLASS', cname, '=====')
-                  for method in cls.get_methods():
-                      if wanted is not None and method.get_name() not in wanted:
-                          continue
-                      code = method.get_code()
-                      if code is None:
-                          continue
-                      print('\n--- METHOD', method.get_name(), method.get_descriptor(), '---')
-                      offset = 0
-                      for ins in code.get_bc().get_instructions():
-                          text = f'{offset:04x}: {ins.get_name()} {ins.get_output()}'
-                          if cname == 'Lpmsj/work/main/e;' or '1138' in text or '0x472' in text or '寄售' in text or '下架' in text or '购买' in text:
-                              print(text)
-                          elif cname in {'Lpmsj/work/e/p;','Lpmsj/work/e/t;','Lpmsj/work/e/au;'}:
-                              # These classes contain the request constructors; dump all instructions.
-                              print(text)
-                          offset += ins.get_length()
+          import re, urllib.parse, urllib.request
+          pages = [
+              'https://www.1ting.com/youxi/207465.html',
+              'https://www.yoyou.com/shouji/piaomiaosanjieshou_36512.html',
+          ]
+          for page in pages:
+              print('\nPAGE', page)
+              req = urllib.request.Request(page, headers={'User-Agent':'Mozilla/5.0'})
+              html = urllib.request.urlopen(req, timeout=30).read().decode('utf-8','ignore')
+              print('LEN', len(html))
+              for line in html.splitlines():
+                  low = line.lower()
+                  if any(key in low for key in ('.apk', 'download', 'downurl', 'android', '7b1a92', 'pmsj')):
+                      clean = re.sub(r'\s+', ' ', line).strip()
+                      if len(clean) > 500:
+                          clean = clean[:500]
+                      print('MATCH', clean)
+              urls = set(re.findall(r'https?://[^\"\'<> ]+', html))
+              for url in sorted(urls):
+                  low=url.lower()
+                  if '.apk' in low or 'down' in low or 'download' in low:
+                      print('URL', url)
           PY
