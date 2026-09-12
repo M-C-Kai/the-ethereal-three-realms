@@ -63,6 +63,45 @@ class TaskRuntime:
             entries.append((task, status))
         return tuple(entries)
 
+    def _available_list_entries(
+        self,
+        role: dict[str, object],
+        *,
+        today: str | None = None,
+    ) -> tuple[tuple[TaskDefinition, int], ...]:
+        """Return rows with the status numbers consumed by e/en and e/ca.
+
+        APK meanings are 0=locked, 1=claimable, 2=active, 3=ready to submit,
+        4=delivered. Repeatable tasks become claimable again after a claim, so
+        availability takes precedence over historical completion.
+        """
+        ensure_task_state(role, today=today)
+        state = role.get('tasks')
+        assert isinstance(state, dict)
+        active = state.get('active')
+        active = active if isinstance(active, dict) else {}
+        completed = state.get('completed')
+        completed = completed if isinstance(completed, dict) else {}
+        available_ids = {
+            task.task_id
+            for task in available_tasks(role, self.registry, today=today)
+        }
+        rows: list[tuple[TaskDefinition, int]] = []
+        for task in self.registry.all_tasks():
+            record = active.get(str(task.task_id))
+            if isinstance(record, dict):
+                status = 3 if record.get('status') == 'ready' else 2
+            elif task.task_id in available_ids:
+                status = 1
+            else:
+                try:
+                    completed_count = max(0, int(completed.get(str(task.task_id), 0)))
+                except (TypeError, ValueError):
+                    completed_count = 0
+                status = 4 if completed_count > 0 else 0
+            rows.append((task, status))
+        return tuple(rows)
+
     def active_snapshot_frames(self, role: dict[str, object]) -> tuple[bytes, ...]:
         return tuple(
             active_task_list_frame(wire_id, self._active_entries(role, wire_id))
@@ -72,7 +111,7 @@ class TaskRuntime:
     def snapshot_frames(self, role: dict[str, object], *, today: str | None = None) -> tuple[bytes, ...]:
         ensure_task_state(role, today=today)
         return (
-            available_task_list_frame(available_tasks(role, self.registry, today=today)),
+            available_task_list_frame(self._available_list_entries(role, today=today)),
             *self.active_snapshot_frames(role),
         )
 
@@ -86,7 +125,7 @@ class TaskRuntime:
         migrated = ensure_task_state(role, today=today)
         if is_available_list_request(fields):
             return TaskRuntimeResult(
-                (available_task_list_frame(available_tasks(role, self.registry, today=today)),),
+                (available_task_list_frame(self._available_list_entries(role, today=today)),),
                 migrated,
             )
         if is_active_list_request(fields):
@@ -111,9 +150,9 @@ class TaskRuntime:
     def matches_1145(self, fields: Sequence[Field]) -> bool:
         """Return True only when an ambiguous 1145 payload names a real task route.
 
-        Gathering pathfinding uses the same four TLV types as the task
-        navigation variant.  Wire shape alone therefore cannot own the
-        message; the route/category values must resolve against this catalog.
+        Gathering pathfinding uses the same four TLV types as the historical
+        compatibility task route. Wire shape alone therefore cannot own the
+        message; route/category values must resolve against this catalog.
         """
         request = parse_task_1145_request(fields)
         if request is None:

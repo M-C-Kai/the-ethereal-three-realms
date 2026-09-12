@@ -15,11 +15,11 @@ from pet_protocol import (
     is_pet_skill_request,
     is_pet_state_request,
     pet_detail_frame,
-    pet_property_update_frame,
     pet_skill_list_frame,
     role_pet_frames,
 )
 from pet_registry import default_pet_registry
+from pet_walking_protocol import pet_state_response_frames
 from protocol import TYPE_BYTE, TYPE_INT, byte, field_values, integer
 
 
@@ -292,10 +292,7 @@ def pet_handle_sect_skill_request(
         )
         if result.changed:
             server.roles.save()
-        frames = tuple(
-            pet_property_update_frame(update_pet_id, [(property_id, value)])
-            for update_pet_id, property_id, value in result.updates
-        )
+        frames = pet_state_response_frames(int(role.get('id', 0)), result)
         LOG.info(
             'PET_1130_STATE role_id=%d pet_id=%d action=%d enabled=%s changed=%s updates=%r reason=%s',
             int(role.get('id', 0)), result.pet_id, result.action, result.enabled,

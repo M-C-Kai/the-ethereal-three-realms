@@ -13,7 +13,18 @@
       "rewards": [{"kind": "experience", "amount": 100}, {"kind": "silver", "amount": 100}],
       "repeat_policy": "once",
       "daily_limit": 0,
-      "client_route": {"route_id": 900001, "route_kind": 1}
+      "client_route": {
+        "route_id": 900001,
+        "route_kind": 1,
+        "accept_map_id": 58,
+        "accept_x": 34,
+        "accept_y": 50,
+        "accept_actor_id": 1900003,
+        "submit_map_id": 58,
+        "submit_x": 34,
+        "submit_y": 50,
+        "submit_actor_id": 1900003
+      }
     },
     {
       "task_id": 900002,
@@ -26,7 +37,18 @@
       "rewards": [{"kind": "experience", "amount": 80}, {"kind": "silver", "amount": 80}],
       "repeat_policy": "once",
       "daily_limit": 0,
-      "client_route": {"route_id": 900002, "route_kind": 1}
+      "client_route": {
+        "route_id": 900002,
+        "route_kind": 1,
+        "accept_map_id": 58,
+        "accept_x": 34,
+        "accept_y": 50,
+        "accept_actor_id": 1900003,
+        "submit_map_id": 60001,
+        "submit_x": 12,
+        "submit_y": 8,
+        "submit_actor_id": 1900101
+      }
     },
     {
       "task_id": 900003,
@@ -39,7 +61,18 @@
       "rewards": [{"kind": "experience", "amount": 50}, {"kind": "silver", "amount": 50}],
       "repeat_policy": "repeat",
       "daily_limit": 0,
-      "client_route": {"route_id": 900003, "route_kind": 1}
+      "client_route": {
+        "route_id": 900003,
+        "route_kind": 1,
+        "accept_map_id": 58,
+        "accept_x": 34,
+        "accept_y": 50,
+        "accept_actor_id": 1900003,
+        "submit_map_id": 58,
+        "submit_x": 34,
+        "submit_y": 50,
+        "submit_actor_id": 1900003
+      }
     },
     {
       "task_id": 900004,
@@ -52,7 +85,18 @@
       "rewards": [{"kind": "experience", "amount": 60}, {"kind": "silver", "amount": 60}],
       "repeat_policy": "daily",
       "daily_limit": 1,
-      "client_route": {"route_id": 900004, "route_kind": 1}
+      "client_route": {
+        "route_id": 900004,
+        "route_kind": 1,
+        "accept_map_id": 58,
+        "accept_x": 34,
+        "accept_y": 50,
+        "accept_actor_id": 1900003,
+        "submit_map_id": 60001,
+        "submit_x": 12,
+        "submit_y": 8,
+        "submit_actor_id": 1900101
+      }
     },
     {
       "task_id": 900005,
@@ -65,7 +109,18 @@
       "rewards": [{"kind": "experience", "amount": 120}, {"kind": "silver", "amount": 120}],
       "repeat_policy": "repeat",
       "daily_limit": 0,
-      "client_route": {"route_id": 900005, "route_kind": 1}
+      "client_route": {
+        "route_id": 900005,
+        "route_kind": 1,
+        "accept_map_id": 58,
+        "accept_x": 34,
+        "accept_y": 50,
+        "accept_actor_id": 1900003,
+        "submit_map_id": 58,
+        "submit_x": 34,
+        "submit_y": 50,
+        "submit_actor_id": 1900003
+      }
     }
   ]
 }
