@@ -11,21 +11,57 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Inspect 1ting download resolver
+      - name: Resolve and decompile 1ting APK
         shell: bash
         run: |
+          set -euo pipefail
+          python -m pip install --quiet androguard
           python - <<'PY'
-          import re, urllib.request
+          import json, re, urllib.request
+          from pathlib import Path
+
+          api='https://www.1ting.com/downs/url?id=207465&click=0'
           headers={'User-Agent':'Mozilla/5.0','Referer':'https://www.1ting.com/youxi/207465.html'}
-          for url in [
-              'https://www.1ting.com/public/js/download.js',
-              'https://www.1ting.com/youxi/207465.html',
-          ]:
-              print('\n===== FETCH', url, '=====')
-              req=urllib.request.Request(url,headers=headers)
-              data=urllib.request.urlopen(req,timeout=30).read().decode('utf-8','ignore')
-              print(data[:30000])
-              print('\n===== URL CANDIDATES =====')
-              for x in sorted(set(re.findall(r'(?:https?:)?//[^\"\'<>\\ ]+',data))):
-                  print(x)
+          req=urllib.request.Request(api,headers=headers)
+          raw=urllib.request.urlopen(req,timeout=30).read().decode('utf-8','ignore')
+          print('DOWN_API_RAW', raw[:2000])
+          m=re.search(r'\((\{.*\})\)\s*;?\s*$',raw,re.S)
+          payload=json.loads(m.group(1) if m else raw)
+          url=(payload.get('data') or {}).get('android_url')
+          print('ANDROID_URL', url)
+          if not url:
+              raise SystemExit('no android_url')
+          req=urllib.request.Request(url,headers=headers)
+          data=urllib.request.urlopen(req,timeout=60).read()
+          Path('/tmp/pmsj.apk').write_bytes(data)
+          print('APK_BYTES',len(data))
+          PY
+          sha256sum /tmp/pmsj.apk
+          python - <<'PY'
+          from androguard.misc import AnalyzeAPK
+
+          apk,dexes,_=AnalyzeAPK('/tmp/pmsj.apk')
+          print('APK',apk.get_package(),apk.get_androidversion_name())
+          targets={
+            'Lpmsj/work/main/e;': {'al'},
+            'Lpmsj/work/e/ev;': None,
+            'Lpmsj/work/e/p;': None,
+            'Lpmsj/work/e/t;': None,
+            'Lpmsj/work/e/au;': None,
+          }
+          for dex in dexes:
+            for cls in dex.get_classes():
+              cname=cls.get_name()
+              if cname not in targets: continue
+              wanted=targets[cname]
+              print('\n=====CLASS',cname,'=====')
+              for method in cls.get_methods():
+                if wanted is not None and method.get_name() not in wanted: continue
+                code=method.get_code()
+                if code is None: continue
+                print('\n---METHOD',method.get_name(),method.get_descriptor(),'---')
+                off=0
+                for ins in code.get_bc().get_instructions():
+                  print(f'{off:04x}: {ins.get_name()} {ins.get_output()}')
+                  off+=ins.get_length()
           PY
