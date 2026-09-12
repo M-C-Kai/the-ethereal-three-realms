@@ -1,1 +1,0 @@
-The branch intentionally lacks consignment_service.py at this point.
