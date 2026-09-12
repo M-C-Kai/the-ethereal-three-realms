@@ -77,9 +77,9 @@ def map_npc_frame_with_effect(definition, npc) -> bytes:
     """Attach the verified 3000000 effect to the dedicated 3000100 carrier.
 
     APK ``main/e.X`` creates a native 2030 ``pmsj.work.b/t`` actor from the
-    normal NPC record. Integer field 5 is the built-in attached-display code:
+    normal NPC record.  Integer field 5 is the built-in attached-display code:
     ``base = value // 100 * 100`` and ``index = value % 100`` before calling
-    ``t.a(base, index, true)``. Therefore 3000000 selects resource 3000000,
+    ``t.a(base, index, true)``.  Therefore 3000000 selects resource 3000000,
     animation index 0, while 3000100.dat remains an invisible carrier body.
 
     Field 7 bit 1 is also native behavior. ``m.a(t)`` routes such actors into
@@ -157,7 +157,7 @@ def main() -> None:
             'DYNAMIC_MAP_READY map=%d ref=%s ref_bytes=%d map_o=%s map_o_bytes=%d',
             built.map_id,
             built.map_ref_path,
-            built.map_o_path,
+            built.map_ref_bytes,
             built.map_o_path,
             built.map_o_bytes,
         )
