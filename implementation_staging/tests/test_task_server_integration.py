@@ -46,14 +46,16 @@ class TaskServerIntegrationTests(unittest.TestCase):
         self.assertEqual(50, fields[0].value)
         self.assertEqual(0, fields[1].value)
         self.assertGreaterEqual(fields[2].value, 1)
-        # First catalog row is the minimum main task.  The APK's native task
-        # row can now pathfind its “领取任务” action to 接引真人 in 长安.
         self.assertEqual(
             [900001, '试炼启程', 1, 58, 34, 50, 1900003],
             [field.value for field in fields[3:10]],
         )
 
-    def test_accept_progress_claim_round_trip_persists_state_and_rewards(self):
+    def test_task_npc_coordinate_is_allowed_by_shared_pathfinder(self):
+        self.assertTrue(self.server.is_known_pathfind_target(58, 34, 50))
+        self.assertFalse(self.server.is_known_pathfind_target(58, 35, 50))
+
+    def test_native_action8_accept_progress_claim_round_trip_persists_state_and_rewards(self):
         role = default_role(self.settings)
         self.server.task_runtime.migrate_role(role, today='2026-09-12')
         self.server.roles.data = {
@@ -62,19 +64,20 @@ class TaskServerIntegrationTests(unittest.TestCase):
         }
         silver_before = int(role['currencies']['silver'])
 
-        accepted = self.server.handle_task_1145(
+        accepted = self.server.handle_task_1403(
             role,
             [
-                Field(TYPE_BYTE, 0),
+                Field(TYPE_BYTE, 8),
+                Field(TYPE_INT, int(role['id'])),
                 Field(TYPE_INT, 900001),
-                Field(TYPE_BYTE, 1),
-                Field(TYPE_BYTE, 1),
             ],
             now=10,
             today='2026-09-12',
         )
-        self.assertIsNotNone(accepted)
+        self.assertGreaterEqual(len(accepted), 1)
         self.assertEqual('active', role['tasks']['active']['900001']['status'])
+        _, available_fields = decode_frame(accepted[0])
+        self.assertEqual(2, available_fields[5].value)
 
         self.server.record_task_event(
             role,
