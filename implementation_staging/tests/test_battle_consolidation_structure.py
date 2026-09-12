@@ -81,11 +81,20 @@ class BattleConsolidationStructureTests(unittest.TestCase):
         for node in self.server_tree().body:
             if isinstance(node, ast.ImportFrom) and node.module:
                 imported_modules.add(node.module)
-        self.assertTrue({'battle.state', 'battle.protocol', 'battle.resources', 'battle.encounter', 'battle.rewards'} <= imported_modules)
+        self.assertTrue({
+            'battle.state',
+            'battle.protocol',
+            'battle.resources',
+            'battle.encounter',
+            'battle.engine',
+            'battle.rewards',
+            'battle.service',
+        } <= imported_modules)
 
     def test_legacy_battle_monkeypatch_and_escape_shim_are_gone(self):
         self.assertFalse((ROOT / 'battle' / 'integration.py').exists())
         self.assertFalse((ROOT / 'battle_escape_guard.py').exists())
+        self.assertFalse((ROOT / 'refactor_battle_server.py').exists())
         pets_source = PETS_PATH.read_text(encoding='utf-8')
         self.assertNotIn('_battle_integration', pets_source)
         self.assertNotIn('battle.integration', pets_source)
