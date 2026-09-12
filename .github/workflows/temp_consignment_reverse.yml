@@ -11,30 +11,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Discover alternate APK mirror
+      - name: Inspect 1ting download resolver
         shell: bash
         run: |
           python - <<'PY'
-          import re, urllib.parse, urllib.request
-          pages = [
+          import re, urllib.request
+          headers={'User-Agent':'Mozilla/5.0','Referer':'https://www.1ting.com/youxi/207465.html'}
+          for url in [
+              'https://www.1ting.com/public/js/download.js',
               'https://www.1ting.com/youxi/207465.html',
-              'https://www.yoyou.com/shouji/piaomiaosanjieshou_36512.html',
-          ]
-          for page in pages:
-              print('\nPAGE', page)
-              req = urllib.request.Request(page, headers={'User-Agent':'Mozilla/5.0'})
-              html = urllib.request.urlopen(req, timeout=30).read().decode('utf-8','ignore')
-              print('LEN', len(html))
-              for line in html.splitlines():
-                  low = line.lower()
-                  if any(key in low for key in ('.apk', 'download', 'downurl', 'android', '7b1a92', 'pmsj')):
-                      clean = re.sub(r'\s+', ' ', line).strip()
-                      if len(clean) > 500:
-                          clean = clean[:500]
-                      print('MATCH', clean)
-              urls = set(re.findall(r'https?://[^\"\'<> ]+', html))
-              for url in sorted(urls):
-                  low=url.lower()
-                  if '.apk' in low or 'down' in low or 'download' in low:
-                      print('URL', url)
+          ]:
+              print('\n===== FETCH', url, '=====')
+              req=urllib.request.Request(url,headers=headers)
+              data=urllib.request.urlopen(req,timeout=30).read().decode('utf-8','ignore')
+              print(data[:30000])
+              print('\n===== URL CANDIDATES =====')
+              for x in sorted(set(re.findall(r'(?:https?:)?//[^\"\'<>\\ ]+',data))):
+                  print(x)
           PY
