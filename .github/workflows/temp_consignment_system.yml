@@ -17,5 +17,5 @@ jobs:
       - name: Run consignment tests
         working-directory: implementation_staging
         run: |
-          python -m py_compile consignment_protocol.py consignment_service.py
-          python -m unittest tests.test_consignment_protocol tests.test_consignment_service
+          python -m py_compile consignment_protocol.py consignment_service.py server.py
+          python -m unittest tests.test_consignment_protocol tests.test_consignment_service tests.test_consignment_server
