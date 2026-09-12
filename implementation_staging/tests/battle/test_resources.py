@@ -23,7 +23,7 @@ class BattleResourceTests(unittest.TestCase):
         self.assertEqual(field_values(last_fields), [2, 0, 0, 0, b''])
         self.assertEqual(
             [field.type_id for field in first_fields],
-            [2, 4, 3, 3, 8],
+            [2, 4, 3, 3, 7],
         )
 
     def test_role_alias_and_offset_resolution_use_implementation_root(self):
@@ -109,7 +109,7 @@ class BattleResourceTests(unittest.TestCase):
             self.assertEqual(field_values(finish_fields)[14:16], [0, b''])
             self.assertEqual(
                 [field.type_id for field in first_fields],
-                [4, 4, 2, 2, 4, 3, 3, 2, 2, 3, 3, 4, 4, 4, 3, 8],
+                [4, 4, 2, 2, 4, 3, 3, 2, 2, 3, 3, 4, 4, 4, 3, 7],
             )
 
 
