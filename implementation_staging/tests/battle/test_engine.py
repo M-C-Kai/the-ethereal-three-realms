@@ -40,7 +40,9 @@ class BattleEngineTests(unittest.TestCase):
         self.assertTrue(result.accepted)
         self.assertFalse(result.monster_defeated)
         self.assertEqual(state.monster_hp_for(700002), 80)
-        self.assertEqual(state.player_hp, 94)
+        # Existing formula: max(1, monster_attack - player_defence // 2)
+        # = 10 - 4 // 2 = 8.
+        self.assertEqual(state.player_hp, 92)
         self.assertEqual(len(result.actions), 2)
         self.assertEqual(
             (result.actions[0].kind, result.actions[0].actor_id, result.actions[0].target_id, result.actions[0].damage),
@@ -48,7 +50,7 @@ class BattleEngineTests(unittest.TestCase):
         )
         self.assertEqual(
             (result.actions[1].kind, result.actions[1].actor_id, result.actions[1].target_id, result.actions[1].damage),
-            ('attack', 700002, 10001, 6),
+            ('attack', 700002, 10001, 8),
         )
 
     def test_defend_halves_monster_damage_without_inventing_player_damage(self):
@@ -57,10 +59,11 @@ class BattleEngineTests(unittest.TestCase):
         result = resolve_round(state, 2)
 
         self.assertTrue(result.accepted)
-        self.assertEqual(state.player_hp, 97)
+        # Base damage 8, defending halves to 4.
+        self.assertEqual(state.player_hp, 96)
         self.assertEqual(result.actions[0].kind, 'defend')
         self.assertEqual(result.actions[0].damage, 0)
-        self.assertEqual(result.actions[1].damage, 3)
+        self.assertEqual(result.actions[1].damage, 4)
 
     def test_killing_last_monster_prevents_counterattack(self):
         state = LocalBattleState()
