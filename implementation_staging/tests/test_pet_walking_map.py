@@ -1,7 +1,7 @@
 import unittest
 
-from pet_protocol import (
-    apply_pet_state_request,
+from pet_protocol import apply_pet_state_request
+from pet_walking_protocol import (
     pet_map_attach_frame,
     pet_map_detach_frame,
     pet_state_response_frames,
