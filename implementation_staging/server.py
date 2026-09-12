@@ -1171,6 +1171,7 @@ class Settings:
     heartbeat_interval_seconds: float = 25.0
     map_o_file: str = 'maps/58.map.o'
     role_data_file: str = 'data/roles.json'
+    consignment_data_file: str = 'data/consignment_listings.json'
 
     @classmethod
     def load(cls, path: Path) -> 'Settings':
@@ -5106,6 +5107,12 @@ class LocalGameServer:
         self.settings = settings
         self.accounts = AccountStore(settings)
         self.roles = RoleStore(settings)
+        configured_consignment = Path(settings.consignment_data_file)
+        self.consignment_data_file = (
+            configured_consignment
+            if configured_consignment.is_absolute()
+            else Path(__file__).resolve().parent / configured_consignment
+        )
         self.character_update_bus = build_character_update_bus()
         self.task_support = default_task_server_support(settings.item_registry)
         self.task_runtime = self.task_support.runtime
@@ -5658,7 +5665,11 @@ class LocalGameServer:
         # reloads before operations so separate connections observe committed
         # listings without sharing a second mutable market cache.
         current_consignment_category = 0
-        consignment = ConsignmentService(self.roles, self.settings.item_registry)
+        consignment = ConsignmentService(
+            self.roles,
+            self.settings.item_registry,
+            self.consignment_data_file,
+        )
         # Connection-level gathering state (one active 2027 gather at most).
         gathering = ConnectionGathering()
         fuyuan_session = fuyuan.FuyuanSession()

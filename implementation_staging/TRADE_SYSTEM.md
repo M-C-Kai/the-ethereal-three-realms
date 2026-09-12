@@ -12,7 +12,7 @@
 
 ## 持久化模型
 
-`data/consignment_listings.json` 同时保存：
+`consignment_data_file`（默认 `data/consignment_listings.json`）可按服务器实例独立配置，文件同时保存：
 
 - `listings`：挂单生命周期，状态为 `active / sold / cancelled / expired`。
 - `transactions`：只记录真正完成的交易；购买失败和撤单都不会生成成交记录。

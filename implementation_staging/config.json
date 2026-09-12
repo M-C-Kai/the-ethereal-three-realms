@@ -138,5 +138,6 @@
     }
   },
   "heartbeat_interval_seconds": 25,
-  "role_data_file": "data/roles.json"
+  "role_data_file": "data/roles.json",
+  "consignment_data_file": "data/consignment_listings.json"
 }
