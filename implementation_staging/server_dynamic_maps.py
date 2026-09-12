@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import server as _server
+from consignment_protocol import consignment_screen_frame
 from dynamic_map_builder import (
     materialize_all_dynamic_maps,
     merge_dynamic_maps_into_registry_payload,
@@ -16,9 +17,12 @@ MAP_REF_CHUNK_SIZE = 12_000
 MAX_MAP_REF_TRANSFER_SIZE = 0x7FFF
 BOSS_EFFECT_CARRIER_DAT_ID = 3_000_100
 BOSS_EFFECT_RESOURCE_ID = 3_000_000
+CONSIGNMENT_MERCHANT_OPTION = 1
 _ORIGINAL_MAP_ENTER_FRAMES = _server.map_enter_frames
 _ORIGINAL_LOAD_MAP_REGISTRY = _server.load_map_registry
 _ORIGINAL_MAP_NPC_FRAME = _server.map_npc_frame
+_ORIGINAL_MAP_NPC_DIALOGUE_FRAMES = _server.map_npc_dialogue_frames
+_ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES = _server.npc_dialogue_option_frames
 
 
 def map_ref_path(map_id: int) -> Path:
@@ -103,6 +107,75 @@ def map_npc_frame_with_effect(definition, npc) -> bytes:
     ])
 
 
+def consignment_map_npc_dialogue_frames(npc, role, settings) -> list[bytes]:
+    """Expose the APK's original consignment page from a consignment NPC.
+
+    Screen 6 (2032) remains the native NPC dialogue overlay.  Selecting the
+    single 寄售 option is handled by ``consignment_npc_dialogue_option_frames``
+    and opens screen 613 / ``pmsj.work.e.ev``.
+    """
+    if str(getattr(npc, 'service', '')) != 'consignment_merchant':
+        return _ORIGINAL_MAP_NPC_DIALOGUE_FRAMES(npc, role, settings)
+
+    def dialogue_record(kind: int, *, option_id: int = 0, text: str = '', icon: int = 0):
+        return [
+            integer(0),
+            integer(0),
+            integer(0),
+            short(0),
+            integer(option_id),
+            byte(kind),
+            string(text),
+            integer(icon),
+        ]
+
+    introduction = str(getattr(npc, 'introduction', '') or getattr(npc, 'label', '') or getattr(npc, 'name', ''))
+    records = [*dialogue_record(1, text=introduction)]
+    records.extend(dialogue_record(
+        2,
+        option_id=CONSIGNMENT_MERCHANT_OPTION,
+        text='寄售',
+    ))
+    records.extend(dialogue_record(2, option_id=0, text='结束对话'))
+    records.extend(dialogue_record(100))
+    return [encode_frame(2032, [
+        integer(int(npc.id)),
+        byte(len(records) // 8),
+        *records,
+    ])]
+
+
+def consignment_npc_dialogue_option_frames(settings, role, state, option_id: int) -> list[bytes]:
+    """Open native consignment screen 613 when the selected NPC is the merchant."""
+    if role is None or int(option_id) != CONSIGNMENT_MERCHANT_OPTION:
+        return _ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES(settings, role, state, option_id)
+
+    try:
+        definition = _server.settings_for_role(settings, role)
+    except ValueError:
+        return _ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES(settings, role, state, option_id)
+
+    if state.map_id != definition.id or state.npc_id is None:
+        return _ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES(settings, role, state, option_id)
+
+    npc = _server.map_npc_for_object_id(definition, state.npc_id)
+    if npc is None or str(getattr(npc, 'service', '')) != 'consignment_merchant':
+        return _ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES(settings, role, state, option_id)
+
+    try:
+        LOG.info(
+            'CONSIGNMENT_MERCHANT_OPEN role_id=%d npc_id=%d screen=613 protocol=1138',
+            int(role.get('id', 0)),
+            int(npc.id),
+        )
+        return [
+            _server.map_object_interaction_ack_frame(0),
+            consignment_screen_frame(),
+        ]
+    finally:
+        state.clear()
+
+
 def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[bytes]:
     """Prefer server-delivered map.ref while preserving native transition order."""
     original = list(_ORIGINAL_MAP_ENTER_FRAMES(definition, role_id))
@@ -148,6 +221,8 @@ def install_dynamic_map_support() -> None:
     _server.map_npc_frame = map_npc_frame_with_effect
     _server.map_enter_frames = dynamic_map_enter_frames
     _server.load_map_registry = dynamic_load_map_registry
+    _server.map_npc_dialogue_frames = consignment_map_npc_dialogue_frames
+    _server.npc_dialogue_option_frames = consignment_npc_dialogue_option_frames
 
 
 def main() -> None:
