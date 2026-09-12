@@ -1,0 +1,205 @@
+name: resume-trade-system
+
+on:
+  push:
+    branches: [feat/consignment-full-flow-20260912]
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Capture repository regression baseline without new trade RED tests
+        shell: bash
+        run: |
+          mv implementation_staging/tests/test_trade_system.py /tmp/test_trade_system.py
+          mv implementation_staging/tests/test_trade_order_history.py /tmp/test_trade_order_history.py
+          set +e
+          (cd implementation_staging && python -m unittest discover -s tests -v) > /tmp/trade-baseline.log 2>&1
+          set -e
+          grep -E '^(FAIL|ERROR): ' /tmp/trade-baseline.log \
+            | sed -E 's/^(FAIL|ERROR): ([^ ]+).*/\1 \2/' \
+            | sort -u > /tmp/trade-baseline.names || true
+          mv /tmp/test_trade_system.py implementation_staging/tests/test_trade_system.py
+          mv /tmp/test_trade_order_history.py implementation_staging/tests/test_trade_order_history.py
+          git reset --hard HEAD
+          test "$(wc -l < /tmp/trade-baseline.names)" -eq 31
+          cat /tmp/trade-baseline.names
+
+      - name: Implement durable transaction ledger and histories
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one marker, got {count}')
+              return text.replace(old, new, 1)
+
+          path = Path('implementation_staging/consignment_service.py')
+          text = path.read_text(encoding='utf-8')
+
+          text = replace_once(
+              text,
+              """    listing: dict[str, object] | None = None\n    item: dict[str, object] | None = None\n""",
+              """    listing: dict[str, object] | None = None\n    transaction: dict[str, object] | None = None\n    item: dict[str, object] | None = None\n""",
+              'result transaction field',
+          )
+
+          text = replace_once(
+              text,
+              """        self.data: dict[str, object] = {\n            'next_listing_id': 1,\n            'next_item_instance_id': 1,\n            'listings': [],\n        }\n""",
+              """        self.data: dict[str, object] = {\n            'next_listing_id': 1,\n            'next_item_instance_id': 1,\n            'next_transaction_id': 1,\n            'listings': [],\n            'transactions': [],\n        }\n""",
+              'initial trade store schema',
+          )
+
+          text = replace_once(
+              text,
+              """        if not isinstance(loaded, dict) or not isinstance(loaded.get('listings'), list):\n            return\n        loaded.setdefault('next_listing_id', 1)\n        loaded.setdefault('next_item_instance_id', 1)\n        self.data = loaded\n""",
+              """        if not isinstance(loaded, dict) or not isinstance(loaded.get('listings'), list):\n            return\n        if 'transactions' in loaded and not isinstance(loaded.get('transactions'), list):\n            return\n        loaded.setdefault('next_listing_id', 1)\n        loaded.setdefault('next_item_instance_id', 1)\n        transactions = loaded.setdefault('transactions', [])\n        max_transaction_id = max(\n            (int(row.get('transaction_id', 0)) for row in transactions if isinstance(row, dict)),\n            default=0,\n        )\n        loaded['next_transaction_id'] = max(\n            int(loaded.get('next_transaction_id', 1)),\n            max_transaction_id + 1,\n            1,\n        )\n        self.data = loaded\n""",
+              'trade store migration',
+          )
+
+          text = replace_once(
+              text,
+              """    def _listings(self) -> list[dict[str, object]]:\n        rows = self.data.setdefault('listings', [])\n        if not isinstance(rows, list):\n            rows = []\n            self.data['listings'] = rows\n        return rows  # type: ignore[return-value]\n\n    def _all_roles(self):\n""",
+              """    def _listings(self) -> list[dict[str, object]]:\n        rows = self.data.setdefault('listings', [])\n        if not isinstance(rows, list):\n            rows = []\n            self.data['listings'] = rows\n        return rows  # type: ignore[return-value]\n\n    def _transactions(self) -> list[dict[str, object]]:\n        rows = self.data.setdefault('transactions', [])\n        if not isinstance(rows, list):\n            rows = []\n            self.data['transactions'] = rows\n        return rows  # type: ignore[return-value]\n\n    def _all_roles(self):\n""",
+              'transactions collection',
+          )
+
+          text = replace_once(
+              text,
+              """    def _next_listing_id(self) -> int:\n        existing = [int(row.get('listing_id', 0)) for row in self._listings()]\n        value = max(max(existing, default=0) + 1, int(self.data.get('next_listing_id', 1)), 1)\n        self.data['next_listing_id'] = value + 1\n        return value\n\n    def _tradable(self, item: Mapping[str, object]) -> bool:\n""",
+              """    def _next_listing_id(self) -> int:\n        existing = [int(row.get('listing_id', 0)) for row in self._listings()]\n        value = max(max(existing, default=0) + 1, int(self.data.get('next_listing_id', 1)), 1)\n        self.data['next_listing_id'] = value + 1\n        return value\n\n    def _next_transaction_id(self) -> int:\n        existing = [int(row.get('transaction_id', 0)) for row in self._transactions()]\n        value = max(\n            max(existing, default=0) + 1,\n            int(self.data.get('next_transaction_id', 1)),\n            1,\n        )\n        self.data['next_transaction_id'] = value + 1\n        return value\n\n    def _tradable(self, item: Mapping[str, object]) -> bool:\n""",
+              'transaction id allocator',
+          )
+
+          text = replace_once(
+              text,
+              """    def category_count(self, category_id: int) -> int:\n        return len(self.search(category_id))\n\n    def unlist(self, seller: dict[str, object], item_instance_id: int) -> ConsignmentResult:\n""",
+              """    def category_count(self, category_id: int) -> int:\n        return len(self.search(category_id))\n\n    def order_history(\n        self,\n        role_id: int,\n        *,\n        status: str | None = None,\n    ) -> list[dict[str, object]]:\n        \"\"\"Return one seller's complete listing lifecycle.\"\"\"\n        self._reload()\n        if status is not None and status not in VALID_STATUSES:\n            raise ValueError(f'unknown listing status: {status}')\n        target = int(role_id)\n        rows = [\n            row\n            for row in self._listings()\n            if int(row.get('seller_role_id', 0)) == target\n            and (status is None or row.get('status') == status)\n        ]\n        return sorted(rows, key=lambda row: int(row.get('listing_id', 0)))\n\n    def trade_history(\n        self,\n        role_id: int,\n        *,\n        side: str = 'all',\n    ) -> list[dict[str, object]]:\n        \"\"\"Return durable successful-trade receipts for a buyer or seller.\"\"\"\n        self._reload()\n        if side not in {'all', 'seller', 'buyer'}:\n            raise ValueError(f'unknown trade history side: {side}')\n        target = int(role_id)\n        rows: list[dict[str, object]] = []\n        for row in self._transactions():\n            seller_match = int(row.get('seller_role_id', 0)) == target\n            buyer_match = int(row.get('buyer_role_id', 0)) == target\n            if side == 'seller' and not seller_match:\n                continue\n            if side == 'buyer' and not buyer_match:\n                continue\n            if side == 'all' and not (seller_match or buyer_match):\n                continue\n            rows.append(row)\n        return sorted(rows, key=lambda row: int(row.get('transaction_id', 0)))\n\n    def unlist(self, seller: dict[str, object], item_instance_id: int) -> ConsignmentResult:\n""",
+              'history query methods',
+          )
+
+          text = replace_once(
+              text,
+              """        listing['status'] = 'sold'\n        listing['buyer_role_id'] = int(buyer.get('id', 0))\n        listing['sold_at'] = int(time.time())\n\n        self._persist(\n            [(buyer, buyer_snapshot), (seller, seller_snapshot)],\n            data_snapshot,\n        )\n        return ConsignmentResult(True, listing=listing, item=item, total_price=total)\n""",
+              """        completed_at = int(time.time())\n        listing['status'] = 'sold'\n        listing['buyer_role_id'] = int(buyer.get('id', 0))\n        listing['sold_at'] = completed_at\n\n        transaction = {\n            'transaction_id': self._next_transaction_id(),\n            'listing_id': int(listing.get('listing_id', 0)),\n            'status': 'completed',\n            'seller_role_id': int(seller.get('id', 0)),\n            'seller_name': str(seller.get('name', listing.get('seller_name', ''))),\n            'buyer_role_id': int(buyer.get('id', 0)),\n            'buyer_name': str(buyer.get('name', '')),\n            'item_instance_id': int(listing.get('item_instance_id', 0)),\n            'template_id': int(listing.get('template_id', 0)),\n            'display_name': str(listing.get('display_name', item.get('name', ''))),\n            'quantity': int(listing.get('quantity', 1)),\n            'unit_price': int(listing.get('unit_price', 0)),\n            'total_price': total,\n            'completed_at': completed_at,\n        }\n        self._transactions().append(transaction)\n\n        self._persist(\n            [(buyer, buyer_snapshot), (seller, seller_snapshot)],\n            data_snapshot,\n        )\n        return ConsignmentResult(\n            True,\n            listing=listing,\n            transaction=transaction,\n            item=item,\n            total_price=total,\n        )\n""",
+              'completed transaction creation',
+          )
+          path.write_text(text, encoding='utf-8')
+
+          server_path = Path('implementation_staging/server.py')
+          server = server_path.read_text(encoding='utf-8')
+          server = replace_once(
+              server,
+              """                                LOG.info(\n                                    'CONSIGNMENT_BUY_SUCCESS user=%r buyer_role_id=%d item_id=%d total=%d silver=%d',\n                                    username, role_id, item_id, result.total_price, silver,\n                                )\n""",
+              """                                transaction_id = int(\n                                    (result.transaction or {}).get('transaction_id', 0)\n                                )\n                                LOG.info(\n                                    'TRADE_COMPLETED transaction_id=%d user=%r buyer_role_id=%d '\n                                    'item_id=%d total=%d silver=%d',\n                                    transaction_id, username, role_id, item_id,\n                                    result.total_price, silver,\n                                )\n""",
+              'trade completion log',
+          )
+          server_path.write_text(server, encoding='utf-8')
+          PY
+
+          cat > implementation_staging/data/consignment_listings.json <<'JSON'
+          {
+            "next_listing_id": 1,
+            "next_item_instance_id": 1,
+            "next_transaction_id": 1,
+            "listings": [],
+            "transactions": []
+          }
+          JSON
+
+          cat > implementation_staging/TRADE_SYSTEM.md <<'EOF'
+          # 交易系统（协议 1138）
+
+          当前交易系统以 APK 原生寄售界面为入口，服务端按完整交易生命周期管理，而不是只做页面回包。
+
+          ## 完整流程
+
+          1. **浏览**：寄售商人读取 28 个原生分类；分类点击通过 `1138/action=13` 进入筛选页，再由 `action=0/23` 请求市场列表，服务端用 `action=1` 返回有效挂单。
+          2. **挂售**：`action=9` 将真实背包物品转入 `consignment` 托管。整件保留原实例 ID；拆分堆叠只为拆出的托管份额分配全局唯一实例 ID。
+          3. **我的挂售**：`action=7` 返回当前角色仍为 `active` 的挂单。
+          4. **撤单**：`action=2` 将同一托管物品实例放回背包，订单变为 `cancelled`，不产生成功成交记录。
+          5. **购买/成功交易**：`action=4` 校验订单、买卖双方、银两、背包和溢出边界；成功后同时完成买家扣银、卖家加银、物品所有权转移、订单 `sold`、唯一成交凭证 `completed`。
+
+          ## 持久化
+
+          `data/consignment_listings.json` 保存两类不可混淆的数据：
+
+          - `listings`：挂单生命周期，状态为 `active / sold / cancelled / expired`。
+          - `transactions`：只记录真正完成的交易。购买失败或撤单不会生成成交记录。
+          - `next_listing_id / next_item_instance_id / next_transaction_id`：独立单调 ID。
+
+          旧数据只有 `listings` 时会自动补齐交易字段，无需清档。
+
+          ## 原子性与幂等
+
+          成交把角色资产和交易数据作为一个逻辑事务保存；保存失败时，买卖双方银两、物品归属、挂单状态、交易凭证和 ID 分配全部回滚。已成交挂单不会再次出现在活动市场，所以重复购买不会二次扣款或生成第二条成交记录。
+
+          自购、银两不足、背包满、卖家银两溢出、托管物品缺失、非法数量/价格都会拒绝，而且不会写入 `transactions`。宠物寄售仍保持未开放；没有 APK 字段证据前不伪造宠物交易协议。
+
+          ## 服务端查询与审计
+
+          - `search(category_id)`：当前市场有效挂单。
+          - `my_listings(role_id)`：当前角色有效挂单。
+          - `order_history(role_id, status=None)`：卖家的完整挂单生命周期。
+          - `trade_history(role_id, side='all')`：买方/卖方成功成交历史。
+          - 成交日志统一使用 `TRADE_COMPLETED transaction_id=...`，方便真机日志和持久化成交凭证一一对应。
+          EOF
+
+      - name: Verify trade system and native consignment contracts
+        working-directory: implementation_staging
+        run: |
+          python -m py_compile consignment_service.py consignment_protocol.py server.py
+          python -m unittest \
+            tests.test_trade_system \
+            tests.test_trade_order_history \
+            tests.test_consignment_service \
+            tests.test_consignment_protocol \
+            tests.test_consignment_server_contract \
+            tests.test_consignment_category_entry \
+            tests.test_consignment_entry \
+            tests.test_consignment_categories -v
+
+      - name: Prove no new full-suite regression
+        shell: bash
+        run: |
+          set +e
+          (cd implementation_staging && python -m unittest discover -s tests -v) > /tmp/trade-after.log 2>&1
+          set -e
+          grep -E '^(FAIL|ERROR): ' /tmp/trade-after.log \
+            | sed -E 's/^(FAIL|ERROR): ([^ ]+).*/\1 \2/' \
+            | sort -u > /tmp/trade-after.names || true
+          echo "after failures: $(wc -l < /tmp/trade-after.names)"
+          diff -u /tmp/trade-baseline.names /tmp/trade-after.names
+
+      - name: Commit verified trade system and clean temporary CI
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-trade-system.yml
+          rm -f .github/workflows/verify-trade-system.yml
+          rm -f .github/workflows/resume-trade-system.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add implementation_staging/consignment_service.py \
+                  implementation_staging/server.py \
+                  implementation_staging/data/consignment_listings.json \
+                  implementation_staging/TRADE_SYSTEM.md \
+                  implementation_staging/tests/test_trade_system.py \
+                  implementation_staging/tests/test_trade_order_history.py \
+                  .github/workflows
+          git commit -m "feat: complete durable trading lifecycle [GREEN]"
+          git push
