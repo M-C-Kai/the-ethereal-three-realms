@@ -113,7 +113,10 @@ def parse_task_1145_request(fields: Sequence[Field]) -> Task1145Request | None:
 
 def available_task_list_frame(tasks: Iterable[TaskDefinition]) -> bytes:
     entries = tuple(tasks)
-    fields: list[Field] = [byte(50), short(len(entries)), byte(AVAILABLE_RECORD_WIDTH)]
+    # main/e.ad action 50/52 reads field1 as a short page/selection token and
+    # field2 as the record count. It infers each record width from the total
+    # remaining field count, so never transmit AVAILABLE_RECORD_WIDTH here.
+    fields: list[Field] = [byte(50), short(0), byte(len(entries))]
     for task in entries:
         fields.extend((
             integer(task.task_id),
@@ -131,10 +134,12 @@ def active_task_list_frame(
     entries: Iterable[tuple[TaskDefinition, str]],
 ) -> bytes:
     records = tuple(entries)
+    # main/e.ad action 6 reads field1 as a short page/selection token, field2
+    # as record count and field3 as category. The 9-field width is inferred.
     fields: list[Field] = [
         byte(6),
-        short(len(records)),
-        byte(ACTIVE_RECORD_WIDTH),
+        short(0),
+        byte(len(records)),
         byte(int(category_wire_id)),
     ]
     for task, status in records:
