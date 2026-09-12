@@ -19,10 +19,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Capture repository baseline without the new TCP RED test
+      - name: Capture unchanged repository baseline before new TCP contracts
         shell: bash
         run: |
           mv implementation_staging/tests/test_trade_tcp_e2e.py /tmp/test_trade_tcp_e2e.py
+          mv implementation_staging/tests/test_consignment_server_contract.py /tmp/test_consignment_server_contract.py
           set +e
           (cd implementation_staging && python -m unittest discover -s tests -v) > /tmp/trade-tcp-baseline.log 2>&1
           set -e
@@ -30,6 +31,7 @@ jobs:
             | sed -E 's/^(FAIL|ERROR): ([^ ]+).*/\1 \2/' \
             | sort -u > /tmp/trade-tcp-baseline.names || true
           mv /tmp/test_trade_tcp_e2e.py implementation_staging/tests/test_trade_tcp_e2e.py
+          mv /tmp/test_consignment_server_contract.py implementation_staging/tests/test_consignment_server_contract.py
           git reset --hard HEAD
           echo "baseline failures: $(wc -l < /tmp/trade-tcp-baseline.names)"
           test "$(wc -l < /tmp/trade-tcp-baseline.names)" -eq 31
