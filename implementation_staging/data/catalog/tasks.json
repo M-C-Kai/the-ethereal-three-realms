@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "status": "local_compatibility",
+  "tasks": [
+    {
+      "task_id": 900001,
+      "category": "main",
+      "name": "试炼启程",
+      "description": "进入传送测试区，熟悉本地兼容服的地图切换。",
+      "level_requirement": 1,
+      "prerequisites": [],
+      "objectives": [{"kind": "map_entered", "target_id": 50000, "required": 1}],
+      "rewards": [{"kind": "experience", "amount": 100}, {"kind": "silver", "amount": 100}],
+      "repeat_policy": "once",
+      "daily_limit": 0,
+      "client_route": {"route_id": 900001, "route_kind": 1}
+    },
+    {
+      "task_id": 900002,
+      "category": "side",
+      "name": "拜访昆仑导师",
+      "description": "前往昆仑，与昆仑导师交谈。",
+      "level_requirement": 1,
+      "prerequisites": [],
+      "objectives": [{"kind": "npc_talked", "target_id": 1900101, "required": 1}],
+      "rewards": [{"kind": "experience", "amount": 80}, {"kind": "silver", "amount": 80}],
+      "repeat_policy": "once",
+      "daily_limit": 0,
+      "client_route": {"route_id": 900002, "route_kind": 1}
+    },
+    {
+      "task_id": 900003,
+      "category": "cycle",
+      "name": "循环试炼",
+      "description": "赢得一次战斗。该任务用于验证循环任务状态机。",
+      "level_requirement": 1,
+      "prerequisites": [],
+      "objectives": [{"kind": "battle_won", "target_id": 0, "required": 1}],
+      "rewards": [{"kind": "experience", "amount": 50}, {"kind": "silver", "amount": 50}],
+      "repeat_policy": "repeat",
+      "daily_limit": 0,
+      "client_route": {"route_id": 900003, "route_kind": 1}
+    },
+    {
+      "task_id": 900004,
+      "category": "daily",
+      "name": "每日昆仑行",
+      "description": "每日进入一次昆仑。",
+      "level_requirement": 1,
+      "prerequisites": [],
+      "objectives": [{"kind": "map_entered", "target_id": 60001, "required": 1}],
+      "rewards": [{"kind": "experience", "amount": 60}, {"kind": "silver", "amount": 60}],
+      "repeat_policy": "daily",
+      "daily_limit": 1,
+      "client_route": {"route_id": 900004, "route_kind": 1}
+    },
+    {
+      "task_id": 900005,
+      "category": "divine",
+      "name": "神炼试炼",
+      "description": "赢得一次战斗。此为本地兼容服神炼分类验证任务，并非原服任务资料。",
+      "level_requirement": 1,
+      "prerequisites": [],
+      "objectives": [{"kind": "battle_won", "target_id": 0, "required": 1}],
+      "rewards": [{"kind": "experience", "amount": 120}, {"kind": "silver", "amount": 120}],
+      "repeat_policy": "repeat",
+      "daily_limit": 0,
+      "client_route": {"route_id": 900005, "route_kind": 1}
+    }
+  ]
+}
