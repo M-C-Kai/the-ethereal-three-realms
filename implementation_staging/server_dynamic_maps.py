@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from dynamic_map_builder import (
     materialize_all_dynamic_maps,
     merge_dynamic_maps_into_registry_payload,
 )
-from protocol import binary, byte, encode_frame, integer, short, string
+from protocol import binary, byte, decode_frame, encode_frame, field_values, integer, short, string
 
 
 LOG = logging.getLogger('piaomiao-local')
@@ -17,12 +18,19 @@ MAP_REF_CHUNK_SIZE = 12_000
 MAX_MAP_REF_TRANSFER_SIZE = 0x7FFF
 BOSS_EFFECT_CARRIER_DAT_ID = 3_000_100
 BOSS_EFFECT_RESOURCE_ID = 3_000_000
+ROAMING_BOSS_MAP_ID = 58
+ROAMING_BOSS_ID = 700_001
+ROAMING_BOSS_MODEL_OFFSET = 2_100_000
+ROAMING_BOSS_MOVE_DELAY_SECONDS = 3.0
+ROAMING_BOSS_TARGET_X = 12
+ROAMING_BOSS_TARGET_Y = 28
 CONSIGNMENT_MERCHANT_OPTION = 1
 _ORIGINAL_MAP_ENTER_FRAMES = _server.map_enter_frames
 _ORIGINAL_LOAD_MAP_REGISTRY = _server.load_map_registry
 _ORIGINAL_MAP_NPC_FRAME = _server.map_npc_frame
 _ORIGINAL_MAP_NPC_DIALOGUE_FRAMES = _server.map_npc_dialogue_frames
 _ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES = _server.npc_dialogue_option_frames
+_ORIGINAL_SEND = _server.LocalGameServer._send
 
 
 def map_ref_path(map_id: int) -> Path:
@@ -75,6 +83,142 @@ def map_ref_transfer_frames(
             short(offset),
         ]))
     return frames
+
+
+def roaming_boss_spawn_frame(definition) -> bytes:
+    """Create the map-58 Boss through APK-native 2028 / ``b/q``.
+
+    The old 1126 path adds 2,100,000 to the configured raw model before
+    creating ``b/n``.  Protocol 2028 creates ``b/q`` directly from field 3, so
+    preserve the same visible resource by applying that offset server-side.
+    Fields 1/2 are map coordinates; ``W(w)`` stores them as actor properties
+    and immediately seeds the q actor position from those properties.
+    """
+    monster = getattr(definition, 'monster', None)
+    if monster is None:
+        raise ValueError('roaming Boss requires a map monster definition')
+    resource_id = int(monster.model) + ROAMING_BOSS_MODEL_OFFSET
+    return encode_frame(2028, [
+        integer(int(monster.id)),
+        short(int(monster.x)),
+        short(int(monster.y)),
+        integer(resource_id),
+    ])
+
+
+def roaming_boss_move_frame(
+    actor_id: int,
+    source_x: int,
+    source_y: int,
+    target_x: int,
+    target_y: int,
+) -> bytes:
+    """Encode one native 1005 map movement update for a q actor.
+
+    APK 1005 reads actor id from field 0 and target x/y from short fields 3/4.
+    Fields 1/2 are retained as short source coordinates; the q branch does not
+    read them, but keeping the coordinate-shaped five-field record mirrors the
+    native movement packet without inventing a new protocol.
+    """
+    return encode_frame(1005, [
+        integer(int(actor_id)),
+        short(int(source_x)),
+        short(int(source_y)),
+        short(int(target_x)),
+        short(int(target_y)),
+    ])
+
+
+def _replace_roaming_boss_spawn(definition, frames: list[bytes]) -> list[bytes]:
+    """Replace only map 58's generic 1126 Boss record with native 2028/q."""
+    monster = getattr(definition, 'monster', None)
+    if int(getattr(definition, 'id', 0)) != ROAMING_BOSS_MAP_ID or monster is None:
+        return frames
+    if int(getattr(monster, 'id', 0)) != ROAMING_BOSS_ID:
+        return frames
+
+    result: list[bytes] = []
+    replaced = False
+    for frame in frames:
+        try:
+            message_id, fields = decode_frame(frame)
+            values = field_values(fields)
+        except Exception:
+            result.append(frame)
+            continue
+        if (
+            not replaced
+            and message_id == 1126
+            and len(values) >= 3
+            and int(values[2]) == ROAMING_BOSS_ID
+        ):
+            result.append(roaming_boss_spawn_frame(definition))
+            replaced = True
+        else:
+            result.append(frame)
+    return result
+
+
+def _roaming_boss_spawn_position(frames: tuple[bytes, ...]) -> tuple[int, int] | None:
+    """Return source coordinates when this send batch contains the 2028 Boss spawn."""
+    for frame in frames:
+        try:
+            message_id, fields = decode_frame(frame)
+            values = field_values(fields)
+        except Exception:
+            continue
+        if message_id == 2028 and len(values) >= 3 and int(values[0]) == ROAMING_BOSS_ID:
+            return int(values[1]), int(values[2])
+    return None
+
+
+async def _send_roaming_boss_probe(
+    server,
+    writer,
+    source_x: int,
+    source_y: int,
+    *,
+    cipher,
+    lock,
+) -> None:
+    """After map entry, issue one movement target to prove native q walking."""
+    try:
+        await asyncio.sleep(ROAMING_BOSS_MOVE_DELAY_SECONDS)
+        frame = roaming_boss_move_frame(
+            ROAMING_BOSS_ID,
+            source_x,
+            source_y,
+            ROAMING_BOSS_TARGET_X,
+            ROAMING_BOSS_TARGET_Y,
+        )
+        await _ORIGINAL_SEND(server, writer, frame, cipher=cipher, lock=lock)
+        LOG.info(
+            'MAP_BOSS_NATIVE_MOVE actor=%d from=(%d,%d) to=(%d,%d) protocol=1005',
+            ROAMING_BOSS_ID,
+            source_x,
+            source_y,
+            ROAMING_BOSS_TARGET_X,
+            ROAMING_BOSS_TARGET_Y,
+        )
+    except asyncio.CancelledError:
+        raise
+    except (ConnectionError, OSError):
+        LOG.info('MAP_BOSS_NATIVE_MOVE skipped actor=%d connection_closed=1', ROAMING_BOSS_ID)
+
+
+async def dynamic_send(server, writer, *frames: bytes, cipher=None, lock=None) -> None:
+    """Preserve normal sends and schedule one delayed q movement after its spawn."""
+    await _ORIGINAL_SEND(server, writer, *frames, cipher=cipher, lock=lock)
+    source = _roaming_boss_spawn_position(tuple(frames))
+    if source is not None:
+        asyncio.create_task(_send_roaming_boss_probe(
+            server,
+            writer,
+            source[0],
+            source[1],
+            cipher=cipher,
+            lock=lock,
+        ))
 
 
 def map_npc_frame_with_effect(definition, npc) -> bytes:
@@ -177,8 +321,11 @@ def consignment_npc_dialogue_option_frames(settings, role, state, option_id: int
 
 
 def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[bytes]:
-    """Prefer server-delivered map.ref while preserving native transition order."""
-    original = list(_ORIGINAL_MAP_ENTER_FRAMES(definition, role_id))
+    """Prefer server-delivered map.ref and use native q actor for the map-58 Boss."""
+    original = _replace_roaming_boss_spawn(
+        definition,
+        list(_ORIGINAL_MAP_ENTER_FRAMES(definition, role_id)),
+    )
     transfer = map_ref_transfer_frames(definition)
     if not transfer:
         return original
@@ -218,6 +365,7 @@ def dynamic_load_map_registry(payload, npc_catalog=None, appearance_catalog=None
 
 def install_dynamic_map_support() -> None:
     """Install launcher-only hooks without polluting modules that merely import us."""
+    _server.LocalGameServer._send = dynamic_send
     _server.map_npc_frame = map_npc_frame_with_effect
     _server.map_enter_frames = dynamic_map_enter_frames
     _server.load_map_registry = dynamic_load_map_registry
