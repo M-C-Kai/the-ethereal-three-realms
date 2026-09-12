@@ -73,6 +73,36 @@ def map_ref_transfer_frames(
     return frames
 
 
+def map_npc_frame_with_effect(definition, npc) -> bytes:
+    """Attach the verified 3000000 effect to the dedicated 3000100 carrier.
+
+    APK ``main/e.X`` creates a native 2030 ``pmsj.work.b/t`` actor from the
+    normal NPC record. Integer field 5 is the built-in attached-display code:
+    ``base = value // 100 * 100`` and ``index = value % 100`` before calling
+    ``t.a(base, index, true)``. Therefore 3000000 selects resource 3000000,
+    animation index 0, while 3000100.dat remains an invisible carrier body.
+
+    Field 7 bit 1 is also native behavior. ``m.a(t)`` routes such actors into
+    the map manager's W vector. W is merged into the render list but omitted
+    from ``m.l(x, y)`` hit-testing, so the effect stays visible without adding
+    another clickable/selected NPC target over the Boss.
+    """
+    if int(getattr(npc, 'dat_id', 0)) != BOSS_EFFECT_CARRIER_DAT_ID:
+        return _ORIGINAL_MAP_NPC_FRAME(definition, npc)
+
+    return encode_frame(2030, [
+        integer(npc.id),
+        integer(npc.x),
+        integer(npc.y),
+        integer(npc.dat_id),
+        integer(npc.direction),
+        integer(BOSS_EFFECT_RESOURCE_ID),
+        string(npc.name),
+        integer(2),
+        string(npc.label),
+    ])
+
+
 def dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[bytes]:
     """Prefer server-delivered map.ref while preserving native transition order."""
     original = list(_ORIGINAL_MAP_ENTER_FRAMES(definition, role_id))
@@ -113,31 +143,6 @@ def dynamic_load_map_registry(payload, npc_catalog=None, appearance_catalog=None
     )
 
 
-def map_npc_frame_with_effect(definition, npc) -> bytes:
-    """Attach the verified 3000000 effect to the dedicated 3000100 carrier.
-
-    APK ``main/e.X`` creates a native 2030 ``pmsj.work.b/t`` actor from the
-    normal NPC record. Integer field 5 is the built-in attached-display code:
-    ``base = value // 100 * 100`` and ``index = value % 100`` before calling
-    ``t.a(base, index, true)``. Therefore 3000000 selects resource 3000000,
-    animation index 0, while 3000100.dat remains an invisible carrier body.
-    """
-    if int(getattr(npc, 'dat_id', 0)) != BOSS_EFFECT_CARRIER_DAT_ID:
-        return _ORIGINAL_MAP_NPC_FRAME(definition, npc)
-
-    return encode_frame(2030, [
-        integer(npc.id),
-        integer(npc.x),
-        integer(npc.y),
-        integer(npc.dat_id),
-        integer(npc.direction),
-        integer(BOSS_EFFECT_RESOURCE_ID),
-        string(npc.name),
-        integer(0),
-        string(npc.label),
-    ])
-
-
 def install_dynamic_map_support() -> None:
     """Install launcher-only hooks without polluting modules that merely import us."""
     _server.map_npc_frame = map_npc_frame_with_effect
@@ -152,7 +157,7 @@ def main() -> None:
             'DYNAMIC_MAP_READY map=%d ref=%s ref_bytes=%d map_o=%s map_o_bytes=%d',
             built.map_id,
             built.map_ref_path,
-            built.map_ref_bytes,
+            built.map_o_path,
             built.map_o_path,
             built.map_o_bytes,
         )
