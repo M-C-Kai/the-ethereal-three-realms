@@ -49,6 +49,9 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_protocol.py' -v
       - name: Commit consolidation
         run: |
+          # Workflow files are maintained through the GitHub connector because
+          # the Actions token cannot push workflow changes without workflows permission.
+          git restore .github/workflows/battle-system.yml
           if git diff --quiet; then
             echo 'No consolidation changes produced.'
             exit 1
