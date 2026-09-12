@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from protocol import decode_frame, field_values
 import server_dynamic_maps as dynamic
-from consignment_protocol import consignment_screen_frame
+from consignment_protocol import CONSIGNMENT_ITEM_MODE, consignment_screen_frame
 
 
 class _DialogueState:
@@ -22,10 +22,11 @@ class _DialogueState:
 
 
 class ConsignmentEntryTests(unittest.TestCase):
-    def test_native_consignment_screen_is_apk_screen_613(self):
+    def test_native_consignment_screen_is_apk_screen_613_in_item_mode(self):
         message_id, fields = decode_frame(consignment_screen_frame())
         self.assertEqual(message_id, 1010)
-        self.assertEqual(field_values(fields), [0, 0, 0, 0, 613, 69])
+        self.assertEqual(field_values(fields), [0, 0, 0, CONSIGNMENT_ITEM_MODE, 613, 69])
+        self.assertEqual(CONSIGNMENT_ITEM_MODE, 2809)
         self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4, 4, 3])
 
     def test_consignment_merchant_dialogue_exposes_consignment_option(self):
@@ -46,7 +47,7 @@ class ConsignmentEntryTests(unittest.TestCase):
         self.assertIn('寄售', values)
         self.assertIn('结束对话', values)
 
-    def test_selecting_consignment_opens_screen_613_and_clears_dialogue_state(self):
+    def test_selecting_consignment_opens_screen_613_in_item_mode_and_clears_dialogue_state(self):
         npc = SimpleNamespace(id=1_900_004, service='consignment_merchant')
         definition = SimpleNamespace(id=58)
         state = _DialogueState(58, npc.id)
@@ -66,7 +67,7 @@ class ConsignmentEntryTests(unittest.TestCase):
         self.assertEqual(frames[0], b'ack')
         message_id, fields = decode_frame(frames[1])
         self.assertEqual(message_id, 1010)
-        self.assertEqual(field_values(fields)[4:], [613, 69])
+        self.assertEqual(field_values(fields)[3:], [CONSIGNMENT_ITEM_MODE, 613, 69])
         self.assertTrue(state.cleared)
 
 
