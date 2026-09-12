@@ -47,8 +47,23 @@ class TaskRewardDefinition:
 
 @dataclass(frozen=True)
 class TaskClientRoute:
+    """Client-visible NPC coordinates used by the native task screens.
+
+    ``route_id``/``route_kind`` are retained for the older compatibility
+    route experiments.  The APK-confirmed 1403 list records use the explicit
+    accept/submit map, tile and actor fields below.
+    """
+
     route_id: int
     route_kind: int
+    accept_map_id: int = 0
+    accept_x: int = 0
+    accept_y: int = 0
+    accept_actor_id: int = 0
+    submit_map_id: int = 0
+    submit_x: int = 0
+    submit_y: int = 0
+    submit_actor_id: int = 0
 
 
 @dataclass(frozen=True)
@@ -184,6 +199,14 @@ class TaskRegistry:
         route = TaskClientRoute(
             route_id=int(route_raw.get('route_id', task_id)),
             route_kind=int(route_raw.get('route_kind', 1)),
+            accept_map_id=int(route_raw.get('accept_map_id', 0)),
+            accept_x=int(route_raw.get('accept_x', 0)),
+            accept_y=int(route_raw.get('accept_y', 0)),
+            accept_actor_id=int(route_raw.get('accept_actor_id', 0)),
+            submit_map_id=int(route_raw.get('submit_map_id', route_raw.get('accept_map_id', 0))),
+            submit_x=int(route_raw.get('submit_x', route_raw.get('accept_x', 0))),
+            submit_y=int(route_raw.get('submit_y', route_raw.get('accept_y', 0))),
+            submit_actor_id=int(route_raw.get('submit_actor_id', route_raw.get('accept_actor_id', 0))),
         )
         return TaskDefinition(
             task_id=task_id,
