@@ -68,10 +68,8 @@ class BattleIntegrationTests(unittest.TestCase):
         server = self.make_server_module()
         integration.install(server)
         battle = server.LocalBattleState()
-        battle.set_escape_guard(58, 700001, 10001, (12, 28), now=10.0)
+        battle.set_escape_guard(58, 700001, 10001, (12, 28))
 
-        # The compatibility predicate uses real monotonic time; a manually
-        # future-stamped guard therefore remains protected.
         self.assertTrue(server.should_suppress_escape_retrigger(
             battle.escape_guard,
             58,
