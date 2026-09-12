@@ -216,7 +216,7 @@ class ProtocolTests(unittest.TestCase):
 
         names_id, names_fields = decode_frame(creation_names())
         self.assertEqual(names_id, 1080)
-        self.assertEqual(field_values(names_fields), [4, '云生', '月华'])
+        self.assertEqual(field_values(names_fields), [4, '', ''])
         self.assertEqual(names_fields[0].type_id, 3)
 
         delete_id, delete_fields = decode_frame(deletion_result(10001))

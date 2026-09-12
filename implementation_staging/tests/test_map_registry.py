@@ -6,7 +6,15 @@ from pathlib import Path
 
 from protocol import decode_frame, field_values
 import server as server_module
-from server import RoleStore, Settings, default_role, notice_and_world, settings_for_map, settings_for_role
+from server import (
+    RoleStore,
+    Settings,
+    default_role,
+    notice_and_world,
+    relocate_role_for_cold_login,
+    settings_for_map,
+    settings_for_role,
+)
 
 
 try:
@@ -328,6 +336,38 @@ class SettingsRegistryTests(unittest.TestCase):
         self.assertEqual(migrated['map_id'], 58)
         self.assertEqual(migrated['map_name'], '长安')
         self.assertEqual((migrated['map_x'], migrated['map_y']), (60, 67))
+
+    def test_cold_login_relocates_transfer_test_map_to_changan(self):
+        settings = Settings()
+        role = default_role(settings)
+        role.update({'id': 10003, 'map_id': 50000, 'map_name': '传送测试区', 'map_x': 8, 'map_y': 6})
+
+        changed = relocate_role_for_cold_login(settings, role)
+
+        self.assertTrue(changed)
+        self.assertEqual((role['map_id'], role['map_name']), (58, '长安'))
+        self.assertEqual((role['map_x'], role['map_y']), (60, 67))
+
+    def test_cold_login_keeps_changan_and_does_not_touch_roles_for(self):
+        settings = Settings()
+        role = default_role(settings)
+        before = dict(role)
+
+        self.assertFalse(relocate_role_for_cold_login(settings, role))
+        self.assertEqual(role, before)
+
+        with tempfile.TemporaryDirectory() as directory:
+            role_path = Path(directory) / 'roles.json'
+            parked = default_role(Settings())
+            parked.update({'map_id': 50000, 'map_name': '传送测试区', 'map_x': 8, 'map_y': 6})
+            role_path.write_text(json.dumps({
+                'next_role_id': 10002,
+                'accounts': {'parked': [parked]},
+            }, ensure_ascii=False), encoding='utf-8')
+            loaded = RoleStore(Settings(role_data_file=str(role_path))).roles_for('parked')[0]
+
+        self.assertEqual((loaded['map_id'], loaded['map_name']), (50000, '传送测试区'))
+        self.assertEqual((loaded['map_x'], loaded['map_y']), (8, 6))
 
 
 class PortalTransitionTests(unittest.TestCase):

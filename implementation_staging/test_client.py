@@ -261,7 +261,17 @@ def main() -> None:
         cipher = GameCipher()
         game_sock.sendall(cipher.encrypt_frame(encode_frame(1052, [integer(session_id), integer(account_id)])))
         roles = expect(game_sock, 1080, cipher)
-        assert roles[0] == 0 and roles[1] >= 1, roles
+        assert roles[0] == 0 and roles[1] >= 0, roles
+        if roles[1] == 0:
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1080, [short(4)])))
+            suggested = expect(game_sock, 1080, cipher)
+            assert suggested == [4, '', ''], suggested
+            initial_name = f'初始{int(time.time()) % 100000}'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1080, [
+                short(2), string(initial_name), byte(6), byte(0), byte(0), byte(53), short(2000), short(15)
+            ])))
+            roles = expect(game_sock, 1080, cipher)
+            assert roles[0] == 0 and roles[1] == 1, roles
         role_id = int(roles[2])
 
         if args.exercise_role_crud:
@@ -317,14 +327,9 @@ def main() -> None:
             assert sect_record_found, skills
             current_skill_level = int(sect_skills[4])
         else:
-            # Find the placeholder record in the merged skill list
-            placeholder_found = False
-            for i in range(skill_count):
-                start = 2 + i * 14
-                if skills[start:start+2] == ['基础技能', 0]:
-                    placeholder_found = True
-                    break
-            assert placeholder_found, skills
+            # A role without a sect may still receive only the real life-skill
+            # records; the obsolete synthetic placeholder is not required.
+            assert skill_count >= 1, skills
         # The starter inventory grew to 18 records with the strengthening
         # stones, so read every initial 1008 item frame until the stream is
         # quiet instead of assuming a fixed record count.  The login burst

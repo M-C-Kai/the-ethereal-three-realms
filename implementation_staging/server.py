@@ -4,10 +4,15 @@ import argparse
 import asyncio
 import copy
 import contextlib
+import hashlib
+import hmac
 import json
 import logging
 import random
+import re
+import secrets
 import struct
+import string as ascii_string
 import time
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -1076,7 +1081,9 @@ class Settings:
     port: int = 6805
     advertise_host: str = '127.0.0.1'
     server_name: str = '本地一区'
-    accept_any_credentials: bool = True
+    accept_any_credentials: bool = False
+    account_data_file: str = 'data/accounts.json'
+    password_hash_iterations: int = 200_000
     expected_client_version: int = 2000
     role_id: int = 10001
     role_name: str = '本地侠客'
@@ -1745,6 +1752,42 @@ def settings_for_role(settings: Settings, role: dict[str, object] | None) -> Map
     )
 
 
+# 50000 的 APK `.map.ref` 是 58 的别名，本地 `50000.map.o` 却是 32×32。
+# 局内传送可以进图，但选角冷登录走完 1010/12–15 后登录页不会关掉。
+# 只在 1080 选角时迁回默认地图；roles_for / 传送阵仍保留 50000。
+COLD_LOGIN_RELOCATE_MAP_IDS = frozenset({50000})
+
+
+def relocate_role_for_cold_login(
+    settings: Settings,
+    role: dict[str, object],
+) -> bool:
+    """Move a role off maps that complete map-enter but leave the login overlay up."""
+    try:
+        map_id = int(role.get('map_id', settings.default_map_id))
+    except (TypeError, ValueError):
+        map_id = int(settings.default_map_id)
+    if map_id not in COLD_LOGIN_RELOCATE_MAP_IDS:
+        return False
+    home = settings.map_registry.require(settings.default_map_id)
+    LOG.warning(
+        'COLD_LOGIN_RELOCATE role_id=%s from map=%d at %s,%s to map=%d %s at %d,%d',
+        role.get('id'),
+        map_id,
+        role.get('map_x'),
+        role.get('map_y'),
+        home.id,
+        home.name,
+        home.spawn_x,
+        home.spawn_y,
+    )
+    role['map_id'] = home.id
+    role['map_name'] = home.name
+    role['map_x'] = home.spawn_x
+    role['map_y'] = home.spawn_y
+    return True
+
+
 def apply_portal_transition(
     settings: Settings,
     role: dict[str, object],
@@ -1940,6 +1983,104 @@ def starter_mail(role_id: int) -> list[dict[str, object]]:
         'expires_at': '长期有效',
         'read': False,
     }]
+
+
+class AccountStore:
+    """Persist local credentials without storing plaintext passwords."""
+
+    USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9]{1,32}$')
+    PASSWORD_PATTERN = re.compile(r'^[A-Za-z0-9]{4,13}$')
+    MOBILE_PATTERN = re.compile(r'^1[3-9][0-9]{9}$')
+
+    def __init__(self, settings: Settings):
+        path = Path(settings.account_data_file)
+        self.path = path if path.is_absolute() else Path(__file__).resolve().parent / path
+        self.iterations = max(1, int(settings.password_hash_iterations))
+        self.data: dict[str, object] = {'version': 1, 'accounts': {}}
+        if self.path.exists():
+            try:
+                loaded = json.loads(self.path.read_text(encoding='utf-8'))
+                if isinstance(loaded, dict) and isinstance(loaded.get('accounts'), dict):
+                    self.data = loaded
+            except (OSError, ValueError) as exc:
+                LOG.warning('failed to load account data %s: %s', self.path, exc)
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(self.path.suffix + '.tmp')
+        temporary.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding='utf-8')
+        temporary.replace(self.path)
+
+    @staticmethod
+    def _derive(password: str, salt: bytes, iterations: int) -> str:
+        return hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, iterations).hex()
+
+    def _new_record(self, username: str, password: str) -> dict[str, object]:
+        salt = secrets.token_bytes(16)
+        return {
+            'salt': salt.hex(),
+            'password_hash': self._derive(password, salt, self.iterations),
+            'iterations': self.iterations,
+            'recovery_phone': username if self.MOBILE_PATTERN.fullmatch(username) else '',
+        }
+
+    def register(self, username: str, password: str) -> str:
+        username = username.strip()
+        if not self.USERNAME_PATTERN.fullmatch(username) or not self.PASSWORD_PATTERN.fullmatch(password):
+            return 'invalid'
+        accounts = self.data['accounts']
+        assert isinstance(accounts, dict)
+        if username in accounts:
+            return 'exists'
+        accounts[username] = self._new_record(username, password)
+        self._save()
+        return 'ok'
+
+    def authenticate(self, username: str, password: str) -> bool:
+        accounts = self.data['accounts']
+        assert isinstance(accounts, dict)
+        record = accounts.get(username)
+        if not isinstance(record, dict):
+            return False
+        try:
+            salt = bytes.fromhex(str(record['salt']))
+            iterations = int(record['iterations'])
+            expected = str(record['password_hash'])
+        except (KeyError, TypeError, ValueError):
+            return False
+        return hmac.compare_digest(self._derive(password, salt, iterations), expected)
+
+    def change_password(self, username: str, old_password: str, new_password: str) -> str:
+        if not self.PASSWORD_PATTERN.fullmatch(new_password):
+            return 'invalid'
+        if not self.authenticate(username, old_password):
+            return 'denied'
+        accounts = self.data['accounts']
+        assert isinstance(accounts, dict)
+        previous = accounts[username]
+        assert isinstance(previous, dict)
+        replacement = self._new_record(username, new_password)
+        replacement['recovery_phone'] = str(previous.get('recovery_phone', ''))
+        accounts[username] = replacement
+        self._save()
+        return 'ok'
+
+    def recover_password(self, username: str, phone: str) -> tuple[str, str | None]:
+        accounts = self.data['accounts']
+        assert isinstance(accounts, dict)
+        record = accounts.get(username)
+        if not isinstance(record, dict) or not str(record.get('recovery_phone', '')):
+            return 'denied', None
+        registered_phone = str(record.get('recovery_phone', ''))
+        if not hmac.compare_digest(registered_phone, phone):
+            return 'denied', None
+        alphabet = ascii_string.ascii_letters + ascii_string.digits
+        temporary_password = ''.join(secrets.choice(alphabet) for _ in range(8))
+        replacement = self._new_record(username, temporary_password)
+        replacement['recovery_phone'] = registered_phone
+        accounts[username] = replacement
+        self._save()
+        return 'ok', temporary_password
 
 
 class RoleStore:
@@ -2199,11 +2340,11 @@ class RoleStore:
             return True
         return False
 
-    def roles_for(self, username: str) -> list[dict[str, object]]:
+    def roles_for(self, username: str, *, create_default: bool = True) -> list[dict[str, object]]:
         accounts = self.data['accounts']
         assert isinstance(accounts, dict)
         if username not in accounts:
-            accounts[username] = [default_role(self.settings)]
+            accounts[username] = [default_role(self.settings)] if create_default else []
             self._save()
         roles = accounts[username]
         assert isinstance(roles, list)
@@ -2361,6 +2502,10 @@ def login_server_list(settings: Settings) -> bytes:
     return encode_frame(1077, fields)
 
 
+def account_result(code: int, message: str = '') -> bytes:
+    return encode_frame(1055, [byte(code), string(message)])
+
+
 def game_server_redirect(settings: Settings, session_id: int, account_id: int) -> bytes:
     # 客户端收到 1052 后会关闭登录连接，再连接这里给出的游戏服地址，
     # 并在新连接中发送同为 1052 的 session/account 两个整数。
@@ -2389,7 +2534,9 @@ def role_list(settings: Settings, roles: list[dict[str, object]] | None = None) 
             # field 2 -> property7 and v.e(I): current equipped weapon preview.
             integer(int(appearance.get(7, 0))),
             integer(int(role.get('model', settings.role_model))),
-            integer((race * 10) + gender),
+            # APK main/e.K splits this field as property12=value/10 (sect)
+            # and property39=value%10 (race). Gender comes from the model.
+            integer((normalized_sect_id(role, settings.sect_registry) * 10) + race),
             string(str(role.get('name', settings.role_name))),
             integer(int(role.get('slot', 0))),
         ]
@@ -2401,10 +2548,18 @@ def role_list(settings: Settings, roles: list[dict[str, object]] | None = None) 
     return encode_frame(1080, [short(0), byte(len(roles)), *records])
 
 
+def role_creation_frames(
+    settings: Settings,
+    roles: list[dict[str, object]],
+) -> tuple[bytes, ...]:
+    """Creation returns to the role page; entering remains an explicit choice."""
+    return (role_list(settings, roles),)
+
+
 
 def creation_names() -> bytes:
     # 创建界面当前种族有男女两个分支，因此 action=4 后固定读取两个名字。
-    return encode_frame(1080, [short(4), string('云生'), string('月华')])
+    return encode_frame(1080, [short(4), string(''), string('')])
 
 
 def deletion_result(role_id: int) -> bytes:
@@ -2730,6 +2885,21 @@ def role_items(role: dict[str, object]) -> list[dict[str, object]]:
         items = [item for item in items if isinstance(item, dict)]
         role['items'] = items
     return items  # type: ignore[return-value]
+
+
+def role_entry_frames(settings: Settings, role: dict[str, object]) -> tuple[bytes, ...]:
+    """Frames required after selecting or creating a role, before map init."""
+    role_map_id = int(role.get('map_id', settings.default_map_id))
+    gather_targets = settings.life_registry.gather_targets_for(role_map_id)
+    return (
+        player_info(settings, role),
+        character_extension_info(),
+        life_skill_list_frame(role, settings),
+        sect_skill_list(role, settings),
+        *(item_frame(item) for item in role_items(role)),
+        gather_catalog_frame(gather_targets),
+        *(gather_spawn_frame(target) for target in gather_targets),
+    )
 
 
 def bag_capacity(role: dict[str, object]) -> int:
@@ -4812,6 +4982,7 @@ def build_character_update_bus() -> CharacterUpdateBus:
 class LocalGameServer:
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.accounts = AccountStore(settings)
         self.roles = RoleStore(settings)
         self.character_update_bus = build_character_update_bus()
         self._next_session_id = 1000
@@ -5311,21 +5482,56 @@ class LocalGameServer:
                 values = field_values(fields)
                 LOG.info('received message=%d field_types=%s', message_id, [x.type_id for x in fields])
 
-                if message_id == 1077:
-                    username = str(values[3]) if len(values) > 3 else ''
+                if message_id == 1055 and values:
+                    action = int(values[0])
+                    if action == 0:
+                        requested_username = str(values[1]) if len(values) > 1 else ''
+                        requested_password = str(values[2]) if len(values) > 2 else ''
+                        result = self.accounts.register(requested_username, requested_password)
+                        await self._send(writer, account_result({'ok': 0, 'invalid': 1, 'exists': 2}[result]))
+                    elif action == 3:
+                        requested_username = str(values[1]) if len(values) > 1 else ''
+                        old_password = str(values[2]) if len(values) > 2 else ''
+                        new_password = str(values[3]) if len(values) > 3 else ''
+                        result = self.accounts.change_password(requested_username, old_password, new_password)
+                        await self._send(writer, account_result({'ok': 3, 'invalid': 1, 'denied': 5}[result]))
+                    elif action == 7:
+                        requested_username = str(values[4]) if len(values) > 4 else ''
+                        phone = str(values[5]) if len(values) > 5 else ''
+                        result, temporary_password = self.accounts.recover_password(requested_username, phone)
+                        message = f'临时密码：{temporary_password}' if result == 'ok' else '账号或手机号不匹配'
+                        await self._send(writer, account_result(6, message))
+                    else:
+                        await self._send(writer, account_result(6, '暂不支持该账号操作'))
+
+                elif message_id == 1077:
+                    requested_username = str(values[3]) if len(values) > 3 else ''
                     password = str(values[4]) if len(values) > 4 else ''
                     version = int(values[0]) if values else -1
-                    LOG.info('login request user=%r password=%s version=%s', username, '*' * len(password), version)
-                    if not username or not password:
-                        await self._send(writer, encode_frame(1055, [byte(5), string('账号或密码不能为空')]))
+                    LOG.info('login request user=%r password=%s version=%s', requested_username, '*' * len(password), version)
+                    if not requested_username or not password:
+                        username = ''
+                        await self._send(writer, account_result(5))
                     elif version != self.settings.expected_client_version:
-                        await self._send(writer, encode_frame(1055, [byte(6), string('客户端版本不匹配')]))
+                        username = ''
+                        await self._send(writer, account_result(6, '客户端版本不匹配'))
+                    elif not self.settings.accept_any_credentials and not self.accounts.authenticate(requested_username, password):
+                        username = ''
+                        await self._send(writer, account_result(5))
                     else:
+                        username = requested_username
                         await self._send(writer, login_server_list(self.settings))
 
                 elif message_id == 1051:
-                    username = str(values[0]) if values else username
+                    requested_username = str(values[0]) if values else ''
+                    password = str(values[1]) if len(values) > 1 else ''
                     selected = str(values[2]) if len(values) > 2 else ''
+                    authenticated = bool(username) and hmac.compare_digest(username, requested_username)
+                    if authenticated and not self.settings.accept_any_credentials:
+                        authenticated = self.accounts.authenticate(requested_username, password)
+                    if not authenticated:
+                        await self._send(writer, account_result(5))
+                        continue
                     self._next_session_id += 1
                     session_id = self._next_session_id
                     account_id = session_id + 100000
@@ -5336,11 +5542,14 @@ class LocalGameServer:
                 elif message_id == 1052:
                     session_id = int(values[0]) if values else 0
                     account_id = int(values[1]) if len(values) > 1 else 0
-                    username = self._sessions.get((session_id, account_id), 'local-player')
+                    username = self._sessions.pop((session_id, account_id), '')
                     LOG.info('game handshake user=%r session=%d account=%d', username, session_id, account_id)
+                    if not username:
+                        await self._send(writer, account_result(5), cipher=game_cipher, lock=send_lock)
+                        continue
                     await self._send(
                         writer,
-                        role_list(self.settings, self.roles.roles_for(username)),
+                        role_list(self.settings, self.roles.roles_for(username, create_default=False)),
                         cipher=game_cipher,
                         lock=send_lock,
                     )
@@ -5361,6 +5570,8 @@ class LocalGameServer:
                         if active_role is None:
                             LOG.warning('unknown role selected user=%r role_id=%d', username, role_id)
                         else:
+                            if relocate_role_for_cold_login(self.settings, active_role):
+                                self.roles.save()
                             team_state.leader_id = 0
                             world_sent = False
                             streamed_npc_ids.clear()
@@ -5377,17 +5588,9 @@ class LocalGameServer:
                                 int(active_role.get('race', 0)),
                             )
                             LOG.info('%s', format_map_player_appearance_log(username, active_role, self.settings))
-                            role_map_id = int(active_role.get('map_id', self.settings.default_map_id))
-                            gather_targets = self.settings.life_registry.gather_targets_for(role_map_id)
                             await self._send(
                                 writer,
-                                player_info(self.settings, active_role),
-                                character_extension_info(),
-                                life_skill_list_frame(active_role, self.settings),
-                                sect_skill_list(active_role, self.settings),
-                                *(item_frame(item) for item in role_items(active_role)),
-                                gather_catalog_frame(gather_targets),
-                                *(gather_spawn_frame(target) for target in gather_targets),
+                                *role_entry_frames(self.settings, active_role),
                                 cipher=game_cipher,
                                 lock=send_lock,
                             )
@@ -5413,7 +5616,7 @@ class LocalGameServer:
                         )
                         await self._send(
                             writer,
-                            role_list(self.settings, self.roles.roles_for(username)),
+                            *role_creation_frames(self.settings, self.roles.roles_for(username)),
                             cipher=game_cipher,
                             lock=send_lock,
                         )

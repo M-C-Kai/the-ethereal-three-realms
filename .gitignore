@@ -10,6 +10,10 @@ __pycache__/
 
 # Local account/character state
 /implementation_staging/data/roles.json
+/implementation_staging/data/roles.*.json
+/implementation_staging/data/accounts.json
+/implementation_staging/data/sprite_catalog.json
+/implementation_staging/server_pid.txt
 
 # Dynamic map runtime binaries; source-of-truth lives in maps/<id>/*.json.
 # Existing tracked legacy .map.o files remain tracked despite these rules.

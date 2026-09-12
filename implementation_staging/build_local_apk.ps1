@@ -11,12 +11,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BuildDir = Join-Path $ProjectDir 'build'
+$BuildTag = "$PID"
 $ApkToolWorkDir = Join-Path ([System.IO.Path]::GetTempPath()) 'piaomiao-local-apk-build'
 $FrameworkDir = Join-Path $ApkToolWorkDir 'framework'
 $SmaliDir = Join-Path $ApkToolWorkDir 'decoded'
-$RebuiltApk = Join-Path $ApkToolWorkDir 'piaomiao_decoded_rebuilt.apk'
-$UnsignedApk = Join-Path $BuildDir 'piaomiao_local_unsigned.apk'
-$AlignedApk = Join-Path $BuildDir 'piaomiao_local_aligned.apk'
+$RebuiltApk = Join-Path $ApkToolWorkDir "piaomiao_decoded_rebuilt_$BuildTag.apk"
+$UnsignedApk = Join-Path $BuildDir "piaomiao_local_unsigned_$BuildTag.apk"
+$AlignedApk = Join-Path $BuildDir "piaomiao_local_aligned_$BuildTag.apk"
 $FinalApk = Join-Path $ProjectDir 'piaomiao_local_login.apk'
 $KeyStorePath = Join-Path $ProjectDir 'local-test-keystore.p12'
 $PythonExe = 'python'
@@ -56,6 +57,10 @@ Assert-NativeSuccess 'NPC direction/selection smali patch'
 Assert-NativeSuccess 'battle escape timing/status smali patch'
 & $PythonExe (Join-Path $ProjectDir 'tools\patch_battle_weapon.py') $SmaliDir
 Assert-NativeSuccess 'battle idle weapon asset patch'
+& $PythonExe (Join-Path $ProjectDir 'tools\patch_login_failure_ui.py') $SmaliDir
+Assert-NativeSuccess 'login failure return-to-input smali patch'
+& $PythonExe (Join-Path $ProjectDir 'tools\patch_role_delete_confirmation.py') $SmaliDir
+Assert-NativeSuccess 'role delete confirmation input patch'
 
 # The client only renders a distinct map id after loading both of its local
 # map resources.  Kunlun reuses the proven map 58 composite-tile reference
