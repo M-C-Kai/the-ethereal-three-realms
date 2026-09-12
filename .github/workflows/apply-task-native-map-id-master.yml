@@ -1,0 +1,127 @@
+name: apply-task-native-map-id-master
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/apply-task-native-map-id-master.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Add native 1110 regression test
+        working-directory: implementation_staging
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_task_minimum_flow.py')
+          s = p.read_text(encoding='utf-8')
+          import_old = "from protocol import Field, TYPE_BYTE, TYPE_INT, decode_frame\n"
+          import_new = import_old + "from server import Settings, default_role, notice_and_world\n"
+          if "from server import Settings, default_role, notice_and_world" not in s:
+              if import_old not in s:
+                  raise SystemExit('protocol import anchor not found')
+              s = s.replace(import_old, import_new, 1)
+          method = """    def test_1110_world_descriptor_sets_native_logical_map_id_in_field_zero(self):
+              temp = tempfile.TemporaryDirectory()
+              self.addCleanup(temp.cleanup)
+              root = Path(temp.name)
+              settings = Settings(
+                  account_data_file=str(root / 'accounts.json'),
+                  role_data_file=str(root / 'roles.json'),
+              )
+              role = default_role(settings)
+              role['map_id'] = 58
+              role['map_name'] = '长安'
+              message_id, fields = decode_frame(notice_and_world(settings, role)[1])
+              self.assertEqual(1110, message_id)
+              # APK main/e stores 1110 field[0] into m.O; task ca compares m.q() == route map id.
+              # field[1] is m.P, the local *.map.o/*.map.ref resource id. field[2] is m.r flags.
+              self.assertEqual([58, 58, 0, '长安'], [field.value for field in fields])
+
+"""
+          if 'def test_1110_world_descriptor_sets_native_logical_map_id_in_field_zero' not in s:
+              anchor = "\n\nif __name__ == '__main__':\n"
+              if anchor not in s:
+                  raise SystemExit('test insertion anchor not found')
+              s = s.replace(anchor, '\n\n' + method + "if __name__ == '__main__':\n", 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Confirm regression is red before production fix
+        working-directory: implementation_staging
+        shell: bash
+        run: |
+          set +e
+          python -m unittest tests.test_task_minimum_flow.TaskMinimumFlowTests.test_1110_world_descriptor_sets_native_logical_map_id_in_field_zero -v
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo 'Regression unexpectedly passed before server fix'
+            exit 1
+          fi
+          echo 'Expected RED confirmed'
+      - name: Apply native 1110 field-order fix
+        working-directory: implementation_staging
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('server.py')
+          s = p.read_text(encoding='utf-8')
+          old_lines = [
+              '    # 1110 字段 1/2 are the logical map id used by the client. The patched',
+              '    # APK carries the matching 50000.map.ref alias for the target map.',
+              '    client_map_id = current_map.id',
+              '    world = encode_frame(1110, [',
+              '        integer(0),',
+              '        integer(client_map_id),',
+              '        integer(client_map_id),',
+              '        string(current_map.name),',
+              '    ])',
+          ]
+          new_lines = [
+              '    # APK main/e stores 1110 as logical map id (field 0), resource map id',
+              '    # (field 1), map flags (field 2), and map name (field 3). Task screens',
+              '    # compare m.q() (field 0) to route map id before same-map local pathing.',
+              '    client_map_id = current_map.id',
+              '    world = encode_frame(1110, [',
+              '        integer(client_map_id),',
+              '        integer(client_map_id),',
+              '        integer(0),',
+              '        string(current_map.name),',
+              '    ])',
+          ]
+          old = '\n'.join(old_lines)
+          new = '\n'.join(new_lines)
+          if old not in s:
+              raise SystemExit('current notice_and_world 1110 block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Verify targeted and all task regressions
+        working-directory: implementation_staging
+        run: |
+          python -m unittest tests.test_task_minimum_flow -v
+          python -m unittest discover -s tests -p 'test_task_*.py' -v
+          python -m py_compile server.py
+      - name: Commit verified master fix and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add implementation_staging/server.py implementation_staging/tests/test_task_minimum_flow.py
+          git rm .github/workflows/apply-task-native-map-id-master.yml
+          git commit -m 'fix(tasks): restore native same-map task auto-pathing'
+          git pull --rebase origin master
+          (cd implementation_staging && python -m unittest tests.test_task_minimum_flow -v)
+          (cd implementation_staging && python -m unittest discover -s tests -p 'test_task_*.py' -v)
+          (cd implementation_staging && python -m py_compile server.py)
+          git push origin HEAD:master
