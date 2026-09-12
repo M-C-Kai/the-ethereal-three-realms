@@ -8,14 +8,17 @@ from dynamic_map_builder import (
     materialize_all_dynamic_maps,
     merge_dynamic_maps_into_registry_payload,
 )
-from protocol import binary, byte, encode_frame, short
+from protocol import binary, byte, encode_frame, integer, short, string
 
 
 LOG = logging.getLogger('piaomiao-local')
 MAP_REF_CHUNK_SIZE = 12_000
 MAX_MAP_REF_TRANSFER_SIZE = 0x7FFF
+BOSS_EFFECT_CARRIER_DAT_ID = 3_000_100
+BOSS_EFFECT_RESOURCE_ID = 3_000_000
 _ORIGINAL_MAP_ENTER_FRAMES = _server.map_enter_frames
 _ORIGINAL_LOAD_MAP_REGISTRY = _server.load_map_registry
+_ORIGINAL_MAP_NPC_FRAME = _server.map_npc_frame
 
 
 def map_ref_path(map_id: int) -> Path:
@@ -110,8 +113,34 @@ def dynamic_load_map_registry(payload, npc_catalog=None, appearance_catalog=None
     )
 
 
+def map_npc_frame_with_effect(definition, npc) -> bytes:
+    """Attach the verified 3000000 effect to the dedicated 3000100 carrier.
+
+    APK ``main/e.X`` creates a native 2030 ``pmsj.work.b/t`` actor from the
+    normal NPC record. Integer field 5 is the built-in attached-display code:
+    ``base = value // 100 * 100`` and ``index = value % 100`` before calling
+    ``t.a(base, index, true)``. Therefore 3000000 selects resource 3000000,
+    animation index 0, while 3000100.dat remains an invisible carrier body.
+    """
+    if int(getattr(npc, 'dat_id', 0)) != BOSS_EFFECT_CARRIER_DAT_ID:
+        return _ORIGINAL_MAP_NPC_FRAME(definition, npc)
+
+    return encode_frame(2030, [
+        integer(npc.id),
+        integer(npc.x),
+        integer(npc.y),
+        integer(npc.dat_id),
+        integer(npc.direction),
+        integer(BOSS_EFFECT_RESOURCE_ID),
+        string(npc.name),
+        integer(0),
+        string(npc.label),
+    ])
+
+
 def install_dynamic_map_support() -> None:
     """Install launcher-only hooks without polluting modules that merely import us."""
+    _server.map_npc_frame = map_npc_frame_with_effect
     _server.map_enter_frames = dynamic_map_enter_frames
     _server.load_map_registry = dynamic_load_map_registry
 
