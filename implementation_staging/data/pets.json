@@ -1,18 +1,33 @@
 {
-  "version": 1,
+  "version": 2,
   "default_template_id": 50100,
   "pets": [
     {
       "template_id": 50100,
       "name": "测试灵宠",
+      "species_name": "测试灵宠",
       "model_dat_id": 50100,
       "pet_type": 1,
       "base_level": 1,
       "carry_level": 1,
       "growth_rank": 0,
       "base_life": 100,
+      "base_hp": 100,
+      "base_mp": 50,
+      "physical_attack": 20,
+      "magic_attack": 15,
+      "physical_defense": 10,
+      "magic_defense": 10,
+      "speed": 10,
+      "base_stats": [10, 10, 10, 10, 10],
+      "qualifications": [70, 100, 70, 100, 70, 100, 70, 100, 70, 100, 70, 100],
+      "innate_divine_power": 0,
+      "divine_power": 0,
+      "standard_skill": "无",
+      "growth_values": [700, 700, 700, 700, 700, 700, 700],
+      "insight_training_max": 100,
       "status": "candidate_renderable",
-      "notes": "APK 内 assets/res/role/50100.dat 已确认存在；作为第一只协议下发测试宠物，物种归属待手机实测确认。"
+      "notes": "APK 内 assets/res/role/50100.dat 已由手机验证可作为宠物实例显示；当前数值用于本地服第一阶段属性/状态闭环，不声明为原服官方数值。"
     }
   ]
 }
