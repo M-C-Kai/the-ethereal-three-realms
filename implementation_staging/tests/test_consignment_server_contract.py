@@ -26,7 +26,10 @@ class ConsignmentServerContractTests(unittest.TestCase):
 
     def test_connection_state_constructs_persistent_consignment_service(self):
         source = inspect.getsource(server.LocalGameServer.handle)
-        self.assertIn('ConsignmentService(self.roles, self.settings.item_registry)', source)
+        self.assertIn('ConsignmentService(', source)
+        self.assertIn('self.roles', source)
+        self.assertIn('self.settings.item_registry', source)
+        self.assertIn('self.consignment_data_file', source)
         self.assertIn('current_consignment_category', source)
 
 
