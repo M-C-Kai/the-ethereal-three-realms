@@ -48,9 +48,6 @@ _ROAMING_BOSS_ENTERED_AT: contextvars.ContextVar[float | None] = contextvars.Con
 _ROAMING_BOSS_SPAWN_TILE: contextvars.ContextVar[tuple[int, int] | None] = contextvars.ContextVar(
     'piaomiao_roaming_boss_spawn_tile', default=None,
 )
-_ROAMING_BOSS_CONTACT_INSIDE: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    'piaomiao_roaming_boss_contact_inside', default=False,
-)
 _ROLE_STORES: dict[int, _server.RoleStore] = {}
 
 
@@ -100,7 +97,7 @@ def pet_role_entry_frames(settings, role: dict[str, object]) -> tuple[bytes, ...
 
 
 def pet_dynamic_map_enter_frames(definition, role_id: int | None = None) -> list[bytes]:
-    """Preserve the roaming-Boss contact tracker added on master."""
+    """Preserve the roaming-Boss position tracker used for contact battles."""
     frames = _ORIGINAL_DYNAMIC_MAP_ENTER_FRAMES(definition, role_id)
     monster = getattr(definition, 'monster', None)
     if (
@@ -111,7 +108,6 @@ def pet_dynamic_map_enter_frames(definition, role_id: int | None = None) -> list
         spawn_tile = (int(monster.x), int(monster.y))
         _ROAMING_BOSS_ENTERED_AT.set(time.monotonic())
         _ROAMING_BOSS_SPAWN_TILE.set(spawn_tile)
-        _ROAMING_BOSS_CONTACT_INSIDE.set(False)
         LOG.info(
             'MAP_BOSS_CONTACT_TRACK_START actor=%d spawn=%s target=(%d,%d) delay=%.1f',
             _dynamic.ROAMING_BOSS_ID, spawn_tile,
@@ -121,7 +117,6 @@ def pet_dynamic_map_enter_frames(definition, role_id: int | None = None) -> list
     else:
         _ROAMING_BOSS_ENTERED_AT.set(None)
         _ROAMING_BOSS_SPAWN_TILE.set(None)
-        _ROAMING_BOSS_CONTACT_INSIDE.set(False)
     return frames
 
 
@@ -152,6 +147,15 @@ def _translate_roaming_boss_fight_request(message_id: int, fields):
 
 
 def _translate_roaming_boss_contact_request(message_id: int, fields, *, now: float | None = None):
+    """Route every in-range movement attempt through the existing battle state.
+
+    Do not keep a separate contact latch here. The core battle handler already
+    owns duplicate/retrigger policy through ``battle_state.active``,
+    ``monster_defeated`` and the post-escape ``escape_guard``. Movements outside
+    the Boss contact radius remain real 1005 packets so the existing
+    ``update_escape_guard_for_movement`` path can clear the escape guard before
+    the player approaches again.
+    """
     if message_id != 1005:
         return message_id, fields
     role = _ACTIVE_ROLE.get()
@@ -165,9 +169,7 @@ def _translate_roaming_boss_contact_request(message_id: int, fields, *, now: flo
     except (TypeError, ValueError):
         return message_id, fields
     inside = max(abs(player_x - boss_tile[0]), abs(player_y - boss_tile[1])) <= ROAMING_BOSS_CONTACT_RADIUS
-    was_inside = _ROAMING_BOSS_CONTACT_INSIDE.get()
-    _ROAMING_BOSS_CONTACT_INSIDE.set(inside)
-    if not inside or was_inside:
+    if not inside:
         return message_id, fields
     if _server.update_role_position(role, player_x, player_y):
         store = _ROLE_STORES.get(id(role))
