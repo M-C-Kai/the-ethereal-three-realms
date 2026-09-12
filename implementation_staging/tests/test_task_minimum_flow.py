@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from protocol import Field, TYPE_BYTE, TYPE_INT, decode_frame
+from server import Settings, default_role, notice_and_world
 from task_protocol import parse_task_accept_request
 from task_registry import TaskRegistry
 from task_runtime import TaskRuntime
@@ -87,6 +88,23 @@ class TaskMinimumFlowTests(unittest.TestCase):
         self.assertTrue(runtime.matches_path_target(58, 34, 50))
         self.assertFalse(runtime.matches_path_target(58, 35, 50))
         self.assertFalse(runtime.matches_path_target(50000, 34, 50))
+
+    def test_1110_world_descriptor_sets_native_logical_map_id_in_field_zero(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        settings = Settings(
+            account_data_file=str(root / 'accounts.json'),
+            role_data_file=str(root / 'roles.json'),
+        )
+        role = default_role(settings)
+        role['map_id'] = 58
+        role['map_name'] = '长安'
+        message_id, fields = decode_frame(notice_and_world(settings, role)[1])
+        self.assertEqual(1110, message_id)
+        # APK main/e stores 1110 field[0] into m.O; task ca compares m.q() == route map id.
+        # field[1] is m.P, the local *.map.o/*.map.ref resource id. field[2] is m.r flags.
+        self.assertEqual([58, 58, 0, '长安'], [field.value for field in fields])
 
 
 if __name__ == '__main__':
