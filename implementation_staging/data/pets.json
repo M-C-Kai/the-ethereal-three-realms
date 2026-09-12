@@ -6,7 +6,7 @@
       "template_id": 50100,
       "name": "测试灵宠",
       "species_name": "测试灵宠",
-      "model_dat_id": 50100,
+      "model_dat_id": 5860000,
       "pet_type": 1,
       "base_level": 1,
       "carry_level": 1,
@@ -26,8 +26,8 @@
       "standard_skill": "无",
       "growth_values": [700, 700, 700, 700, 700, 700, 700],
       "insight_training_max": 100,
-      "status": "candidate_renderable",
-      "notes": "APK 内 assets/res/role/50100.dat 已由手机验证可作为宠物实例显示；当前数值用于本地服第一阶段属性/状态闭环，不声明为原服官方数值。"
+      "status": "verified_battle_monster_resource",
+      "notes": "测试宠物改用 APK 已确认的试炼妖兽资源 assets/res/role/5860000.dat；同族附属资源 5860001.dat 至 5860005.dat 也在当前 APK 中存在。战斗资源链已验证可渲染，本次用于验证地图溜宠 b/u 渲染链。"
     }
   ]
 }
