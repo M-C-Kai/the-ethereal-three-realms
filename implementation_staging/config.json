@@ -20,7 +20,7 @@
       "fallback_height": 96,
       "spawn": {"x": 60, "y": 67},
       "monster": {
-        "id": 1900001,
+        "id": 700001,
         "name": "试炼妖兽",
         "model": -2004250,
         "x": 9,
