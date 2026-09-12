@@ -1,0 +1,40 @@
+name: battle-system
+
+on:
+  push:
+    branches:
+      - master
+      - refactor/battle-system-consolidation
+    paths:
+      - 'implementation_staging/battle/**'
+      - 'implementation_staging/battle_escape_guard.py'
+      - 'implementation_staging/server_pets.py'
+      - 'implementation_staging/tests/battle/**'
+      - 'implementation_staging/tests/test_battle_escape_guard.py'
+      - 'implementation_staging/tests/test_roaming_boss_interaction.py'
+      - '.github/workflows/battle-system.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile battle modules
+        working-directory: implementation_staging
+        run: python -m py_compile battle/*.py battle_escape_guard.py server_pets.py
+      - name: Battle subsystem tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests/battle -v
+      - name: Escape guard compatibility tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_battle_escape_guard.py' -v
+      - name: Roaming Boss battle integration tests
+        working-directory: implementation_staging
+        run: python -m unittest discover -s tests -p 'test_roaming_boss_interaction.py' -v
