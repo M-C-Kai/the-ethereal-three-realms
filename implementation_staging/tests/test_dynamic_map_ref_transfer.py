@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from protocol import decode_frame, field_values
+from protocol import byte, decode_frame, encode_frame, field_values, integer, short, string
 import server_dynamic_maps as dynamic
 
 
@@ -31,9 +31,9 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(b''.join(row[2] for row in values), payload)
 
     def test_missing_server_ref_preserves_old_apk_local_entry_path(self):
-        definition = SimpleNamespace(id=58)
+        definition = SimpleNamespace(id=60010)
         with tempfile.TemporaryDirectory() as tmp:
-            missing = Path(tmp) / '58.map.ref'
+            missing = Path(tmp) / '60010.map.ref'
             with patch.object(dynamic, 'map_ref_path', return_value=missing), patch.object(
                 dynamic, '_ORIGINAL_MAP_ENTER_FRAMES', return_value=[b'old-13', b'old-14']
             ):
@@ -88,6 +88,57 @@ class DynamicMapRefTransferTests(unittest.TestCase):
 
         self.assertEqual(frame, b'original')
         original.assert_called_once_with(definition, npc)
+
+    def test_roaming_boss_spawn_uses_native_2028_q_layout(self):
+        definition = SimpleNamespace(
+            id=58,
+            monster=SimpleNamespace(id=700_001, model=-2_004_250, x=9, y=28),
+        )
+
+        message_id, fields = decode_frame(dynamic.roaming_boss_spawn_frame(definition))
+
+        self.assertEqual(message_id, 2028)
+        self.assertEqual(field_values(fields), [700_001, 9, 28, 95_750])
+        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4])
+
+    def test_roaming_boss_move_uses_native_1005_target_short_layout(self):
+        message_id, fields = decode_frame(
+            dynamic.roaming_boss_move_frame(700_001, 9, 28, 12, 28)
+        )
+
+        self.assertEqual(message_id, 1005)
+        self.assertEqual(field_values(fields), [700_001, 9, 28, 12, 28])
+        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 3, 3])
+
+    def test_map58_replaces_generic_1126_boss_with_native_2028_q(self):
+        definition = SimpleNamespace(
+            id=58,
+            monster=SimpleNamespace(
+                id=700_001,
+                name='试炼妖兽',
+                model=-2_004_250,
+                x=9,
+                y=28,
+            ),
+        )
+        generic = encode_frame(1126, [
+            byte(0),
+            byte(1),
+            integer(700_001),
+            integer(9),
+            integer(28),
+            integer(-2_004_250),
+            string('试炼妖兽'),
+        ])
+        with patch.object(dynamic, '_ORIGINAL_MAP_ENTER_FRAMES', return_value=[b'action-13', generic]), patch.object(
+            dynamic, 'map_ref_transfer_frames', return_value=[]
+        ):
+            frames = dynamic.dynamic_map_enter_frames(definition, 10001)
+
+        self.assertEqual(frames[0], b'action-13')
+        message_id, fields = decode_frame(frames[1])
+        self.assertEqual(message_id, 2028)
+        self.assertEqual(field_values(fields), [700_001, 9, 28, 95_750])
 
 
 if __name__ == '__main__':
