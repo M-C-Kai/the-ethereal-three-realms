@@ -86,7 +86,7 @@ class TradeSystemTests(unittest.TestCase):
         self.assertEqual(receipt['unit_price'], 300)
         self.assertEqual(receipt['total_price'], 600)
         self.assertGreater(receipt['completed_at'], 0)
-        self.assertEqual(listed.listing['status'], 'sold')
+        self.assertEqual(bought.listing['status'], 'sold')
         self.assertEqual(self.seller['currencies']['silver'], 10_600)
         self.assertEqual(self.buyer['currencies']['silver'], 9_400)
         self.assertIn(item, self.buyer['items'])
@@ -131,7 +131,7 @@ class TradeSystemTests(unittest.TestCase):
         cancelled = self.service.unlist(self.seller, int(listed.listing['item_instance_id']))
 
         self.assertTrue(cancelled.ok)
-        self.assertEqual(listed.listing['status'], 'cancelled')
+        self.assertEqual(cancelled.listing['status'], 'cancelled')
         self.assertEqual(item['location'], 'bag')
         self.assertEqual(self.service.trade_history(10001), [])
 
