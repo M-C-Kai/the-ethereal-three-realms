@@ -35,6 +35,14 @@ class TaskOperationRequest:
 
 
 @dataclass(frozen=True)
+class TaskAcceptRequest:
+    """APK 1403/action-8 request emitted by the native “接受” button."""
+
+    player_id: int
+    task_id: int
+
+
+@dataclass(frozen=True)
 class Task1145Request:
     variant: str
     route_id: int
@@ -83,10 +91,27 @@ def parse_task_operation_request(fields: Sequence[Field]) -> TaskOperationReques
     )
 
 
+def parse_task_accept_request(fields: Sequence[Field]) -> TaskAcceptRequest | None:
+    """Parse the native task acceptance packet exactly.
+
+    APK ``pmsj/work/e/em`` sends 1403 as ``BYTE 8, INT player_id,
+    INT task_id`` when the user presses the detail screen's “接受” button.
+    Numeric values with different TLV types are intentionally rejected.
+    """
+    if not _exact_types(fields, (TYPE_BYTE, TYPE_INT, TYPE_INT)):
+        return None
+    if int(fields[0].value) != 8:
+        return None
+    return TaskAcceptRequest(
+        player_id=int(fields[1].value),
+        task_id=int(fields[2].value),
+    )
+
+
 def parse_task_1145_request(fields: Sequence[Field]) -> Task1145Request | None:
     """Parse the historical compatibility 1145 task forms.
 
-    The live APK also uses 1145/action-0 for cross-map pathfinding.  Runtime
+    The live APK also uses 1145/action-0 for cross-map pathfinding. Runtime
     routing therefore validates the decoded route against the task catalog and
     falls through when it is not an exact task route.
     """
@@ -121,7 +146,7 @@ def available_task_list_frame(
     """Encode action 50 using the APK's seven-field task row.
 
     ``e/en`` and the available-task pane in ``e/ca`` read each row as
-    ``task_id, name, status, map_id, x, y, actor_id``.  Status 1 exposes
+    ``task_id, name, status, map_id, x, y, actor_id``. Status 1 exposes
     “领取任务”; status 3 exposes “提交任务”.
     """
     records = tuple(entries)
@@ -169,5 +194,5 @@ def active_task_list_frame(
 
 
 def safe_detail_ack_frame() -> bytes:
-    """Release the client's waiting state without opening the untraced detail UI."""
+    """Release the client's waiting state without opening an unhandled UI branch."""
     return encode_frame(TASK_MESSAGE_ID, [byte(1)])
