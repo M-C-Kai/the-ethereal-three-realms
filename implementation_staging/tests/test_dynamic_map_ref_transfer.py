@@ -49,10 +49,6 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         ), patch.object(dynamic._server, 'map_action', return_value=b'new-13') as map_action:
             frames = dynamic.dynamic_map_enter_frames(definition, 10001)
 
-        # Working APK-local maps receive action 13 before their target map.ref is
-        # parsed.  Keep the same ordering for streamed refs so m.C() runs while
-        # the client is already inside its native map-transition state instead
-        # of repainting the active scene from the top edge.
         self.assertEqual(frames, [b'new-13', b'ref-chunk', b'old-14', b'old-105'])
         map_action.assert_called_once_with(definition, 13, status=1, role_id=10001)
 
@@ -92,7 +88,7 @@ class DynamicMapRefTransferTests(unittest.TestCase):
     def test_roaming_boss_spawn_uses_native_2028_q_layout_with_attached_ring_flag(self):
         definition = SimpleNamespace(
             id=58,
-            monster=SimpleNamespace(id=700_001, model=-2_004_250, x=9, y=28),
+            monster=SimpleNamespace(id=700_001, name='试炼妖兽', model=-2_004_250, x=9, y=28),
         )
 
         message_id, fields = decode_frame(dynamic.roaming_boss_spawn_frame(definition))
@@ -100,9 +96,9 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(message_id, 2028)
         self.assertEqual(
             field_values(fields),
-            [700_001, 9, 28, 95_750, 0, 0, 0x800000],
+            [700_001, 9, 28, 95_750, '试炼妖兽', 0, 0x800000],
         )
-        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4, 4, 4, 4])
+        self.assertEqual([field.type_id for field in fields], [4, 3, 3, 4, 6, 4, 4])
 
     def test_roaming_boss_effect_image_70600_reuses_verified_apk_70000_pixels(self):
         marker = object()
@@ -157,7 +153,7 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(message_id, 2028)
         self.assertEqual(
             field_values(fields),
-            [700_001, 9, 28, 95_750, 0, 0, 0x800000],
+            [700_001, 9, 28, 95_750, '试炼妖兽', 0, 0x800000],
         )
 
 
