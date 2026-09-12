@@ -108,6 +108,27 @@ class TaskRuntime:
             return task
         return None
 
+    def matches_1145(self, fields: Sequence[Field]) -> bool:
+        """Return True only when an ambiguous 1145 payload names a real task route.
+
+        Gathering pathfinding uses the same four TLV types as the task
+        navigation variant.  Wire shape alone therefore cannot own the
+        message; the route/category values must resolve against this catalog.
+        """
+        request = parse_task_1145_request(fields)
+        if request is None:
+            return False
+        if request.variant == 'available':
+            return self._route_task(
+                request.route_id, request.category, request.route_kind
+            ) is not None
+        task = self.registry.get(request.task_id)
+        return bool(
+            task is not None
+            and task.client_route.route_id == request.route_id
+            and task.category_wire_id == request.category
+        )
+
     def handle_1145(
         self,
         role: dict[str, object],
@@ -118,13 +139,12 @@ class TaskRuntime:
         today: str | None = None,
     ) -> TaskRuntimeResult | None:
         request = parse_task_1145_request(fields)
-        if request is None:
+        if request is None or not self.matches_1145(fields):
             return None
         migrated = ensure_task_state(role, today=today)
         if request.variant == 'available':
             task = self._route_task(request.route_id, request.category, request.route_kind)
-            if task is None:
-                return TaskRuntimeResult(self.snapshot_frames(role, today=today), migrated, reason='unknown_route')
+            assert task is not None
             action = accept_task(role, self.registry, task.task_id, now=now, today=today)
             return TaskRuntimeResult(
                 self.snapshot_frames(role, today=today),
@@ -133,12 +153,7 @@ class TaskRuntime:
             )
 
         task = self.registry.get(request.task_id)
-        if (
-            task is None
-            or task.client_route.route_id != request.route_id
-            or task.category_wire_id != request.category
-        ):
-            return TaskRuntimeResult(self.snapshot_frames(role, today=today), migrated, reason='route_mismatch')
+        assert task is not None
         if request.operation == 4:
             action = abandon_task(role, self.registry, task.task_id, today=today)
         elif request.operation == 2:
