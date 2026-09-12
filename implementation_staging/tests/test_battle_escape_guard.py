@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from battle_escape_guard import (
+from battle.state import (
     CONTACT_RADIUS_TILES,
     RETRIGGER_TIMEOUT_SECONDS,
     movement_outside_guard_radius,
-    should_suppress,
+    should_suppress_guard,
     stamp_guard,
 )
 
@@ -28,19 +28,19 @@ class BattleEscapeGuardTests(unittest.TestCase):
         guard = self.make_guard()
         stamp_guard(guard, now=100.0)
 
-        self.assertTrue(should_suppress(guard, 58, 700_001, now=101.999))
+        self.assertTrue(should_suppress_guard(guard, 58, 700_001, now=101.999))
 
     def test_same_encounter_is_released_at_two_seconds(self):
         guard = self.make_guard()
         stamp_guard(guard, now=100.0)
 
-        self.assertFalse(should_suppress(guard, 58, 700_001, now=102.0))
+        self.assertFalse(should_suppress_guard(guard, 58, 700_001, now=102.0))
 
     def test_other_monster_is_not_suppressed(self):
         guard = self.make_guard()
         stamp_guard(guard, now=100.0)
 
-        self.assertFalse(should_suppress(guard, 58, 700_002, now=100.1))
+        self.assertFalse(should_suppress_guard(guard, 58, 700_002, now=100.1))
 
     def test_one_tile_from_contact_origin_remains_guarded(self):
         guard = self.make_guard()
