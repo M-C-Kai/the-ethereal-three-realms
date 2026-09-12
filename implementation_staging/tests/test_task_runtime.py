@@ -41,7 +41,10 @@ class TaskRuntimeTests(unittest.TestCase):
         message_id, fields = decode_frame(available.frames[0])
         self.assertEqual(1403, message_id)
         self.assertEqual(50, fields[0].value)
-        self.assertEqual(2, fields[1].value)
+        self.assertEqual(0, fields[1].value)
+        self.assertEqual(2, fields[2].value)
+        self.assertEqual(1, fields[5].value)   # task 101 claimable
+        self.assertEqual(1, fields[12].value)  # task 102 claimable
 
         active = runtime.handle_1403(role, [Field(TYPE_BYTE, 6), Field(TYPE_BYTE, 0), Field(TYPE_BYTE, 0), Field(TYPE_BYTE, 0)], today='2026-09-12')
         self.assertEqual(5, len(active.frames))
@@ -57,6 +60,8 @@ class TaskRuntimeTests(unittest.TestCase):
         self.assertTrue(result.changed)
         self.assertEqual('active', role['tasks']['active']['101']['status'])
         self.assertEqual(6, len(result.frames))
+        _, available_fields = decode_frame(result.frames[0])
+        self.assertEqual(2, available_fields[5].value)
 
     def test_active_1145_abandon_and_claim_use_exact_task_route(self):
         runtime = self.make_runtime()
@@ -90,9 +95,6 @@ class TaskRuntimeTests(unittest.TestCase):
         runtime = self.make_runtime()
         role = {'level': 1}
         runtime.migrate_role(role, today='2026-09-12')
-        # Gathering pathfinding uses the same BYTE,INT,BYTE,BYTE wire shape as
-        # task navigation. A map id that is not a registered task route must
-        # fall through to the existing 1145 pathfinding handler.
         result = runtime.handle_1145(role, [
             Field(TYPE_BYTE, 0), Field(TYPE_INT, 58), Field(TYPE_BYTE, 10), Field(TYPE_BYTE, 11)
         ], today='2026-09-12')
@@ -111,9 +113,11 @@ class TaskRuntimeTests(unittest.TestCase):
         result = runtime.record_event(role, 'monster_killed', target_id=1900001, now=2, today='2026-09-12')
         self.assertTrue(result.changed)
         self.assertEqual('ready', role['tasks']['active']['101']['status'])
+        _, available_fields = decode_frame(result.frames[0])
+        self.assertEqual(3, available_fields[5].value)
         active_frames = [frame for frame in result.frames if decode_frame(frame)[1][0].value == 6]
         main = next(frame for frame in active_frames if decode_frame(frame)[1][3].value == 1)
-        self.assertEqual(2, decode_frame(main)[1][10].value)
+        self.assertEqual(2, decode_frame(main)[1][8].value)
 
     def test_detail_request_uses_safe_ack_until_layout_is_fully_traced(self):
         runtime = self.make_runtime()
