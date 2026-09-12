@@ -1,0 +1,186 @@
+"""Task-system orchestration shared by server routing and tests."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable, Sequence
+
+from protocol import Field
+from task_protocol import (
+    active_task_list_frame,
+    available_task_list_frame,
+    detail_request_task_id,
+    is_active_list_request,
+    is_available_list_request,
+    parse_task_1145_request,
+    parse_task_operation_request,
+    safe_detail_ack_frame,
+)
+from task_registry import TaskDefinition, TaskRegistry
+from task_service import (
+    abandon_task,
+    accept_task,
+    available_tasks,
+    claim_task,
+    ensure_task_state,
+    record_event as update_task_progress,
+)
+
+
+@dataclass(frozen=True)
+class TaskRuntimeResult:
+    frames: tuple[bytes, ...]
+    changed: bool
+    handled: bool = True
+    reason: str = ''
+
+
+RewardApplier = Callable[[dict[str, object], TaskDefinition], bool]
+
+
+class TaskRuntime:
+    """Bridge pure task state and the APK's task protocol without persistence."""
+
+    def __init__(self, registry: TaskRegistry) -> None:
+        self.registry = registry
+
+    def migrate_role(self, role: dict[str, object], *, today: str | None = None) -> bool:
+        return ensure_task_state(role, today=today)
+
+    def _active_entries(self, role: dict[str, object], category_wire_id: int):
+        state = role.get('tasks')
+        active = state.get('active') if isinstance(state, dict) else None
+        active = active if isinstance(active, dict) else {}
+        entries: list[tuple[TaskDefinition, str]] = []
+        for task in self.registry.all_tasks():
+            if task.category_wire_id != int(category_wire_id):
+                continue
+            record = active.get(str(task.task_id))
+            if not isinstance(record, dict):
+                continue
+            status = str(record.get('status', 'active'))
+            if status not in {'active', 'ready'}:
+                continue
+            entries.append((task, status))
+        return tuple(entries)
+
+    def active_snapshot_frames(self, role: dict[str, object]) -> tuple[bytes, ...]:
+        return tuple(
+            active_task_list_frame(wire_id, self._active_entries(role, wire_id))
+            for wire_id in (1, 2, 3, 4, 6)
+        )
+
+    def snapshot_frames(self, role: dict[str, object], *, today: str | None = None) -> tuple[bytes, ...]:
+        ensure_task_state(role, today=today)
+        return (
+            available_task_list_frame(available_tasks(role, self.registry, today=today)),
+            *self.active_snapshot_frames(role),
+        )
+
+    def handle_1403(
+        self,
+        role: dict[str, object],
+        fields: Sequence[Field],
+        *,
+        today: str | None = None,
+    ) -> TaskRuntimeResult:
+        migrated = ensure_task_state(role, today=today)
+        if is_available_list_request(fields):
+            return TaskRuntimeResult(
+                (available_task_list_frame(available_tasks(role, self.registry, today=today)),),
+                migrated,
+            )
+        if is_active_list_request(fields):
+            return TaskRuntimeResult(self.active_snapshot_frames(role), migrated)
+        if detail_request_task_id(fields) is not None:
+            return TaskRuntimeResult((safe_detail_ack_frame(),), migrated, reason='detail_layout_untraced')
+        if parse_task_operation_request(fields) is not None:
+            return TaskRuntimeResult((safe_detail_ack_frame(),), migrated, reason='operation_1403_untraced')
+        return TaskRuntimeResult((safe_detail_ack_frame(),), migrated, reason='unknown_1403_action')
+
+    def _route_task(self, route_id: int, category: int, route_kind: int | None = None) -> TaskDefinition | None:
+        for task in self.registry.all_tasks():
+            if task.client_route.route_id != int(route_id):
+                continue
+            if task.category_wire_id != int(category):
+                continue
+            if route_kind is not None and task.client_route.route_kind != int(route_kind):
+                continue
+            return task
+        return None
+
+    def handle_1145(
+        self,
+        role: dict[str, object],
+        fields: Sequence[Field],
+        *,
+        reward_applier: RewardApplier | None = None,
+        now: int | float = 0,
+        today: str | None = None,
+    ) -> TaskRuntimeResult | None:
+        request = parse_task_1145_request(fields)
+        if request is None:
+            return None
+        migrated = ensure_task_state(role, today=today)
+        if request.variant == 'available':
+            task = self._route_task(request.route_id, request.category, request.route_kind)
+            if task is None:
+                return TaskRuntimeResult(self.snapshot_frames(role, today=today), migrated, reason='unknown_route')
+            action = accept_task(role, self.registry, task.task_id, now=now, today=today)
+            return TaskRuntimeResult(
+                self.snapshot_frames(role, today=today),
+                migrated or action.changed,
+                reason=action.reason,
+            )
+
+        task = self.registry.get(request.task_id)
+        if (
+            task is None
+            or task.client_route.route_id != request.route_id
+            or task.category_wire_id != request.category
+        ):
+            return TaskRuntimeResult(self.snapshot_frames(role, today=today), migrated, reason='route_mismatch')
+        if request.operation == 4:
+            action = abandon_task(role, self.registry, task.task_id, today=today)
+        elif request.operation == 2:
+            action = claim_task(
+                role,
+                self.registry,
+                task.task_id,
+                reward_applier=reward_applier,
+                now=now,
+                today=today,
+            )
+        else:
+            return TaskRuntimeResult(self.snapshot_frames(role, today=today), migrated, reason='unsupported_operation')
+        return TaskRuntimeResult(
+            self.snapshot_frames(role, today=today),
+            migrated or action.changed,
+            reason=action.reason,
+        )
+
+    def record_event(
+        self,
+        role: dict[str, object],
+        kind: str,
+        *,
+        target_id: int = 0,
+        amount: int = 1,
+        now: int | float = 0,
+        today: str | None = None,
+    ) -> TaskRuntimeResult:
+        migrated = ensure_task_state(role, today=today)
+        changed_ids = update_task_progress(
+            role,
+            self.registry,
+            kind,
+            target_id=target_id,
+            amount=amount,
+            now=now,
+            today=today,
+        )
+        changed = migrated or bool(changed_ids)
+        return TaskRuntimeResult(
+            self.snapshot_frames(role, today=today) if changed_ids else (),
+            changed,
+            reason=','.join(str(task_id) for task_id in changed_ids),
+        )
