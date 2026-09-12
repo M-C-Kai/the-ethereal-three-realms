@@ -116,6 +116,14 @@ from mount_constructor import (
     mount_ride_code_for_role,
     mount_ride_code_from_item,
 )
+from consignment_protocol import (
+    CONSIGNMENT_ACTION_BROWSE,
+    CONSIGNMENT_ITEM_CATEGORIES,
+    consignment_category_frame,
+    empty_consignment_result_frame,
+    is_consignment_browse_request,
+    is_consignment_category_request,
+)
 from character_update_bus import CharacterUpdateBus, CharacterUpdateEvent
 
 
@@ -6718,6 +6726,38 @@ class LocalGameServer:
                                     quantity,
                                     result.reason or 'unknown',
                                 )
+
+                elif message_id == 1138 and fields:
+                    if is_consignment_category_request(fields):
+                        LOG.info(
+                            'CONSIGNMENT_CATEGORIES user=%r role_id=%d count=%d',
+                            username,
+                            int(active_role.get('id', 0)) if active_role is not None else 0,
+                            len(CONSIGNMENT_ITEM_CATEGORIES),
+                        )
+                        await self._send(
+                            writer,
+                            consignment_category_frame(),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    elif is_consignment_browse_request(fields):
+                        category_id = int(fields[1].value)
+                        LOG.info(
+                            'CONSIGNMENT_BROWSE user=%r role_id=%d category_id=%d category=%r',
+                            username,
+                            int(active_role.get('id', 0)) if active_role is not None else 0,
+                            category_id,
+                            CONSIGNMENT_ITEM_CATEGORIES[category_id],
+                        )
+                        await self._send(
+                            writer,
+                            empty_consignment_result_frame(CONSIGNMENT_ACTION_BROWSE),
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
+                    else:
+                        LOG.info('ignored consignment message=1138 values=%r', values)
 
                 elif message_id == 1143 and active_role is not None and fields:
                     action = int(fields[0].value) if fields[0].type_id == TYPE_BYTE else -1
