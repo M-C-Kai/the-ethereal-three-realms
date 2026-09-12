@@ -9,6 +9,14 @@ on:
       - 'implementation_staging/tests/test_consignment_entry.py'
       - 'implementation_staging/tests/test_consignment_categories.py'
       - '.github/workflows/verify-consignment-bootstrap.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'implementation_staging/consignment_protocol.py'
+      - 'implementation_staging/server_dynamic_maps.py'
+      - 'implementation_staging/tests/test_consignment_entry.py'
+      - 'implementation_staging/tests/test_consignment_categories.py'
+      - '.github/workflows/verify-consignment-bootstrap.yml'
 
 permissions:
   contents: read
