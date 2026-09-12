@@ -13,13 +13,6 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def replace_exact_count(text: str, old: str, new: str, expected: int, label: str) -> str:
-    count = text.count(old)
-    if count != expected:
-        raise RuntimeError(f'{label}: expected {expected} matches, got {count}')
-    return text.replace(old, new)
-
-
 def main() -> None:
     text = SERVER.read_text(encoding='utf-8')
 
@@ -40,12 +33,18 @@ def main() -> None:
         'remove task empty prefetch',
     )
 
-    text = replace_exact_count(
+    text = replace_once(
         text,
         "    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    fuyuan.ensure_state(role)\n",
         "    role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n    ensure_task_state(role)\n    fuyuan.ensure_state(role)\n",
-        2,
-        'initialize task state for new/default roles',
+        'initialize default role task state',
+    )
+
+    text = replace_once(
+        text,
+        "        role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n        fuyuan.ensure_state(role)\n        roles.append(role)\n",
+        "        role['bag_reset_version'] = ROLE_BAG_RESET_VERSION\n        ensure_task_state(role)\n        fuyuan.ensure_state(role)\n        roles.append(role)\n",
+        'initialize created role task state',
     )
 
     text = replace_once(
