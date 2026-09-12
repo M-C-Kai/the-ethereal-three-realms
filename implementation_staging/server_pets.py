@@ -4,7 +4,7 @@ import contextvars
 import logging
 import time
 
-import battle_escape_guard as _battle_escape
+from battle import state as _battle_state
 import server as _server
 import server_dynamic_maps as _dynamic
 from pet_protocol import (
@@ -25,7 +25,7 @@ from protocol import TYPE_BYTE, TYPE_INT, byte, field_values, integer
 
 LOG = logging.getLogger('piaomiao-local')
 PET_REGISTRY = default_pet_registry()
-ROAMING_BOSS_CONTACT_RADIUS = _battle_escape.CONTACT_RADIUS_TILES
+ROAMING_BOSS_CONTACT_RADIUS = _battle_state.CONTACT_RADIUS_TILES
 
 # Internal-only routing actions; these values never go onto the wire.
 _INTERNAL_PET_SKILL_ACTION = 248
@@ -39,7 +39,6 @@ _ORIGINAL_ROLE_CREATE = _server.RoleStore.create
 _ORIGINAL_DECODE_PAYLOAD = _server.decode_payload
 _ORIGINAL_HANDLE_SECT_SKILL_REQUEST = _server.LocalGameServer.handle_sect_skill_request
 _ORIGINAL_DYNAMIC_MAP_ENTER_FRAMES = _dynamic.dynamic_map_enter_frames
-_ORIGINAL_SET_ESCAPE_GUARD = _server.LocalBattleState.set_escape_guard
 
 _ACTIVE_ROLE: contextvars.ContextVar[dict[str, object] | None] = contextvars.ContextVar(
     'piaomiao_active_pet_role', default=None,
@@ -133,45 +132,18 @@ def _roaming_boss_current_tile(*, now: float | None = None) -> tuple[int, int] |
     return int(_dynamic.ROAMING_BOSS_TARGET_X), int(_dynamic.ROAMING_BOSS_TARGET_Y)
 
 
-def battle_set_escape_guard(
-    state,
-    map_id: int,
-    monster_id: int,
-    player_id: int,
-    origin: tuple[int, int] | None,
-) -> None:
-    """Create the normal battle guard and add its two-second timeout epoch."""
-    _ORIGINAL_SET_ESCAPE_GUARD(state, map_id, monster_id, player_id, origin)
-    _battle_escape.stamp_guard(state.escape_guard)
-
-
 def battle_should_suppress_escape_retrigger(
     guard: dict[str, object] | None,
     map_id: int,
     monster_id: int,
 ) -> bool:
-    """Apply the battle-owned OR policy: leave radius or wait two seconds."""
-    return _battle_escape.should_suppress(guard, map_id, monster_id)
+    """Compatibility adapter while server.py moves to battle.encounter."""
+    return _battle_state.should_suppress_guard(guard, map_id, monster_id)
 
 
 def battle_update_escape_guard_for_movement(state, x: int, y: int) -> bool:
-    """Clear escape protection only after timeout or leaving the one-tile radius."""
-    new_tile = (int(x), int(y))
-    state.player_tile = new_tile
-    guard = state.escape_guard
-    if not guard:
-        return False
-    if _battle_escape.timed_out(guard):
-        state.clear_escape_guard()
-        return True
-    origin = guard.get('origin')
-    if origin is None:
-        guard['origin'] = new_tile
-        return False
-    if not _battle_escape.movement_outside_guard_radius(guard, new_tile[0], new_tile[1]):
-        return False
-    state.clear_escape_guard()
-    return True
+    """Delegate movement release policy to the authoritative battle state."""
+    return state.update_player_tile(x, y)
 
 
 def _translate_roaming_boss_fight_request(message_id: int, fields):
@@ -190,12 +162,11 @@ def _translate_roaming_boss_fight_request(message_id: int, fields):
 
 
 def _translate_roaming_boss_contact_request(message_id: int, fields, *, now: float | None = None):
-    """Route every in-range movement attempt through the existing battle state.
+    """Route every in-range movement attempt through the existing battle entry.
 
     The synthetic 2031 record carries the Boss tile, not the player's tile, so
-    ``LocalBattleState.contact_tile`` becomes the contact-radius anchor used by
-    the escape guard. The player's real position is still persisted from the
-    decoded 1005 path before the interaction is rewritten.
+    the consolidated battle state uses that tile as the contact-radius anchor.
+    The player's real position is still persisted from the decoded 1005 path.
     """
     if message_id != 1005:
         return message_id, fields
@@ -310,9 +281,14 @@ def install_pet_support() -> None:
     _server.role_entry_frames = pet_role_entry_frames
     _server.decode_payload = pet_decode_payload
     _server.LocalGameServer.handle_sect_skill_request = pet_handle_sect_skill_request
-    _server.LocalBattleState.set_escape_guard = battle_set_escape_guard
+
+    # Transitional compatibility: all new connections now instantiate the
+    # battle package's authoritative state class. The remaining two function
+    # aliases disappear when server.py's map-entry adapter moves to encounter.py.
+    _server.LocalBattleState = _battle_state.LocalBattleState
     _server.should_suppress_escape_retrigger = battle_should_suppress_escape_retrigger
     _server.update_escape_guard_for_movement = battle_update_escape_guard_for_movement
+
     _dynamic.dynamic_map_enter_frames = pet_dynamic_map_enter_frames
 
 
