@@ -20,7 +20,10 @@ from task_registry import TaskDefinition
 TASK_MESSAGE_ID = 1403
 TASK_ROUTE_MESSAGE_ID = 1145
 ACTIVE_RECORD_WIDTH = 9
-AVAILABLE_RECORD_WIDTH = 6
+AVAILABLE_RECORD_WIDTH = 7
+ACTIVE_STYLE_DEFAULT = 3
+ACTIVE_STATE_ACTIVE = 1
+ACTIVE_STATE_READY = 2
 
 
 @dataclass(frozen=True)
@@ -81,10 +84,11 @@ def parse_task_operation_request(fields: Sequence[Field]) -> TaskOperationReques
 
 
 def parse_task_1145_request(fields: Sequence[Field]) -> Task1145Request | None:
-    """Parse only the two APK-confirmed task-shaped 1145/action-0 forms.
+    """Parse the historical compatibility 1145 task forms.
 
-    Other 1145 payloads (notably map pathfinding) deliberately return None so
-    existing server routing can continue unchanged.
+    The live APK also uses 1145/action-0 for cross-map pathfinding.  Runtime
+    routing therefore validates the decoded route against the task catalog and
+    falls through when it is not an exact task route.
     """
     if _exact_types(fields, (TYPE_BYTE, TYPE_INT, TYPE_BYTE, TYPE_BYTE)):
         if int(fields[0].value) != 0:
@@ -111,20 +115,27 @@ def parse_task_1145_request(fields: Sequence[Field]) -> Task1145Request | None:
     return None
 
 
-def available_task_list_frame(tasks: Iterable[TaskDefinition]) -> bytes:
-    entries = tuple(tasks)
-    # main/e.ad action 50/52 reads field1 as a short page/selection token and
-    # field2 as the record count. It infers each record width from the total
-    # remaining field count, so never transmit AVAILABLE_RECORD_WIDTH here.
-    fields: list[Field] = [byte(50), short(0), byte(len(entries))]
-    for task in entries:
+def available_task_list_frame(
+    entries: Iterable[tuple[TaskDefinition, int]],
+) -> bytes:
+    """Encode action 50 using the APK's seven-field task row.
+
+    ``e/en`` and the available-task pane in ``e/ca`` read each row as
+    ``task_id, name, status, map_id, x, y, actor_id``.  Status 1 exposes
+    “领取任务”; status 3 exposes “提交任务”.
+    """
+    records = tuple(entries)
+    fields: list[Field] = [byte(50), short(0), byte(len(records))]
+    for task, status in records:
+        route = task.client_route
         fields.extend((
             integer(task.task_id),
             string(task.name),
-            integer(0),
-            integer(task.client_route.route_id),
-            byte(task.category_wire_id),
-            byte(task.client_route.route_kind),
+            integer(int(status)),
+            integer(route.accept_map_id),
+            integer(route.accept_x),
+            integer(route.accept_y),
+            integer(route.accept_actor_id),
         ))
     return encode_frame(TASK_MESSAGE_ID, fields)
 
@@ -133,9 +144,8 @@ def active_task_list_frame(
     category_wire_id: int,
     entries: Iterable[tuple[TaskDefinition, str]],
 ) -> bytes:
+    """Encode action 6 using the APK's nine-field active-task row."""
     records = tuple(entries)
-    # main/e.ad action 6 reads field1 as a short page/selection token, field2
-    # as record count and field3 as category. The 9-field width is inferred.
     fields: list[Field] = [
         byte(6),
         short(0),
@@ -143,17 +153,17 @@ def active_task_list_frame(
         byte(int(category_wire_id)),
     ]
     for task, status in records:
-        ready = status == 'ready'
+        route = task.client_route
         fields.extend((
             integer(task.task_id),
             string(task.name),
-            integer(0),
             integer(task.level_requirement),
-            integer(4 if ready else 0),
-            integer(task.client_route.route_id),
-            byte(2 if ready else 4),
-            byte(task.category_wire_id),
-            integer(task.task_id),
+            integer(ACTIVE_STYLE_DEFAULT),
+            integer(ACTIVE_STATE_READY if status == 'ready' else ACTIVE_STATE_ACTIVE),
+            integer(route.submit_map_id),
+            integer(route.submit_x),
+            integer(route.submit_y),
+            integer(route.submit_actor_id),
         ))
     return encode_frame(TASK_MESSAGE_ID, fields)
 
