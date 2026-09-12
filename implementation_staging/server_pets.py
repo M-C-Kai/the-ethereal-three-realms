@@ -4,7 +4,6 @@ import contextvars
 import logging
 import time
 
-from battle import integration as _battle_integration
 from battle import state as _battle_state
 import server as _server
 import server_dynamic_maps as _dynamic
@@ -262,9 +261,6 @@ def pet_handle_sect_skill_request(
 
 
 def install_pet_support() -> None:
-    # Keep battle compatibility inside the battle subsystem, not the pet layer.
-    _battle_integration.install(_server)
-
     _server.default_role = pet_default_role
     _server.RoleStore.roles_for = pet_roles_for
     _server.RoleStore.create = pet_create_role
