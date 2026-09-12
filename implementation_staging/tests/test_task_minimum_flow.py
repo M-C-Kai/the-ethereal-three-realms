@@ -69,7 +69,7 @@ class TaskMinimumFlowTests(unittest.TestCase):
         self.assertEqual(50, fields[0].value)
         self.assertEqual(2, fields[5].value)
 
-    def test_action8_rejects_other_player_id(self):
+    def test_action8_rejects_other_player_id_without_mutating_role(self):
         runtime = self.make_runtime()
         role = {'id': 10001, 'level': 1}
         result = runtime.handle_1403(
@@ -79,7 +79,8 @@ class TaskMinimumFlowTests(unittest.TestCase):
             today='2026-09-12',
         )
         self.assertFalse(result.changed)
-        self.assertEqual({}, role['tasks']['active'])
+        self.assertEqual('player_mismatch', result.reason)
+        self.assertNotIn('tasks', role)
 
     def test_task_accept_and_submit_coordinates_are_valid_path_targets(self):
         runtime = self.make_runtime()
