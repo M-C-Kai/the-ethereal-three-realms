@@ -6,6 +6,79 @@ from dataclasses import dataclass, field
 
 CONTACT_RADIUS_TILES = 1
 RETRIGGER_TIMEOUT_SECONDS = 2.0
+_CREATED_AT_KEY = 'created_at'
+
+
+def stamp_guard(
+    guard: dict[str, object] | None,
+    *,
+    now: float | None = None,
+) -> dict[str, object] | None:
+    """Stamp an escape guard with the monotonic timeout epoch."""
+    if guard is None:
+        return None
+    guard[_CREATED_AT_KEY] = time.monotonic() if now is None else float(now)
+    return guard
+
+
+def guard_matches(
+    guard: dict[str, object] | None,
+    map_id: int,
+    monster_id: int,
+) -> bool:
+    if not guard:
+        return False
+    return (
+        int(guard.get('map_id', -1)) == int(map_id)
+        and int(guard.get('monster_id', -1)) == int(monster_id)
+    )
+
+
+def guard_timed_out(
+    guard: dict[str, object] | None,
+    *,
+    now: float | None = None,
+    timeout_seconds: float = RETRIGGER_TIMEOUT_SECONDS,
+) -> bool:
+    """Return whether the guard has reached its retrigger timeout."""
+    if not guard:
+        return False
+    created_at = guard.get(_CREATED_AT_KEY)
+    if created_at is None:
+        # Legacy guards stay movement-gated instead of expiring immediately.
+        return False
+    current = time.monotonic() if now is None else float(now)
+    return current - float(created_at) >= float(timeout_seconds)
+
+
+def should_suppress_guard(
+    guard: dict[str, object] | None,
+    map_id: int,
+    monster_id: int,
+    *,
+    now: float | None = None,
+) -> bool:
+    """Suppress the guarded encounter only until its timeout expires."""
+    if not guard_matches(guard, map_id, monster_id):
+        return False
+    return not guard_timed_out(guard, now=now)
+
+
+def movement_outside_guard_radius(
+    guard: dict[str, object] | None,
+    x: int,
+    y: int,
+    *,
+    radius: int = CONTACT_RADIUS_TILES,
+) -> bool:
+    """Return whether movement leaves the guard's contact radius."""
+    if not guard:
+        return False
+    origin = guard.get('origin')
+    if origin is None:
+        return False
+    origin_x, origin_y = int(origin[0]), int(origin[1])
+    return max(abs(int(x) - origin_x), abs(int(y) - origin_y)) > int(radius)
 
 
 @dataclass(frozen=True)
@@ -115,8 +188,8 @@ class LocalBattleState:
             'monster_id': int(monster_id),
             'player_id': int(player_id),
             'origin': (int(origin[0]), int(origin[1])) if origin else None,
-            'created_at': time.monotonic() if now is None else float(now),
         }
+        stamp_guard(self.escape_guard, now=now)
 
     def clear_escape_guard(self) -> None:
         self.escape_guard = None
@@ -129,22 +202,17 @@ class LocalBattleState:
         now: float | None = None,
     ) -> bool:
         """Suppress only the guarded same-map/same-monster encounter."""
-        guard = self.escape_guard
-        if not guard:
-            return False
-        if (
-            int(guard.get('map_id', -1)) != int(map_id)
-            or int(guard.get('monster_id', -1)) != int(monster_id)
+        if not should_suppress_guard(
+            self.escape_guard,
+            map_id,
+            monster_id,
+            now=now,
         ):
-            return False
-
-        created_at = guard.get('created_at')
-        if created_at is None:
-            # Keep old unstamped guards movement-gated during migration.
-            return True
-        current = time.monotonic() if now is None else float(now)
-        if current - float(created_at) >= RETRIGGER_TIMEOUT_SECONDS:
-            self.clear_escape_guard()
+            if guard_matches(self.escape_guard, map_id, monster_id) and guard_timed_out(
+                self.escape_guard,
+                now=now,
+            ):
+                self.clear_escape_guard()
             return False
         return True
 
@@ -162,19 +230,15 @@ class LocalBattleState:
         if not guard:
             return False
 
-        created_at = guard.get('created_at')
-        if created_at is not None:
-            current = time.monotonic() if now is None else float(now)
-            if current - float(created_at) >= RETRIGGER_TIMEOUT_SECONDS:
-                self.clear_escape_guard()
-                return True
+        if guard_timed_out(guard, now=now):
+            self.clear_escape_guard()
+            return True
 
         origin = guard.get('origin')
         if origin is None:
             guard['origin'] = new_tile
             return False
-        origin_x, origin_y = int(origin[0]), int(origin[1])
-        if max(abs(new_tile[0] - origin_x), abs(new_tile[1] - origin_y)) <= CONTACT_RADIUS_TILES:
+        if not movement_outside_guard_radius(guard, new_tile[0], new_tile[1]):
             return False
 
         self.clear_escape_guard()
