@@ -9,6 +9,26 @@ class PetCatalogError(ValueError):
     pass
 
 
+def _int_tuple(
+    raw: object,
+    *,
+    length: int,
+    default: tuple[int, ...],
+    minimum: int = 0,
+) -> tuple[int, ...]:
+    if not isinstance(raw, list):
+        return default
+    values: list[int] = []
+    for value in raw[:length]:
+        try:
+            values.append(max(minimum, int(value)))
+        except (TypeError, ValueError):
+            values.append(default[len(values)])
+    while len(values) < length:
+        values.append(default[len(values)])
+    return tuple(values)
+
+
 @dataclass(frozen=True)
 class PetDefinition:
     template_id: int
@@ -19,6 +39,24 @@ class PetDefinition:
     carry_level: int = 1
     growth_rank: int = 0
     base_life: int = 100
+    species_name: str = ''
+    base_hp: int = 100
+    base_mp: int = 50
+    physical_attack: int = 20
+    magic_attack: int = 15
+    physical_defense: int = 10
+    magic_defense: int = 10
+    speed: int = 10
+    base_stats: tuple[int, ...] = (10, 10, 10, 10, 10)
+    qualifications: tuple[int, ...] = (
+        70, 100, 70, 100, 70, 100,
+        70, 100, 70, 100, 70, 100,
+    )
+    innate_divine_power: int = 0
+    divine_power: int = 0
+    standard_skill: str = '无'
+    growth_values: tuple[int, ...] = (700, 700, 700, 700, 700, 700, 700)
+    insight_training_max: int = 100
     status: str = 'candidate_renderable'
     notes: str = ''
 
@@ -48,15 +86,37 @@ class PetRegistry:
         for raw in raw_pets:
             if not isinstance(raw, dict):
                 raise PetCatalogError('pet definition must be an object')
+            name = str(raw['name'])
             definition = PetDefinition(
                 template_id=int(raw['template_id']),
-                name=str(raw['name']),
+                name=name,
                 model_dat_id=int(raw['model_dat_id']),
                 pet_type=int(raw.get('pet_type', 1)),
                 base_level=max(1, int(raw.get('base_level', 1))),
                 carry_level=max(0, int(raw.get('carry_level', 1))),
-                growth_rank=max(0, int(raw.get('growth_rank', 0))),
+                growth_rank=max(0, min(4, int(raw.get('growth_rank', 0)))),
                 base_life=max(1, int(raw.get('base_life', 100))),
+                species_name=str(raw.get('species_name', name)),
+                base_hp=max(1, int(raw.get('base_hp', 100))),
+                base_mp=max(1, int(raw.get('base_mp', 50))),
+                physical_attack=max(0, int(raw.get('physical_attack', 20))),
+                magic_attack=max(0, int(raw.get('magic_attack', 15))),
+                physical_defense=max(0, int(raw.get('physical_defense', 10))),
+                magic_defense=max(0, int(raw.get('magic_defense', 10))),
+                speed=max(0, int(raw.get('speed', 10))),
+                base_stats=_int_tuple(raw.get('base_stats'), length=5, default=(10, 10, 10, 10, 10)),
+                qualifications=_int_tuple(
+                    raw.get('qualifications'), length=12,
+                    default=(70, 100, 70, 100, 70, 100, 70, 100, 70, 100, 70, 100),
+                ),
+                innate_divine_power=max(0, int(raw.get('innate_divine_power', 0))),
+                divine_power=max(0, int(raw.get('divine_power', 0))),
+                standard_skill=str(raw.get('standard_skill', '无')),
+                growth_values=_int_tuple(
+                    raw.get('growth_values'), length=7,
+                    default=(700, 700, 700, 700, 700, 700, 700), minimum=500,
+                ),
+                insight_training_max=max(1, int(raw.get('insight_training_max', 100))),
                 status=str(raw.get('status', 'candidate_renderable')),
                 notes=str(raw.get('notes', '')),
             )
