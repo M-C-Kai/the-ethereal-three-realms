@@ -26,7 +26,7 @@ function Get-ListeningPids {
 function Get-ServerPyPids {
     $found = @()
     Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and ($_.CommandLine -match '(server|server_dynamic_maps)\.py') } |
+        Where-Object { $_.CommandLine -and ($_.CommandLine -match '(server|server_dynamic_maps|server_pets)\.py') } |
         ForEach-Object { $found += [int]$_.ProcessId }
     $found | Where-Object { $_ -gt 0 } | Select-Object -Unique
 }
@@ -96,9 +96,9 @@ try {
             throw "Port $Port still LISTENING after kill: $($still -join ', ')"
         }
 
-        Write-Host "Starting $Python server_dynamic_maps.py on 0.0.0.0:$Port advertising ${AdvertiseHost}:$Port"
+        Write-Host "Starting $Python server_pets.py on 0.0.0.0:$Port advertising ${AdvertiseHost}:$Port"
         $pythonProcess = Start-Process -FilePath $Python -ArgumentList @(
-            '.\server_dynamic_maps.py',
+            '.\server_pets.py',
             '--host', '0.0.0.0',
             '--port', "$Port",
             '--advertise-host', $AdvertiseHost
@@ -115,7 +115,7 @@ try {
         if ($pythonProcess.HasExited) {
             $launchExit = $pythonProcess.ExitCode
             if ($launchExit -eq 0) { $launchExit = 1 }
-            Write-Host "server_dynamic_maps.py exited before binding port $Port (code $launchExit)"
+            Write-Host "server_pets.py exited before binding port $Port (code $launchExit)"
         }
     }
 } catch {
