@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "default_template_id": 50100,
+  "pets": [
+    {
+      "template_id": 50100,
+      "name": "测试灵宠",
+      "model_dat_id": 50100,
+      "pet_type": 1,
+      "base_level": 1,
+      "carry_level": 1,
+      "growth_rank": 0,
+      "base_life": 100,
+      "status": "candidate_renderable",
+      "notes": "APK 内 assets/res/role/50100.dat 已确认存在；作为第一只协议下发测试宠物，物种归属待手机实测确认。"
+    }
+  ]
+}
