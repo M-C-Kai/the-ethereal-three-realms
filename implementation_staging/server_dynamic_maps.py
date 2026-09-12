@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 import server as _server
-from consignment_protocol import consignment_screen_frame
+from consignment_protocol import consignment_category_frame, consignment_screen_frame
 from dynamic_map_builder import (
     materialize_all_dynamic_maps,
     merge_dynamic_maps_into_registry_payload,
@@ -327,7 +327,7 @@ def consignment_map_npc_dialogue_frames(npc, role, settings) -> list[bytes]:
 
 
 def consignment_npc_dialogue_option_frames(settings, role, state, option_id: int) -> list[bytes]:
-    """Open native consignment screen 613 when the selected NPC is the merchant."""
+    """Open native consignment screen 613 and bootstrap native item categories."""
     if role is None or int(option_id) != CONSIGNMENT_MERCHANT_OPTION:
         return _ORIGINAL_NPC_DIALOGUE_OPTION_FRAMES(settings, role, state, option_id)
 
@@ -345,13 +345,14 @@ def consignment_npc_dialogue_option_frames(settings, role, state, option_id: int
 
     try:
         LOG.info(
-            'CONSIGNMENT_MERCHANT_OPEN role_id=%d npc_id=%d screen=613 protocol=1138',
+            'CONSIGNMENT_MERCHANT_OPEN role_id=%d npc_id=%d screen=613 protocol=1138 categories=28',
             int(role.get('id', 0)),
             int(npc.id),
         )
         return [
             _server.map_object_interaction_ack_frame(0),
             consignment_screen_frame(),
+            consignment_category_frame(),
         ]
     finally:
         state.clear()
