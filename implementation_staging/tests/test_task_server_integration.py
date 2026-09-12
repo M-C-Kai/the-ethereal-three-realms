@@ -96,6 +96,22 @@ class TaskServerIntegrationTests(unittest.TestCase):
         self.assertGreater(int(role['currencies']['silver']), silver_before)
         self.assertTrue(self.server.roles.path.exists())
 
+    def test_live_pathfind_1145_payload_still_falls_through(self):
+        role = default_role(self.settings)
+        # The live gathering pathfinder shares BYTE,INT,BYTE,BYTE with task
+        # navigation.  Map id 58 is not a task route and must remain owned by
+        # the pre-existing pathfinding branch in the game dispatcher.
+        result = self.server.handle_task_1145(
+            role,
+            [
+                Field(TYPE_BYTE, 0),
+                Field(TYPE_INT, 58),
+                Field(TYPE_BYTE, 10),
+                Field(TYPE_BYTE, 11),
+            ],
+        )
+        self.assertIsNone(result)
+
     def test_non_task_1145_payload_still_falls_through(self):
         role = default_role(self.settings)
         result = self.server.handle_task_1145(
