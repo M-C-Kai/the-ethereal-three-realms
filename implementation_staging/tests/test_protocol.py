@@ -260,7 +260,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(fields[0].type_id, 4)
 
     def test_menu_prefetch_empty_acks_release_client_wait_state(self):
-        expected = {1403: 1, 1090: 0, 1153: 0, 1061: 3}
+        expected = {1090: 0, 1153: 0, 1061: 3}
         for protocol_id, subtype in expected.items():
             message_id, fields = decode_frame(menu_prefetch_empty_ack(protocol_id))
             self.assertEqual(message_id, protocol_id)

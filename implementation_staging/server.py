@@ -127,6 +127,9 @@ from consignment_protocol import (
     is_consignment_category_request,
 )
 from character_update_bus import CharacterUpdateBus, CharacterUpdateEvent
+from task_protocol import parse_task_1145_request
+from task_server_support import default_task_server_support
+from task_service import ensure_task_state
 
 
 LOG = logging.getLogger('piaomiao-local')
@@ -138,7 +141,6 @@ LOG = logging.getLogger('piaomiao-local')
 # Use deliberately unhandled subtypes so an unavailable system behaves as an
 # empty module without constructing a screen that expects additional fields.
 MENU_PREFETCH_EMPTY_SUBTYPES = {
-    1403: 1,
     # In the active client, subtype 2 opens a panel and immediately reads a
     # multi-field payload.  Subtype 0 is intentionally unhandled and safely
     # releases the menu's loading state with this one-field empty response.
@@ -1759,6 +1761,7 @@ def default_role(settings: Settings) -> dict[str, object]:
     role['mailbox'] = starter_mail(int(role['id']))
     role['mailbox_initialized'] = True
     role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
+    ensure_task_state(role)
     fuyuan.ensure_state(role)
     return role
 
@@ -2408,6 +2411,8 @@ class RoleStore:
         assert isinstance(roles, list)
         changed = False
         for role in roles:
+            if ensure_task_state(role):
+                changed = True
             if fuyuan.settle(role):
                 changed = True
             if 'experience' not in role:
@@ -2529,6 +2534,7 @@ class RoleStore:
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
         role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
+        ensure_task_state(role)
         fuyuan.ensure_state(role)
         roles.append(role)
         accounts = self.data['accounts']
@@ -5088,8 +5094,65 @@ class LocalGameServer:
         self.accounts = AccountStore(settings)
         self.roles = RoleStore(settings)
         self.character_update_bus = build_character_update_bus()
+        self.task_support = default_task_server_support(settings.item_registry)
+        self.task_runtime = self.task_support.runtime
         self._next_session_id = 1000
         self._sessions: dict[tuple[int, int], str] = {}
+
+    def handle_task_1403(
+        self,
+        role: dict[str, object],
+        fields: list[Field],
+        *,
+        today: str | None = None,
+    ) -> tuple[bytes, ...]:
+        result = self.task_runtime.handle_1403(role, fields, today=today)
+        if result.changed:
+            self.roles.save()
+        return result.frames
+
+    def handle_task_1145(
+        self,
+        role: dict[str, object],
+        fields: list[Field],
+        *,
+        now: int | float = 0,
+        today: str | None = None,
+    ) -> tuple[bytes, ...] | None:
+        result = self.task_runtime.handle_1145(
+            role,
+            fields,
+            reward_applier=self.task_support.apply_rewards,
+            now=now,
+            today=today,
+        )
+        if result is None:
+            return None
+        if result.changed:
+            self.roles.save()
+        return result.frames
+
+    def record_task_event(
+        self,
+        role: dict[str, object],
+        kind: str,
+        *,
+        target_id: int = 0,
+        amount: int = 1,
+        now: int | float = 0,
+        today: str | None = None,
+    ) -> tuple[bytes, ...]:
+        result = self.task_runtime.record_event(
+            role,
+            kind,
+            target_id=target_id,
+            amount=amount,
+            now=now,
+            today=today,
+        )
+        if result.changed:
+            self.roles.save()
+        return result.frames
 
     def handle_sect_skill_request(
         self,
@@ -5433,9 +5496,20 @@ class LocalGameServer:
                 npc.name,
                 source,
             )
+            task_frames = (
+                self.record_task_event(
+                    active_role,
+                    'npc_talked',
+                    target_id=npc.id,
+                    now=time.time(),
+                )
+                if active_role is not None
+                else ()
+            )
             await self._send(
                 writer,
                 *map_npc_dialogue_frames(npc, active_role, self.settings),
+                *task_frames,
                 cipher=cipher,
                 lock=send_lock,
             )
@@ -5885,6 +5959,13 @@ class LocalGameServer:
                                 current_settings.id
                             )
                         )
+                        if active_role is not None:
+                            enter_frames.extend(self.record_task_event(
+                                active_role,
+                                'map_entered',
+                                target_id=current_settings.id,
+                                now=time.time(),
+                            ))
                         await self._send(
                             writer,
                             *enter_frames,
@@ -6118,9 +6199,23 @@ class LocalGameServer:
                                 reward_item = None
                                 level_up = False
                                 awarded_experience = BATTLE_EXP_REWARD
+                                task_frames: tuple[bytes, ...] = ()
                                 if active_role is not None:
                                     awarded_experience = fuyuan.experience_reward(active_role, BATTLE_EXP_REWARD)
                                     reward_item, level_up = apply_battle_rewards(active_role, registry=self.settings.item_registry)
+                                    killed_frames = self.record_task_event(
+                                        active_role,
+                                        'monster_killed',
+                                        target_id=battle_state.monster_id,
+                                        now=time.time(),
+                                    )
+                                    won_frames = self.record_task_event(
+                                        active_role,
+                                        'battle_won',
+                                        target_id=battle_state.monster_id,
+                                        now=time.time(),
+                                    )
+                                    task_frames = (*killed_frames, *won_frames)
                                     self.roles.save()
                                 battle_state.finish()
                                 battle_state.monster_defeated = True
@@ -6131,6 +6226,7 @@ class LocalGameServer:
                                 result_frames = [
                                     battle_end_frame(),
                                     map_object_remove_frame(battle_state.monster_id),
+                                    *task_frames,
                                 ]
                                 if active_role is not None and reward_item is not None:
                                     result_frames.extend((
@@ -6482,6 +6578,22 @@ class LocalGameServer:
                                 )
                     else:
                         LOG.info('ignored skill message=%d values=%r', message_id, values)
+                elif message_id == 1403 and active_role is not None:
+                    response_frames = self.handle_task_1403(active_role, fields)
+                    LOG.info(
+                        'task protocol 1403 user=%r role_id=%d values=%r replies=%d',
+                        username,
+                        int(active_role.get('id', 0)),
+                        values,
+                        len(response_frames),
+                    )
+                    if response_frames:
+                        await self._send(
+                            writer,
+                            *response_frames,
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
                 elif message_id in MENU_PREFETCH_EMPTY_SUBTYPES:
                     LOG.info('menu prefetch acknowledged as empty message=%d values=%r', message_id, values)
                     await self._send(
@@ -7110,6 +7222,29 @@ class LocalGameServer:
                             ))
                             gathering.task = task
                             await self._send(writer, *frames, cipher=game_cipher, lock=send_lock)
+
+                elif (
+                    message_id == 1145
+                    and active_role is not None
+                    and self.task_runtime.matches_1145(fields)
+                ):
+                    response_frames = self.handle_task_1145(
+                        active_role, fields, now=time.time(),
+                    )
+                    LOG.info(
+                        'task protocol 1145 user=%r role_id=%d values=%r replies=%d',
+                        username,
+                        int(active_role.get('id', 0)),
+                        values,
+                        len(response_frames or ()),
+                    )
+                    if response_frames:
+                        await self._send(
+                            writer,
+                            *response_frames,
+                            cipher=game_cipher,
+                            lock=send_lock,
+                        )
 
                 elif message_id == 1145 and is_map_pathfind_request(fields) and active_role is not None:
                     map_id = int(fields[1].value)
