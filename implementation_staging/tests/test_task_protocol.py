@@ -27,7 +27,18 @@ class TaskProtocolTests(unittest.TestCase):
             'level_requirement': 2, 'prerequisites': [],
             'objectives': [{'kind': 'battle_won', 'target_id': 0, 'required': 1}],
             'rewards': [], 'repeat_policy': 'once', 'daily_limit': 0,
-            'client_route': {'route_id': 11001, 'route_kind': 7},
+            'client_route': {
+                'route_id': 11001,
+                'route_kind': 7,
+                'accept_map_id': 58,
+                'accept_x': 34,
+                'accept_y': 50,
+                'accept_actor_id': 1900003,
+                'submit_map_id': 58,
+                'submit_x': 34,
+                'submit_y': 50,
+                'submit_actor_id': 1900003,
+            },
         }]}), encoding='utf-8')
         return TaskRegistry(path, item_exists=lambda _: True).require(10001)
 
@@ -66,30 +77,42 @@ class TaskProtocolTests(unittest.TestCase):
         self.assertEqual(('active', 11001, 2, 1, 10001, 0), (active.variant, active.route_id, active.operation, active.category, active.task_id, active.route_kind))
         self.assertIsNone(parse_task_1145_request([Field(TYPE_BYTE, 0), Field(TYPE_INT, 1)]))
 
-    def test_available_frame_matches_apk_action_50_header_and_record_layout(self):
+    def test_available_frame_matches_apk_action_50_header_and_seven_field_record(self):
         task = self.make_task()
-        message_id, fields = decode_frame(available_task_list_frame([task]))
+        message_id, fields = decode_frame(available_task_list_frame([(task, 1)]))
         self.assertEqual(1403, message_id)
-        # APK main/e.ad reads field1 as SHORT page/selection and field2 as
-        # BYTE record count; record width is inferred from remaining fields.
-        self.assertEqual([(TYPE_BYTE, 50), (TYPE_SHORT, 0), (TYPE_BYTE, 1)], [(f.type_id, f.value) for f in fields[:3]])
-        self.assertEqual([10001, '试炼起步', 0, 11001, 1, 7], [f.value for f in fields[3:]])
+        self.assertEqual(
+            [(TYPE_BYTE, 50), (TYPE_SHORT, 0), (TYPE_BYTE, 1)],
+            [(f.type_id, f.value) for f in fields[:3]],
+        )
+        # en/ca consume the record as:
+        # id, name, status, target-map, target-x, target-y, target-actor.
+        self.assertEqual(
+            [10001, '试炼起步', 1, 58, 34, 50, 1900003],
+            [f.value for f in fields[3:]],
+        )
 
     def test_available_frame_count_is_number_of_records_not_record_width(self):
         task = self.make_task()
-        _, fields = decode_frame(available_task_list_frame([task, task]))
+        _, fields = decode_frame(available_task_list_frame([(task, 1), (task, 3)]))
         self.assertEqual(0, fields[1].value)
         self.assertEqual(2, fields[2].value)
-        self.assertEqual(12, len(fields) - 3)
+        self.assertEqual(14, len(fields) - 3)
 
-    def test_active_frame_matches_apk_action_6_header_and_record_layout(self):
+    def test_active_frame_matches_apk_action_6_header_and_nine_field_record(self):
         task = self.make_task()
         message_id, fields = decode_frame(active_task_list_frame(1, [(task, 'ready')]))
         self.assertEqual(1403, message_id)
-        # APK main/e.ad reads SHORT field1, BYTE record-count field2 and BYTE
-        # category field3; it derives the 9-field record width itself.
-        self.assertEqual([(TYPE_BYTE, 6), (TYPE_SHORT, 0), (TYPE_BYTE, 1), (TYPE_BYTE, 1)], [(f.type_id, f.value) for f in fields[:4]])
-        self.assertEqual([10001, '试炼起步', 0, 2, 4, 11001, 2, 1, 10001], [f.value for f in fields[4:]])
+        self.assertEqual(
+            [(TYPE_BYTE, 6), (TYPE_SHORT, 0), (TYPE_BYTE, 1), (TYPE_BYTE, 1)],
+            [(f.type_id, f.value) for f in fields[:4]],
+        )
+        # ca consumes the record as:
+        # id, name, level, style, state, submit-map/x/y, submit-actor.
+        self.assertEqual(
+            [10001, '试炼起步', 2, 3, 2, 58, 34, 50, 1900003],
+            [f.value for f in fields[4:]],
+        )
 
     def test_active_frame_count_is_number_of_records_not_record_width(self):
         task = self.make_task()
