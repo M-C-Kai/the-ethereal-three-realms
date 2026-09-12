@@ -11,6 +11,12 @@ from protocol import decode_frame, field_values
 
 
 class BattleResourceTests(unittest.TestCase):
+    def test_default_resource_root_is_implementation_staging(self):
+        self.assertEqual(
+            resources.PROJECT_DIR,
+            Path(__file__).resolve().parents[2],
+        )
+
     def test_empty_role_resource_finishes_with_two_native_1503_chunks(self):
         frames = resources.battle_resource_frames(0)
 
