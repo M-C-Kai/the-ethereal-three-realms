@@ -1,0 +1,115 @@
+name: reconcile-master-trade
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build trade result from pre-trade master with a three-way patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feat/consignment-full-flow-20260912
+          PARENT=83b119d729956e256548a7a7650f43507688cc94
+          FEATURE=origin/feat/consignment-full-flow-20260912
+          BASE=$(git merge-base "$PARENT" "$FEATURE")
+          echo "merge_base=$BASE"
+
+          paths=(
+            docs/protocol/1138-consignment-flow.md
+            docs/superpowers/plans/2026-09-12-consignment-full-flow.md
+            implementation_staging/TRADE_SYSTEM.md
+            implementation_staging/config.json
+            implementation_staging/consignment_protocol.py
+            implementation_staging/consignment_service.py
+            implementation_staging/data/consignment_listings.json
+            implementation_staging/server.py
+            implementation_staging/tests/test_consignment_category_entry.py
+            implementation_staging/tests/test_consignment_protocol.py
+            implementation_staging/tests/test_consignment_server_contract.py
+            implementation_staging/tests/test_consignment_service.py
+            implementation_staging/tests/test_trade_order_history.py
+            implementation_staging/tests/test_trade_system.py
+            implementation_staging/tests/test_trade_tcp_e2e.py
+          )
+
+          git diff --binary "$BASE" "$FEATURE" -- "${paths[@]}" > /tmp/trade-system.patch
+          git worktree add --detach /tmp/trade-merge "$PARENT"
+          cd /tmp/trade-merge
+          git apply --3way --index /tmp/trade-system.patch
+          git diff --cached --check
+
+      - name: Verify merged trade lifecycle
+        working-directory: /tmp/trade-merge/implementation_staging
+        run: |
+          python -m py_compile server.py consignment_protocol.py consignment_service.py
+          python -m unittest \
+            tests.test_trade_tcp_e2e \
+            tests.test_trade_system \
+            tests.test_trade_order_history \
+            tests.test_consignment_service \
+            tests.test_consignment_protocol \
+            tests.test_consignment_server_contract \
+            tests.test_consignment_category_entry \
+            tests.test_consignment_entry \
+            tests.test_consignment_categories -v
+
+      - name: Verify existing task integration is preserved
+        working-directory: /tmp/trade-merge/implementation_staging
+        run: python -m unittest discover -s tests -p 'test_task_*.py' -v
+
+      - name: Verify current composable pet core is preserved
+        working-directory: /tmp/trade-merge/implementation_staging
+        run: |
+          python -m unittest \
+            tests.test_pet_model \
+            tests.test_pet_protocol_core \
+            tests.test_pet_server_core \
+            tests.test_pet_service -v
+
+      - name: Commit reconciled files directly to master
+        shell: bash
+        run: |
+          set -euo pipefail
+          paths=(
+            docs/protocol/1138-consignment-flow.md
+            docs/superpowers/plans/2026-09-12-consignment-full-flow.md
+            implementation_staging/TRADE_SYSTEM.md
+            implementation_staging/config.json
+            implementation_staging/consignment_protocol.py
+            implementation_staging/consignment_service.py
+            implementation_staging/data/consignment_listings.json
+            implementation_staging/server.py
+            implementation_staging/tests/test_consignment_category_entry.py
+            implementation_staging/tests/test_consignment_protocol.py
+            implementation_staging/tests/test_consignment_server_contract.py
+            implementation_staging/tests/test_consignment_service.py
+            implementation_staging/tests/test_trade_order_history.py
+            implementation_staging/tests/test_trade_system.py
+            implementation_staging/tests/test_trade_tcp_e2e.py
+          )
+          for path in "${paths[@]}"; do
+            mkdir -p "$(dirname "$path")"
+            cp "/tmp/trade-merge/$path" "$path"
+          done
+          rm -f .github/workflows/reconcile-master-trade.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "${paths[@]}" .github/workflows/reconcile-master-trade.yml
+          git diff --cached --check
+          git commit -m "fix: preserve master integrations with complete trade system"
+          git push
