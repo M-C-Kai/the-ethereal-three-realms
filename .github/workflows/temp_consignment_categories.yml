@@ -1,0 +1,73 @@
+name: temp-consignment-categories
+on:
+  push:
+    branches: [ master ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch consignment category protocol and server handler
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          proto = Path('implementation_staging/consignment_protocol.py')
+          text = proto.read_text(encoding='utf-8')
+          text = text.replace(
+              'from protocol import byte, encode_frame, integer, short\n',
+              'from protocol import TYPE_BYTE, Field, byte, encode_frame, integer, short, string\n',
+          )
+          marker = 'CONSIGNMENT_OBJECT_PET = 3\n\n\n'
+          insert = '''CONSIGNMENT_OBJECT_PET = 3\n\n# APK pmsj/work/a/n.<clinit> contains the native 28-entry item-consignment\n# category table. Screen 613/ev renders action-3 records as [id, name] and\n# sends the selected id back through 1138 [BYTE 13, BYTE category_id].\nCONSIGNMENT_ITEM_CATEGORIES = (\n    '所有武器', '长枪', '折扇', '环器', '棍杖', '双刃', '爪刺', '剑', '刀', '笔',\n    '长斧', '灯枪', '半月', '双斧', '头盔', '肩甲', '铠甲', '腰带', '腿甲', '项链',\n    '披风', '护腕', '鞋子', '戒指', '坐骑', '外套', '道具', '材料',\n)\n\n\ndef consignment_category_frame() -> bytes:\n    \"\"\"S->C 1138/action 3: native screen-613 item category list.\"\"\"\n    fields = [byte(CONSIGNMENT_ACTION_REFRESH_MERCHANT), byte(len(CONSIGNMENT_ITEM_CATEGORIES))]\n    for category_id, name in enumerate(CONSIGNMENT_ITEM_CATEGORIES):\n        fields.extend((byte(category_id), string(name)))\n    return encode_frame(CONSIGNMENT_MESSAGE_ID, fields)\n\n\ndef is_consignment_category_request(fields: list[Field]) -> bool:\n    \"\"\"C->S 1138 [BYTE 3] emitted by the native merchant category view.\"\"\"\n    return bool(\n        len(fields) == 1\n        and fields[0].type_id == TYPE_BYTE\n        and fields[0].value == CONSIGNMENT_ACTION_REFRESH_MERCHANT\n    )\n\n\ndef is_consignment_browse_request(fields: list[Field]) -> bool:\n    \"\"\"C->S 1138 [BYTE 13, BYTE category_id] emitted after a category tap.\"\"\"\n    return bool(\n        len(fields) == 2\n        and fields[0].type_id == TYPE_BYTE\n        and fields[0].value == CONSIGNMENT_ACTION_BROWSE\n        and fields[1].type_id == TYPE_BYTE\n        and 0 <= int(fields[1].value) < len(CONSIGNMENT_ITEM_CATEGORIES)\n    )\n\n\n'''
+          if 'CONSIGNMENT_ITEM_CATEGORIES' not in text:
+              if marker not in text:
+                  raise SystemExit('consignment protocol marker not found')
+              text = text.replace(marker, insert, 1)
+          proto.write_text(text, encoding='utf-8')
+
+          server = Path('implementation_staging/server.py')
+          text = server.read_text(encoding='utf-8')
+          import_marker = '''from mount_constructor import (\n    construct_mount_state,\n    create_mount_item_instance,\n    load_mount_catalog,\n    mount_ride_code_for_role,\n    mount_ride_code_from_item,\n)\n'''
+          import_block = import_marker + '''from consignment_protocol import (\n    CONSIGNMENT_ACTION_BROWSE,\n    CONSIGNMENT_ITEM_CATEGORIES,\n    consignment_category_frame,\n    empty_consignment_result_frame,\n    is_consignment_browse_request,\n    is_consignment_category_request,\n)\n'''
+          if 'is_consignment_category_request' not in text:
+              if import_marker not in text:
+                  raise SystemExit('server import marker not found')
+              text = text.replace(import_marker, import_block, 1)
+
+          handler_marker = '''                elif message_id == 1143 and active_role is not None and fields:\n'''
+          handler = '''                elif message_id == 1138 and fields:\n                    if is_consignment_category_request(fields):\n                        LOG.info(\n                            'CONSIGNMENT_CATEGORIES user=%r role_id=%d count=%d',\n                            username,\n                            int(active_role.get('id', 0)) if active_role is not None else 0,\n                            len(CONSIGNMENT_ITEM_CATEGORIES),\n                        )\n                        await self._send(\n                            writer,\n                            consignment_category_frame(),\n                            cipher=game_cipher,\n                            lock=send_lock,\n                        )\n                    elif is_consignment_browse_request(fields):\n                        category_id = int(fields[1].value)\n                        LOG.info(\n                            'CONSIGNMENT_BROWSE user=%r role_id=%d category_id=%d category=%r',\n                            username,\n                            int(active_role.get('id', 0)) if active_role is not None else 0,\n                            category_id,\n                            CONSIGNMENT_ITEM_CATEGORIES[category_id],\n                        )\n                        # Action 13 creates/refreshes the native screen-44 result page.\n                        # There are no player listings yet, so return a valid zero-count\n                        # result instead of leaving the client wait state unresolved.\n                        await self._send(\n                            writer,\n                            empty_consignment_result_frame(CONSIGNMENT_ACTION_BROWSE),\n                            cipher=game_cipher,\n                            lock=send_lock,\n                        )\n                    else:\n                        LOG.info('ignored consignment message=1138 values=%r', values)\n\n'''
+          if "CONSIGNMENT_CATEGORIES user=%r" not in text:
+              if handler_marker not in text:
+                  raise SystemExit('server handler marker not found')
+              text = text.replace(handler_marker, handler + handler_marker, 1)
+          server.write_text(text, encoding='utf-8')
+
+          test = Path('implementation_staging/tests/test_consignment_categories.py')
+          test.write_text('''from __future__ import annotations\n\nimport unittest\n\nfrom consignment_protocol import (\n    CONSIGNMENT_ITEM_CATEGORIES,\n    consignment_category_frame,\n    is_consignment_browse_request,\n    is_consignment_category_request,\n)\nfrom protocol import byte, decode_frame, field_values\n\n\nclass ConsignmentCategoryTests(unittest.TestCase):\n    def test_apk_native_item_categories_are_downlinked_in_order(self):\n        message_id, fields = decode_frame(consignment_category_frame())\n        values = field_values(fields)\n        self.assertEqual(message_id, 1138)\n        self.assertEqual(values[:2], [3, 28])\n        records = values[2:]\n        self.assertEqual(len(records), 56)\n        self.assertEqual(records[0:4], [0, '所有武器', 1, '长枪'])\n        self.assertEqual(records[-4:], [26, '道具', 27, '材料'])\n        self.assertEqual(len(CONSIGNMENT_ITEM_CATEGORIES), 28)\n\n    def test_native_request_shapes_are_strict(self):\n        self.assertTrue(is_consignment_category_request([byte(3)]))\n        self.assertTrue(is_consignment_browse_request([byte(13), byte(27)]))\n        self.assertFalse(is_consignment_browse_request([byte(13), byte(28)]))\n\n\nif __name__ == '__main__':\n    unittest.main()\n''', encoding='utf-8')
+          PY
+      - name: Verify
+        working-directory: implementation_staging
+        run: |
+          python -m py_compile consignment_protocol.py server.py server_dynamic_maps.py
+          python -m unittest tests.test_consignment_entry tests.test_consignment_categories tests.test_dynamic_map_ref_transfer
+      - name: Commit patch and self-delete workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/temp_consignment_categories.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add implementation_staging/consignment_protocol.py implementation_staging/server.py implementation_staging/tests/test_consignment_categories.py .github/workflows/temp_consignment_categories.yml
+          git commit -m "feat: downlink native consignment categories"
+          git push
