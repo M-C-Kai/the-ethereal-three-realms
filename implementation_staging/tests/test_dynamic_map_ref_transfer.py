@@ -56,6 +56,39 @@ class DynamicMapRefTransferTests(unittest.TestCase):
         self.assertEqual(frames, [b'new-13', b'ref-chunk', b'old-14', b'old-105'])
         map_action.assert_called_once_with(definition, 13, status=1, role_id=10001)
 
+    def test_boss_effect_carrier_uses_native_2030_field5_attachment(self):
+        definition = SimpleNamespace(id=58)
+        carrier = SimpleNamespace(
+            id=1_900_099,
+            x=9,
+            y=28,
+            dat_id=3_000_100,
+            direction=0,
+            name='',
+            label='',
+        )
+
+        message_id, fields = decode_frame(dynamic.map_npc_frame_with_effect(definition, carrier))
+
+        self.assertEqual(message_id, 2030)
+        self.assertEqual(
+            field_values(fields),
+            [1_900_099, 9, 28, 3_000_100, 0, 3_000_000, '', 0, ''],
+        )
+        self.assertEqual(
+            [field.type_id for field in fields],
+            [4, 4, 4, 4, 4, 4, 6, 4, 6],
+        )
+
+    def test_non_effect_npc_keeps_original_2030_encoder(self):
+        definition = SimpleNamespace(id=58)
+        npc = SimpleNamespace(dat_id=95_750)
+        with patch.object(dynamic, '_ORIGINAL_MAP_NPC_FRAME', return_value=b'original') as original:
+            frame = dynamic.map_npc_frame_with_effect(definition, npc)
+
+        self.assertEqual(frame, b'original')
+        original.assert_called_once_with(definition, npc)
+
 
 if __name__ == '__main__':
     unittest.main()
