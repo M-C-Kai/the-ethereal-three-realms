@@ -4,7 +4,11 @@ from pet_registry import default_pet_registry
 from pet_protocol import (
     apply_pet_state_request,
     ensure_role_pets,
+    is_pet_detail_request,
+    is_pet_skill_request,
+    is_pet_state_request,
     pet_detail_frame,
+    pet_instance_frame,
     pet_property_update_frame,
     pet_skill_list_frame,
 )
@@ -22,6 +26,11 @@ class PetDetailsActionsTests(unittest.TestCase):
     def property_field(fields, property_id):
         # 1127/action=9 field[2] maps to property 30.
         return fields[property_id - 28]
+
+    def test_action_1_property_9_is_confirmed_carry_level_gate(self):
+        _, fields = decode_frame(pet_instance_frame(self.pet, self.registry))
+        self.assertEqual(fields[9].type_id, TYPE_INT)
+        self.assertEqual(fields[9].value, 1)
 
     def test_1127_action_9_maps_properties_30_through_90(self):
         frame = pet_detail_frame(self.pet, self.registry)
@@ -92,6 +101,18 @@ class PetDetailsActionsTests(unittest.TestCase):
             [byte(48), integer(self.pet['id']), byte(1)],
         )
         self.assertEqual(result.updates, ((self.pet['id'], 12, 1),))
+
+    def test_request_classifiers_preserve_exact_apk_field_types(self):
+        pet_id = self.pet['id']
+        self.assertTrue(is_pet_detail_request([byte(9), integer(pet_id)]))
+        self.assertFalse(is_pet_detail_request([integer(9), integer(pet_id)]))
+
+        self.assertTrue(is_pet_skill_request([byte(10), integer(pet_id)]))
+        self.assertFalse(is_pet_skill_request([byte(10), byte(1)]))
+
+        self.assertTrue(is_pet_state_request([byte(10), integer(pet_id), byte(1)]))
+        self.assertTrue(is_pet_state_request([byte(48), integer(pet_id), byte(0)]))
+        self.assertFalse(is_pet_state_request([integer(48), integer(pet_id), byte(0)]))
 
 
 if __name__ == '__main__':
