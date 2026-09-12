@@ -7,7 +7,6 @@ on:
       - refactor/battle-system-consolidation
     paths:
       - 'implementation_staging/battle/**'
-      - 'implementation_staging/battle_escape_guard.py'
       - 'implementation_staging/server.py'
       - 'implementation_staging/server_pets.py'
       - 'implementation_staging/tests/battle/**'
@@ -30,14 +29,14 @@ jobs:
           python-version: '3.11'
       - name: Compile battle modules
         working-directory: implementation_staging
-        run: python -m py_compile battle/*.py battle_escape_guard.py server.py server_pets.py
+        run: python -m py_compile battle/*.py server.py server_pets.py
       - name: Battle subsystem tests
         working-directory: implementation_staging
         run: python -m unittest discover -s tests/battle -v
       - name: Battle consolidation structure tests
         working-directory: implementation_staging
         run: python -m unittest discover -s tests -p 'test_battle_consolidation_structure.py' -v
-      - name: Escape guard compatibility tests
+      - name: Escape guard state tests
         working-directory: implementation_staging
         run: python -m unittest discover -s tests -p 'test_battle_escape_guard.py' -v
       - name: Roaming Boss battle integration tests
