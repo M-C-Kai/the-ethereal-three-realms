@@ -122,10 +122,11 @@ def roaming_boss_spawn_frame(definition) -> bytes:
     Fields 1/2 are map coordinates; ``W(w)`` stores them as actor properties
     and immediately seeds the q actor position from those properties.
 
-    q.a(mask) reads integer property 6.  ``main/e.W`` checks bit 0x800000 and,
-    when set, calls ``q.c(40000, true)``.  Because that display is attached to
-    the q actor itself, it shares the actor's interpolated coordinates while
-    protocol 1005 moves the Boss.
+    q.p() reads property 4 as the actor display/interaction name. Keep it as a
+    STRING: sending an INT placeholder leaves the roaming actor without the
+    metadata used by the native map-object interaction path. Property 6 is the
+    q effect mask; bit 0x800000 calls ``q.c(40000, true)`` so the ring remains
+    attached to the moving actor itself.
     """
     monster = getattr(definition, 'monster', None)
     if monster is None:
@@ -136,7 +137,7 @@ def roaming_boss_spawn_frame(definition) -> bytes:
         short(int(monster.x)),
         short(int(monster.y)),
         integer(resource_id),
-        integer(0),
+        string(str(monster.name)),
         integer(0),
         integer(ROAMING_BOSS_EFFECT_MASK),
     ])
