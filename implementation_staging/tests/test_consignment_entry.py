@@ -6,7 +6,10 @@ from unittest.mock import patch
 
 from protocol import decode_frame, field_values
 import server_dynamic_maps as dynamic
-from consignment_protocol import CONSIGNMENT_ITEM_MODE, consignment_screen_frame
+from consignment_protocol import (
+    CONSIGNMENT_ITEM_MODE,
+    consignment_screen_frame,
+)
 
 
 class _DialogueState:
@@ -47,7 +50,7 @@ class ConsignmentEntryTests(unittest.TestCase):
         self.assertIn('寄售', values)
         self.assertIn('结束对话', values)
 
-    def test_selecting_consignment_opens_screen_613_in_item_mode_and_clears_dialogue_state(self):
+    def test_selecting_consignment_bootstraps_item_categories_and_clears_dialogue_state(self):
         npc = SimpleNamespace(id=1_900_004, service='consignment_merchant')
         definition = SimpleNamespace(id=58)
         state = _DialogueState(58, npc.id)
@@ -64,10 +67,18 @@ class ConsignmentEntryTests(unittest.TestCase):
                 dynamic.CONSIGNMENT_MERCHANT_OPTION,
             )
 
+        self.assertEqual(len(frames), 3)
         self.assertEqual(frames[0], b'ack')
+
         message_id, fields = decode_frame(frames[1])
         self.assertEqual(message_id, 1010)
         self.assertEqual(field_values(fields)[3:], [CONSIGNMENT_ITEM_MODE, 613, 69])
+
+        message_id, fields = decode_frame(frames[2])
+        values = field_values(fields)
+        self.assertEqual(message_id, 1138)
+        self.assertEqual(values[:2], [3, 28])
+        self.assertEqual(values[2:6], [0, '所有武器', 1, '长枪'])
         self.assertTrue(state.cleared)
 
 
