@@ -11,6 +11,7 @@ from protocol import (
     short,
     string,
 )
+from systems.inventory.registry import default_item_registry
 from systems.pet.handler import PetSystem
 from systems.pet.registry import default_pet_registry
 from systems.pet.service import ensure_pet_schema
@@ -145,6 +146,18 @@ class PetSystemTests(unittest.TestCase):
         self.assertEqual(self.role['items'][0]['quantity'], 2)
         self.assertEqual(self.saves, 0)
         self.assertEqual(result.frames, ())
+
+    def test_skill_book_is_real_inventory_template_and_starter_stack(self):
+        registry = default_item_registry()
+        definition = registry.require(399010011)
+        self.assertEqual(definition.name, '灵宠猛击技能书')
+        self.assertGreater(definition.icon_code, 0)
+        self.assertGreater(definition.max_quantity, 1)
+        self.assertNotIn(399010011, registry.preview_template_ids())
+        starters = registry.starter_instances(10001)
+        book = next(item for item in starters if int(item['template_id']) == 399010011)
+        self.assertGreaterEqual(int(book['quantity']), 2)
+        self.assertEqual(book['location'], 'bag')
 
 
 if __name__ == '__main__':
