@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from map_o import MapO, MapOError, inspect_map_ref, load_spec, read_map_ref
+from systems.map.protocol import MapO, MapOError, inspect_map_ref, load_spec, read_map_ref
 
 
 def add_ref_arguments(parser: argparse.ArgumentParser) -> None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from item_registry import (
+from systems.inventory.registry import (
     ARMOR_APPEARANCE_MAPPING_FILE,
     SLOT_FAMILY_LABELS,
     preview_appearance_properties,

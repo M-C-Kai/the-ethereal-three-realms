@@ -9,7 +9,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from map_o import MapO
+from systems.map.protocol import MapO
 from tools.map_ref_renderer import (
     AssetReader,
     CompositeRenderer,

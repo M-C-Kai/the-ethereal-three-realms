@@ -18,6 +18,13 @@
 | `smali/pmsj/work/b/h.smali` | 战斗人物 work/b/h；1048 kind=1 field[2] 的人物底板、武器图层和品质覆盖层解析证据。 |
 | `smali/pmsj/work/e/af.smali` | 人物装备面板；14 个装备槽位及其名称 |
 | `smali/pmsj/work/d/a.smali` | UI 物品控件；图标字段到图片资源的调用 |
+| `smali/pmsj/work/e/t.smali` | screen 70 已寄售物品；添加物品/添加宠物按钮（0x11171/0x11176）、1138 action 7/9/2 发送点 |
+| `smali/pmsj/work/e/ev.smali` | screen 613 寄售分类页；事件 0xaf9 发送 action 3、分类点击发送 action 13 |
+| `smali/pmsj/work/e/s.smali` / `e/p.smali` | screen 44 计数页与 screen 73 市场列表；购买 action 4、行情请求 action 0/23 |
+| `smali/pmsj/work/e/ac.smali` | screen 351 仙晶下单；1083 action 10/11/12/13/15/16 发送点与响应解析 |
+| `smali/pmsj/work/e/ad.smali` | screen 350 仙晶行情；1083 action 0/3/4/5/6 发送点与响应解析 |
+| `smali/pmsj/work/e/cn.smali` | 宠物界面；宠物寄售菜单与 action 9 发送点（object_type=3） |
+| `smali/pmsj/work/d/n.smali` / `d/i.smali` | 屏幕工厂（1010 开屏、screen id 映射）与分页控件 |
 | `smali/a/c/x.smali` | 图片图集编号算法；`f(int)` 是 24×24 物品图标转换 |
 | `smali/a/a/a.smali` | `role/*.dat` 角色动画资源解析和绘制 |
 

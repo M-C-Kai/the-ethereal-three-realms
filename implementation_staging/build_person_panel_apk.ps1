@@ -12,18 +12,21 @@ $WorkspaceDir = Resolve-Path (Join-Path $ProjectDir '..\..')
 $ApkToolJar = Join-Path $WorkspaceDir 'work\tools\apktool.jar'
 $DecodeDir = Join-Path $WorkspaceDir 'work\apk-person-panel'
 $FrameworkDir = Join-Path $WorkspaceDir 'work\apktool-framework'
-$BuildDir = Join-Path $ProjectDir 'build'
+$ArtifactDir = Join-Path $ProjectDir 'build_artifacts'
+$BuildDir = Join-Path $ArtifactDir 'build'
+$ApkOutputDir = Join-Path $ArtifactDir 'apk'
+$SigningDir = Join-Path $ArtifactDir 'signing'
 $RebuiltApk = Join-Path $BuildDir 'person_panel_rebuilt.apk'
 $PatchedApk = Join-Path $BuildDir 'person_panel_endpoint.apk'
 $AlignedApk = Join-Path $BuildDir 'person_panel_aligned.apk'
-$FinalApk = Join-Path $ProjectDir 'piaomiao_local_person_panel.apk'
-$KeyStorePath = Join-Path $ProjectDir 'local-test-keystore.p12'
+$FinalApk = Join-Path $ApkOutputDir 'piaomiao_local_person_panel.apk'
+$KeyStorePath = Join-Path $SigningDir 'local-test-keystore.p12'
 $AndroidBuildTools = Join-Path $env:LOCALAPPDATA 'Android\Sdk\build-tools\35.0.0'
 $ZipAlignExe = Join-Path $AndroidBuildTools 'zipalign.exe'
 $ApkSignerBat = Join-Path $AndroidBuildTools 'apksigner.bat'
 $JavaExe = 'C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot\bin\java.exe'
 
-New-Item -ItemType Directory -Force -Path $BuildDir, $FrameworkDir | Out-Null
+New-Item -ItemType Directory -Force -Path $BuildDir, $ApkOutputDir, $SigningDir, $FrameworkDir | Out-Null
 
 & $JavaExe -jar $ApkToolJar d -f -r -p $FrameworkDir -o $DecodeDir $SourceApk
 & python (Join-Path $ProjectDir 'tools\patch_person_shortcut.py') $DecodeDir

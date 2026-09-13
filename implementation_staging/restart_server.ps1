@@ -10,6 +10,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RuntimeDir = Join-Path $Root 'runtime'
+$LogDir = Join-Path $Root 'logs'
+New-Item -ItemType Directory -Force -Path $RuntimeDir, $LogDir | Out-Null
+$PidFile = Join-Path $RuntimeDir 'server_pid.txt'
 Set-Location $Root
 
 function Get-ListeningPids {
@@ -28,7 +32,7 @@ function Get-ListeningPids {
 function Get-ServerPyPids {
     $found = @()
     Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and ($_.CommandLine -match '(server|server_dynamic_maps|server_pets|server_pet_system)\.py') } |
+        Where-Object { $_.CommandLine -and ($_.CommandLine -match 'server\.py') } |
         ForEach-Object { $found += [int]$_.ProcessId }
     $found | Where-Object { $_ -gt 0 } | Select-Object -Unique
 }
@@ -107,13 +111,21 @@ try {
         }
         Wait-PortFree -PortNumber $Port
 
-        Write-Host "Starting $Python server_pet_system.py on 0.0.0.0:$Port advertising ${AdvertiseHost}:$Port"
+        $logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $stdoutLog = Join-Path $LogDir "server.$logStamp.stdout.log"
+        $stderrLog = Join-Path $LogDir "server.$logStamp.stderr.log"
+
+        Write-Host "Starting $Python server.py on 0.0.0.0:$Port advertising ${AdvertiseHost}:$Port"
+        Write-Host "Writing logs to:"
+        Write-Host "  $stdoutLog"
+        Write-Host "  $stderrLog"
         $pythonProcess = Start-Process -FilePath $Python -ArgumentList @(
-            '.\server_pet_system.py',
+            '.\server.py',
             '--host', '0.0.0.0',
             '--port', "$Port",
             '--advertise-host', $AdvertiseHost
-        ) -WorkingDirectory $Root -NoNewWindow -PassThru
+        ) -WorkingDirectory $Root -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog -WindowStyle Hidden -PassThru
+        Set-Content -LiteralPath $PidFile -Value $pythonProcess.Id -Encoding ascii
 
         $deadline = (Get-Date).AddSeconds(8)
         do {
@@ -126,7 +138,7 @@ try {
         if ($pythonProcess.HasExited) {
             $launchExit = $pythonProcess.ExitCode
             if ($launchExit -eq 0) { $launchExit = 1 }
-            Write-Host "server_pet_system.py exited before binding port $Port (code $launchExit)"
+            Write-Host "server.py exited before binding port $Port (code $launchExit)"
         } else {
             Write-Host "Server is listening on port $Port"
         }
@@ -151,6 +163,9 @@ if ($null -eq $pythonProcess) {
     exit 1
 }
 $pythonProcess.WaitForExit()
+if ((Test-Path -LiteralPath $PidFile) -and ((Get-Content -LiteralPath $PidFile -ErrorAction SilentlyContinue) -eq "$($pythonProcess.Id)")) {
+    Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
+}
 # The replacement click already started a new window. Close this one instead of
 # pausing on the taskkill exit code from the previous Python process.
 exit 0

@@ -19,13 +19,19 @@
 
 昆仑门派闭环使用本地地图 `60001`（不是原服地图编号）：长安 `(62,67)` 的 `580005`“昆仑传送阵”进入昆仑 `(8,6)`，地图内 `1900101`“昆仑导师”通过原生 `2032` 对话提供“学习门派技能”，选择后由 `1010/action=69` 以 mode 1 打开门派技能学习页；`6000101/(9,6)` 返回阵回到长安。昆仑地图不生成试炼妖兽，现有 50000 号测试区保持不变；修复版 APK 将长安的复合图块引用别名为 `60001.map.ref`，并打包独立的 `60001.map.o`，进入帧使用 status 0 完成本地绘制资源加载。
 
+## 代码结构
+
+所有玩法系统位于 `systems/<name>/` 五层目录（商店、技能、地图、角色、背包、战斗、任务、帮派、宠物、寄售、福缘），`server.py` 只保留依赖装配、`app.router.SystemRouter` 总线路由和网络收发。系统清单与协议入口对照见 `systems/README.md`。
+
 ## 手机测试
 
 当前配置使用电脑局域网地址 `192.168.0.104`，手机和电脑必须连接同一局域网。
 
 1. 双击 `start_server.bat`，保持窗口开启。每次双击都会先关掉旧服务和旧窗口，再启动一份新服务。
+   启动器会把本次 stdout/stderr 写入 `logs/server.<时间戳>.stdout.log`
+   和 `logs/server.<时间戳>.stderr.log`。
 2. 如果 Windows 防火墙询问权限，只允许“专用网络”。
-3. 安装 `piaomiao_local_login.apk`。它与手机上的旧测试包使用同一签名，可直接覆盖安装；底部红衣快捷键已改为打开“人物”四页总面板。更新前的包会保留为 `piaomiao_local_login.before-character-panel.apk`。
+3. 安装 `build_artifacts/apk/piaomiao_local_login.apk`。它与手机上的旧测试包使用同一签名，可直接覆盖安装；底部红衣快捷键已改为打开“人物”四页总面板。更新前的包会保留为 `piaomiao_local_login.before-character-panel.apk`。
 4. 输入任意临时账号和密码，应看到“本地一区（良好）”。
 5. 选择服务器，可在三个槽位中进入角色、创建角色或删除角色。
 6. 新建角色可选择人、仙、妖三族、性别和造型；进入后应显示地图“长安”。
@@ -81,7 +87,7 @@ python -m unittest discover -s tests -v
 
 脚本会修改 `channel.o`，重新应用 NPC、战斗逃跑和战斗待机武器补丁，执行 zipalign，并生成 v1/v2/v3 签名。待机武器补丁会严格校验
 `assets/res/role/100000.dat` 的补丁前/后哈希，防止从历史 APK 重建时再次丢失武器显示。测试密钥库密码固定为
-`localtest123`，只能用于本地测试。为允许覆盖安装，后续构建必须继续使用项目内同一个 `local-test-keystore.p12`。
+`localtest123`，只能用于本地测试。为允许覆盖安装，后续构建必须继续使用 `build_artifacts/signing/local-test-keystore.p12`。
 
 ## 协议说明与安全
 

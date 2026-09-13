@@ -12,8 +12,10 @@ __pycache__/
 /implementation_staging/data/roles.json
 /implementation_staging/data/roles.*.json
 /implementation_staging/data/accounts.json
+/implementation_staging/data/gangs.json
 /implementation_staging/data/sprite_catalog.json
-/implementation_staging/server_pid.txt
+/implementation_staging/logs/
+/implementation_staging/runtime/
 
 # Dynamic map runtime binaries; source-of-truth lives in maps/<id>/*.json.
 # Existing tracked legacy .map.o files remain tracked despite these rules.
@@ -28,6 +30,11 @@ __pycache__/
 *.idsig
 
 # Generated extraction/build workspaces
+/implementation_staging/build_artifacts/*
+!/implementation_staging/build_artifacts/
+!/implementation_staging/build_artifacts/apk/
+/implementation_staging/build_artifacts/apk/*
+!/implementation_staging/build_artifacts/apk/APK_SHA256.txt
 /implementation_staging/build/
 /implementation_staging/work/
 /implementation_staging/META-INF/

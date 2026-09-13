@@ -6,14 +6,14 @@
 
 | 产物 | 生成来源或用途 |
 | --- | --- |
-| `player_overlay_variants.png` | 由仓库根目录 `render_player_overlay_variants.py` 生成，对比角色属性槽位替换后的外观。 |
+| `player_overlay_variants.png` | 由 `resource_generator/tools/characters/render_player_overlay_variants.py` 生成，对比角色属性槽位替换后的外观。 |
 | `role_50k_diagnostic.json` / `.png` | 50xxx 角色资源的历史结构清单与预览图；原始生成器不在当前仓库。 |
 | `role_models_diagnostic.json` / `.png` | 基础角色模型的历史结构清单与预览图；原始生成器不在当前仓库。 |
 | `role_overlay_diagnostic.json` / `.png` | 角色叠加资源的历史结构清单与预览图；原始生成器不在当前仓库。 |
-| `appearance-layer-audit/` | 由根目录 `audit_all_character_layers.py` 生成的逐图层审计结果。 |
-| `appearance-layer-audit/selected-equipment-mapping.png` | 由根目录 `render_selected_equipment_mapping.py` 生成的已选装备映射预览。 |
+| `appearance-layer-audit/` | 由 `resource_generator/tools/characters/audit_all_character_layers.py` 生成的逐图层审计结果。 |
+| `appearance-layer-audit/selected-equipment-mapping.png` | 由 `resource_generator/tools/characters/render_selected_equipment_mapping.py` 生成的已选装备映射预览。 |
 
-三个生成脚本仍保留在仓库根目录。它们依赖历史提取目录中的资源，可能需要调整脚本顶部的绝对路径后才能在其他机器上重新运行；输出路径已经统一指向本目录。
+三个生成脚本已迁入 `resource_generator/tools/characters/`。它们依赖历史提取目录中的资源，可能需要调整脚本顶部的绝对路径后才能在其他机器上重新运行；输出路径已经统一指向本目录。
 
 ## NPC 镜像预览
 

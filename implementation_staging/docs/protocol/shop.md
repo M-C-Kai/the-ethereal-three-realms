@@ -212,12 +212,12 @@ invoke-virtual {v0, p3}, La/c/r;->c(I)V   # SHORT quantity
 
 | 内容 | 位置 |
 |---|---|
-| 商城资料层 | `shop_registry.py` + `data/catalog/shops.json` |
-| 1067/1033 协议构造与纯函数校验 | `server.py`（`mall_*_frame` / `shop_*_frame` / `is_*_request`） |
-| 1067/1033 handler | `server.py` `LocalGameServer.handle()` 分发链 |
-| 购买原子业务 | `shop_purchase_result()`（服务端价格/库存/货币/背包全部重验） |
-| 连接级商城状态 | `current_shop_mode` / `current_shop_category`（不入角色 JSON） |
-| 日志 | `SHOP_OPEN` / `SHOP_CATEGORY` / `SHOP_LIST` / `SHOP_PURCHASE_REQUEST` / `SHOP_PURCHASE_SUCCESS` / `SHOP_PURCHASE_REJECT` |
+| 商城资料层 | `systems/shop/registry.py` + `data/catalog/shops.json` |
+| 1067/1033 协议构造与校验 | `systems/shop/protocol.py` |
+| 1067/1033 handler | `systems/shop/handler.py` |
+| 购买原子业务 | `systems/shop/service.py` |
+| 连接级商城状态 | `ShopSession`（不写入角色 JSON） |
+| 系统接入 | `server.py` 只初始化依赖并转交消息 |
 
 资料层约束：商城只能出售 `item_registry` 中真实存在的 template_id
 （加载期校验），购买创建的是最小背包实例 `{id, template_id, quantity,

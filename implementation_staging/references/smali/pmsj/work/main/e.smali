@@ -2907,7 +2907,7 @@
 .end method
 
 .method private static Q(Lpmsj/work/main/w;)V
-    .locals 9
+    .locals 13
 
     const/4 v8, 0x0
 
@@ -2998,9 +2998,147 @@
 
     goto :goto_0
 
+    :pswitch_1
+    const/4 v0, 0x1
+
+    invoke-virtual {p0, v0}, Lpmsj/work/main/w;->a(I)B
+
+    move-result v0
+
+    iget-object v1, p0, Lpmsj/work/main/w;->b:Ljava/util/Vector;
+
+    invoke-virtual {v1}, Ljava/util/Vector;->size()I
+
+    move-result v1
+
+    const/4 v2, 0x2
+
+    sub-int/2addr v1, v2
+
+    div-int/2addr v1, v0
+
+    const/4 v10, 0x0
+
+    const/4 v11, 0x3
+
+    move v2, v10
+
+    :goto_1
+    if-ge v2, v0, :cond_3
+
+    mul-int v3, v2, v1
+
+    add-int/lit8 v4, v3, 0x2
+
+    invoke-virtual {p0, v4}, Lpmsj/work/main/w;->d(I)I
+
+    move-result v4
+
+    add-int/lit8 v5, v3, 0x3
+
+    invoke-virtual {p0, v5}, Lpmsj/work/main/w;->a(I)B
+
+    move-result v5
+
+    if-lt v5, v10, :cond_2
+
+    if-gt v5, v11, :cond_2
+
+    invoke-static {}, Lpmsj/work/b/m;->d()Lpmsj/work/b/m;
+
+    move-result-object v6
+
+    iget-object v6, v6, Lpmsj/work/b/m;->u:Ljava/util/Vector;
+
+    invoke-virtual {v6}, Ljava/util/Vector;->size()I
+
+    move-result v7
+
+    move v8, v10
+
+    :goto_2
+    if-ge v8, v7, :cond_2
+
+    invoke-virtual {v6, v8}, Ljava/util/Vector;->elementAt(I)Ljava/lang/Object;
+
+    move-result-object v9
+
+    check-cast v9, Lpmsj/work/b/n;
+
+    iget v12, v9, Lpmsj/work/b/n;->j:I
+
+    if-ne v12, v4, :cond_1
+
+    invoke-virtual {v9, v5}, Lpmsj/work/b/n;->q(I)V
+
+    invoke-virtual {v9}, Lpmsj/work/b/n;->I()V
+
+    goto :goto_3
+
+    :cond_1
+    add-int/lit8 v8, v8, 0x1
+
+    goto :goto_2
+
+    :cond_2
+    :goto_3
+    add-int/lit8 v2, v2, 0x1
+
+    goto :goto_1
+
+    :cond_3
+    return-void
+
+    :pswitch_2
+    const/4 v0, 0x1
+
+    invoke-virtual {p0, v0}, Lpmsj/work/main/w;->d(I)I
+
+    move-result v0
+
+    invoke-static {}, Lpmsj/work/b/m;->d()Lpmsj/work/b/m;
+
+    move-result-object v1
+
+    iget-object v2, v1, Lpmsj/work/b/m;->u:Ljava/util/Vector;
+
+    invoke-virtual {v2}, Ljava/util/Vector;->size()I
+
+    move-result v3
+
+    const/4 v4, 0x0
+
+    :goto_4
+    if-ge v4, v3, :cond_5
+
+    invoke-virtual {v2, v4}, Ljava/util/Vector;->elementAt(I)Ljava/lang/Object;
+
+    move-result-object v5
+
+    check-cast v5, Lpmsj/work/b/n;
+
+    iget v6, v5, Lpmsj/work/b/n;->j:I
+
+    if-ne v6, v0, :cond_4
+
+    invoke-virtual {v1, v5}, Lpmsj/work/b/m;->a(Lpmsj/work/b/n;)V
+
+    goto :goto_5
+
+    :cond_4
+    add-int/lit8 v4, v4, 0x1
+
+    goto :goto_4
+
+    :cond_5
+    :goto_5
+    return-void
+
     :pswitch_data_0
     .packed-switch 0x0
         :pswitch_0
+        :pswitch_1
+        :pswitch_2
     .end packed-switch
 .end method
 
@@ -3575,9 +3713,7 @@
 
     if-eqz p0, :cond_0
 
-    invoke-virtual {p0}, Lpmsj/work/e/j;->j()V
-
-    invoke-static {}, Lpmsj/work/main/b;->c()V
+    invoke-virtual {p0}, Lpmsj/work/e/j;->escapeStart()V
 
     goto :goto_0
 
@@ -3599,8 +3735,6 @@
     invoke-virtual {v0, v1}, Lpmsj/work/a/l;->c(I)Ljava/lang/Object;
 
     goto :goto_0
-
-    nop
 
     :sswitch_data_0
     .sparse-switch
@@ -5358,6 +5492,30 @@
     invoke-static {}, Lpmsj/work/d/n;->f()Lpmsj/work/d/n;
 
     move-result-object v4
+
+    const/16 v5, 0xa
+
+    invoke-virtual {v4, v5}, Lpmsj/work/d/n;->a(I)Z
+
+    invoke-static {}, Lpmsj/work/d/n;->f()Lpmsj/work/d/n;
+
+    move-result-object v4
+
+    const/16 v5, 0x136
+
+    invoke-virtual {v4, v5}, Lpmsj/work/d/n;->f(I)Lpmsj/work/d/c;
+
+    const/16 v5, 0xa
+
+    invoke-virtual {v4, v5}, Lpmsj/work/d/n;->a(I)Z
+
+    invoke-static {}, Lpmsj/work/d/n;->f()Lpmsj/work/d/n;
+
+    move-result-object v4
+
+    const/16 v5, 0x136
+
+    invoke-virtual {v4, v5}, Lpmsj/work/d/n;->f(I)Lpmsj/work/d/c;
 
     const-string v5, "\u9519\u8bef\u7684\u8d26\u53f7\u6216\u5bc6\u7801"
 

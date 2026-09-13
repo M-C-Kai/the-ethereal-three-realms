@@ -10,7 +10,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$BuildDir = Join-Path $ProjectDir 'build'
+$ArtifactDir = Join-Path $ProjectDir 'build_artifacts'
+$BuildDir = Join-Path $ArtifactDir 'build'
+$ApkOutputDir = Join-Path $ArtifactDir 'apk'
+$SigningDir = Join-Path $ArtifactDir 'signing'
 $BuildTag = "$PID"
 $ApkToolWorkDir = Join-Path ([System.IO.Path]::GetTempPath()) 'piaomiao-local-apk-build'
 $FrameworkDir = Join-Path $ApkToolWorkDir 'framework'
@@ -18,8 +21,8 @@ $SmaliDir = Join-Path $ApkToolWorkDir 'decoded'
 $RebuiltApk = Join-Path $ApkToolWorkDir "piaomiao_decoded_rebuilt_$BuildTag.apk"
 $UnsignedApk = Join-Path $BuildDir "piaomiao_local_unsigned_$BuildTag.apk"
 $AlignedApk = Join-Path $BuildDir "piaomiao_local_aligned_$BuildTag.apk"
-$FinalApk = Join-Path $ProjectDir 'piaomiao_local_login.apk'
-$KeyStorePath = Join-Path $ProjectDir 'local-test-keystore.p12'
+$FinalApk = Join-Path $ApkOutputDir 'piaomiao_local_login.apk'
+$KeyStorePath = Join-Path $SigningDir 'local-test-keystore.p12'
 $PythonExe = 'python'
 $AndroidBuildTools = Join-Path $env:LOCALAPPDATA 'Android\Sdk\build-tools\35.0.0'
 $ZipAlignExe = Join-Path $AndroidBuildTools 'zipalign.exe'
@@ -39,7 +42,7 @@ if (-not $UseApkToolJar -and -not (Get-Command $ApkTool -ErrorAction SilentlyCon
     throw "apktool not found on PATH ('$ApkTool'). Install apktool so the local NPC and battle smali patches can be applied."
 }
 
-New-Item -ItemType Directory -Force -Path $BuildDir, $ApkToolWorkDir, $FrameworkDir | Out-Null
+New-Item -ItemType Directory -Force -Path $BuildDir, $ApkOutputDir, $SigningDir, $ApkToolWorkDir, $FrameworkDir | Out-Null
 
 # Decode the source APK, apply the local smali patches, then reassemble. This is
 # required because the NPC handlers and native battle-escape transition live in
@@ -61,6 +64,8 @@ Assert-NativeSuccess 'battle idle weapon asset patch'
 Assert-NativeSuccess 'login failure return-to-input smali patch'
 & $PythonExe (Join-Path $ProjectDir 'tools\patch_role_delete_confirmation.py') $SmaliDir
 Assert-NativeSuccess 'role delete confirmation input patch'
+& $PythonExe (Join-Path $ProjectDir 'tools\patch_team_roster_ui.py') $SmaliDir
+Assert-NativeSuccess 'team roster map UI patch'
 
 # The client only renders a distinct map id after loading both of its local
 # map resources.  Kunlun reuses the proven map 58 composite-tile reference

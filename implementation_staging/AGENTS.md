@@ -1,6 +1,12 @@
 # OpenCode working rules
 
-Read `OPENCODE_HANDOFF.md`, `README.md`, `EQUIPMENT_RESOURCE_CATALOG.md`, and the relevant tests before making changes.
+Read `OPENCODE_HANDOFF.md`, `README.md`, `systems/README.md`, `EQUIPMENT_RESOURCE_CATALOG.md`, and the relevant tests before making changes.
+
+## Architecture
+
+- All gameplay protocol entries live in `systems/<name>/` (handler/service/protocol/registry/events). `server.py` keeps only dependency assembly, `app.router.SystemRouter` dispatch, and network I/O.
+- Cross-system dependencies are injected in `server.py` at assembly time; never import another system's handler directly.
+- Do not add monkey patches; the former pet/dynamic-map compatibility layers are gone.
 
 ## Scope
 
@@ -34,5 +40,5 @@ D:\python\python.exe -m unittest discover -s tests -v
 D:\python\python.exe test_client.py --host 127.0.0.1 --port 6805 --exercise-role-crud
 ```
 
-Current baseline: 14 unit tests pass and the complete login/role/item/map integration test prints `OK`.
+Current baseline: the unified suite in `tests/` passes (`python -m unittest discover -s tests`); the login/role/item/map integration flow is validated with `test_client.py`.
 

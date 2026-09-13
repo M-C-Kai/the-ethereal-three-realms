@@ -120,7 +120,9 @@ def assert_full_refresh(
     action, actual_id, properties = parse_appearance(frame)
     assert action == 0, frame
     assert actual_id == role_id, frame
-    assert set(properties) == set(LOCKED_APPEARANCE_PROPERTIES), frame
+    # 装备路径的全量刷新帧在锁定外观层之外还会附带 hp/mp（40-43）与
+    # 面板属性（44-48），这里只要求锁定层逐一匹配、额外属性不冲突。
+    assert set(LOCKED_APPEARANCE_PROPERTIES) <= set(properties), frame
     for locked in LOCKED_APPEARANCE_PROPERTIES:
         assert properties[locked] == authoritative[locked], (frame, locked, authoritative[locked])
     return properties
@@ -216,6 +218,12 @@ def main() -> None:
         '--exercise-shop-only',
         action='store_true',
         help='Exercise the APK-confirmed 1067/1033 mall browse-and-purchase flow and exit',
+    )
+    parser.add_argument(
+        '--exercise-consignment-only',
+        action='store_true',
+        help='Exercise the Zhao Gongming consignment dialogue, native screen 70 '
+             'list/unlist path and the 1083 crystal-exchange order flow',
     )
     parser.add_argument(
         '--exercise-logout-only',
@@ -348,6 +356,9 @@ def main() -> None:
                     gather_catalog = values
                 elif message_id == 2027:
                     gather_spawns.append(values)
+                elif message_id == 1127:
+                    # 宠物容器帧随入场序列下发（宠物系统迁移后行为不变）。
+                    pass
                 else:
                     assert False, (message_id, values)
         except socket.timeout:
@@ -461,6 +472,167 @@ def main() -> None:
             assert int(stone_stack[2]) == int(items['初级强化石'][2]) + 1, stone_stack
             assert expect(game_sock, 1033, cipher) == [1], 'stone purchase ack'
             print('OK: 仙晶商城分类/列表/购买 -> 仙石商城列表/购买 -> 货币与背包同步')
+            return
+
+        if args.exercise_consignment_only:
+            # ---- 寄售商人 赵公明 (1900004, 长安 11,21) ----
+            # 对话含三个功能选项：寄售商场 / 我的寄售 / 仙晶交易所。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2031, [
+                integer(1900004), integer(0), short(11), short(21), short(0), short(0)
+            ])))
+            merchant_dialogue = expect(game_sock, 2032, cipher)
+            assert merchant_dialogue[:2] == [1900004, 8], merchant_dialogue
+            assert merchant_dialogue[14:17] == [1, 2, '寄售商场'], merchant_dialogue
+            assert merchant_dialogue[22:25] == [2, 2, '我的寄售'], merchant_dialogue
+            assert merchant_dialogue[30:33] == [3, 2, '仙晶交易所'], merchant_dialogue
+            assert merchant_dialogue[38:41] == [4, 2, '寄售仙晶'], merchant_dialogue
+            assert merchant_dialogue[46:49] == [5, 2, '求购仙晶'], merchant_dialogue
+
+            # ---- 我的寄售（寄售途径）：dialog option 2 -> screen 70 ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2032, [byte(2), byte(101), string('')])))
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 0, 7], 'consign ack'
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 70, 69], 'screen 70'
+            # 原生 screen 70 初始化会请求自己的寄售记录（1138/action 7）。
+            # 客户端 b/m.h() 在本构建中恒为 0，服务端按会话角色绑定（角色 id
+            # 只作提示性校验：>0 且不匹配才拒绝）。
+            client_role_id = 0
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1138, [byte(7), integer(client_role_id)])))
+            own_empty = expect(game_sock, 1138, cipher)
+            assert own_empty[:2] == [7, 0], own_empty
+
+            # 上架 2 个小还丹（单价 100 银两）：原生背包菜单 寄售 -> 1138/action 9。
+            potion = items['小还丹']
+            potion_instance = int(potion[1])
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1138, [
+                byte(9), integer(potion_instance), byte(1), integer(client_role_id), byte(2), integer(100)
+            ])))
+            partial_update = expect(game_sock, 1008, cipher)
+            assert partial_update[0] == 3 and int(partial_update[1]) == potion_instance, partial_update
+            assert int(partial_update[2]) == int(potion[2]) - 2, partial_update  # 堆叠扣减
+            listed = expect(game_sock, 1138, cipher)
+            assert listed[0] == 9 and listed[1] == 1, listed
+            listed_row = listed[2:]
+            # 部分堆叠上架会生成新的托管实例 id，不与原堆叠冲突。
+            escrow_instance = int(listed_row[1])
+            assert listed_row[0] == 1 and escrow_instance != potion_instance, listed_row
+            assert listed_row[2] == 260000001, listed_row
+            assert listed_row[3] == 2 and listed_row[4] == 200, listed_row  # 数量 x 总价
+
+            # 我的寄售应能看到这一行，然后原生下架（1138/action 2）。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1138, [byte(7), integer(client_role_id)])))
+            own_one = expect(game_sock, 1138, cipher)
+            assert own_one[:2] == [7, 1] and own_one[3] == escrow_instance, own_one
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1138, [
+                byte(2), integer(escrow_instance), byte(1), integer(client_role_id)
+            ])))
+            removed_own = expect(game_sock, 1138, cipher)
+            assert removed_own == [15, escrow_instance], removed_own
+            restored = expect(game_sock, 1008, cipher)
+            assert int(restored[1]) == escrow_instance and int(restored[2]) == 2, restored
+
+            # ---- 仙晶交易所：dialog option 3 -> screen 350 (1083) ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2031, [
+                integer(1900004), integer(0), short(11), short(21), short(0), short(0)
+            ])))
+            assert expect(game_sock, 2032, cipher)[:2] == [1900004, 8], 'dialogue reopen'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2032, [byte(3), byte(101), string('')])))
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 0, 7], 'exchange ack'
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 350, 69], 'screen 350'
+            # 原生 screen 350 初始化：[4,tab] 页签、[5,tab] 自己的订单、[0] 行情。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(4), byte(0)])))
+            tabs = expect(game_sock, 1083, cipher)
+            assert tabs[:3] == [4, 2, '玩家求购单'] and tabs[3] == '玩家出售单', tabs
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(5), byte(0)])))
+            assert expect(game_sock, 1083, cipher) == [5, 0], 'own buy ids'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(0), byte(0), byte(20), byte(0)])))
+            assert expect(game_sock, 1083, cipher) == [0, 0, 0, 0], 'empty market rows'
+
+            crystals_before = int(player_properties[52])
+            silver_before = int(player_properties[50])
+            # 出售单：挂 100 仙晶 @500 银两（托管 100 仙晶 + 2% 委托费 1000 银两）。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(16), integer(100), integer(500)])))
+            posted = expect(game_sock, 1083, cipher)
+            assert posted == [16], posted
+            sell_sync = expect(game_sock, 1017, cipher)
+            sell_props = dict(zip(sell_sync[3::2], sell_sync[4::2]))
+            assert sell_props[52] == crystals_before - 100, sell_sync
+            assert sell_props[50] == silver_before - 1000, sell_sync
+            # 我的出售单（screen 351 分页）与行情页各见一行。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(11), byte(0), byte(20), byte(1)])))
+            my_sell = expect(game_sock, 1083, cipher)
+            assert my_sell[:3] == [11, 1, 1], my_sell
+            assert my_sell[3:7] == [1, '100', '出售单', '500'], my_sell
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(0), byte(0), byte(20), byte(1)])))
+            sell_rows = expect(game_sock, 1083, cipher)
+            assert sell_rows[:4] == [0, 1, 1, 1], sell_rows
+            sell_order_id = int(sell_rows[4])
+            # 委托费用查询（screen 351 的费用按钮）。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(12), byte(1), integer(100), integer(500)])))
+            fee = expect(game_sock, 1083, cipher)
+            assert fee[0] == 12 and '1000' in fee[1], fee
+            # 撤单退还托管。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(13), integer(sell_order_id)])))
+            cancelled = expect(game_sock, 1083, cipher)
+            assert cancelled[:2] == [13, 50000] and cancelled[2] == sell_order_id, cancelled
+            cancel_sync = expect(game_sock, 1017, cipher)
+            cancel_props = dict(zip(cancel_sync[3::2], cancel_sync[4::2]))
+            assert cancel_props[52] == crystals_before, cancel_sync
+            # 求购单：挂 10 仙晶 @100 银两（托管 1000 银两 + 委托费 20 银两）。
+            silver_after_sell_cycle = silver_before - 1000
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(15), integer(10), integer(100)])))
+            assert expect(game_sock, 1083, cipher) == [15], 'buy posted'
+            buy_sync = expect(game_sock, 1017, cipher)
+            buy_props = dict(zip(buy_sync[3::2], buy_sync[4::2]))
+            assert buy_props[50] == silver_after_sell_cycle - 1020, buy_sync
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(0), byte(0), byte(20), byte(0)])))
+            buy_rows = expect(game_sock, 1083, cipher)
+            assert buy_rows[:4] == [0, 1, 0, 1], buy_rows
+            buy_order_id = int(buy_rows[4])
+            # 撤单求购单，恢复银两。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(13), integer(buy_order_id)])))
+            buy_cancelled = expect(game_sock, 1083, cipher)
+            assert buy_cancelled[:2] == [13, 1000] and buy_cancelled[2] == buy_order_id, buy_cancelled
+            expect(game_sock, 1017, cipher)
+
+            # ---- 寄售仙晶/求购仙晶：dialog option 4/5 -> screen 351 下单页 ----
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2031, [
+                integer(1900004), integer(0), short(11), short(21), short(0), short(0)
+            ])))
+            assert expect(game_sock, 2032, cipher)[:2] == [1900004, 8], 'dialogue reopen 2'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2032, [byte(4), byte(101), string('')])))
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 0, 7], 'entry ack'
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 1, 351, 69], 'screen 351 sell'
+            # 原生 screen 351 初始化发送 [10, mode]，服务端返回摘要行 + 帮助文本。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(10), byte(1)])))
+            entry_rows = expect(game_sock, 1083, cipher)
+            assert entry_rows[0] == 10 and entry_rows[1] == 0, entry_rows  # 无挂单
+            assert len(entry_rows) == 3 and '玩家求购单' in entry_rows[2], entry_rows
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(11), byte(0), byte(20), byte(1)])))
+            assert expect(game_sock, 1083, cipher)[:3] == [11, 0, 0], 'empty my sell orders'
+
+            # 寄售仙晶页提交出售单（等同 [16]）并撤单。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(16), integer(50), integer(200)])))
+            assert expect(game_sock, 1083, cipher) == [16], 'sell posted from 351'
+            expect(game_sock, 1017, cipher)
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(11), byte(0), byte(20), byte(1)])))
+            my_sell_rows = expect(game_sock, 1083, cipher)
+            assert my_sell_rows[:3] == [11, 1, 1], my_sell_rows
+            new_sell_id = int(my_sell_rows[3])
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(13), integer(new_sell_id)])))
+            assert expect(game_sock, 1083, cipher)[0] == 13, 'cancel from 351'
+            expect(game_sock, 1017, cipher)
+
+            # 求购仙晶页（mode 0）。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2031, [
+                integer(1900004), integer(0), short(11), short(21), short(0), short(0)
+            ])))
+            assert expect(game_sock, 2032, cipher)[:2] == [1900004, 8], 'dialogue reopen 3'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(2032, [byte(5), byte(101), string('')])))
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 0, 7], 'entry ack 2'
+            assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 351, 69], 'screen 351 buy'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(10), byte(0)])))
+            assert expect(game_sock, 1083, cipher)[0] == 10, 'entry rows buy'
+            print('OK: 寄售商人对话 -> 我的寄售上架/下架 -> 仙晶交易所挂单/费用/撤单 -> 仙晶下单页')
             return
 
         if args.exercise_life_skills_only:
@@ -683,29 +855,25 @@ def main() -> None:
             equipped = expect(game_sock, 1008, cipher)
             equip_ack = expect(game_sock, 1009, cipher)
             equipped_appearance = expect(game_sock, 1017, cipher)
+            # 全量刷新包含 1017 外观帧 + 1039 面板帧两帧。
+            expect(game_sock, 1039, cipher)
             assert equipped[0:5] == [3, item_id, 1, 1, slot], equipped
             assert equip_ack == [5], equip_ack
-            # The server sends a minimal single-property change frame only when
-            # the appearance actually differs; otherwise it falls back to the
-            # full locked-appearance refresh. Mirror that decision from the
-            # authoritative appearance so either legal response is validated.
-            if appearance[property_index] != value:
-                assert_minimal_change(equipped_appearance, role_id, property_index, value)
-            else:
-                assert_full_refresh(equipped_appearance, role_id, appearance)
+            # 服务器对装备路径统一回全量锁定外观刷新帧（1017 全量）；
+            # 先更新权威快照再比较。
             appearance[property_index] = value
+            assert_full_refresh(equipped_appearance, role_id, appearance)
 
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1009, [short(6), integer(item_id)])))
             unequipped = expect(game_sock, 1008, cipher)
             unequip_ack = expect(game_sock, 1009, cipher)
             restored_appearance = expect(game_sock, 1017, cipher)
+            expect(game_sock, 1039, cipher)
             assert unequipped[0:5] == [3, item_id, 1, 1, 50], unequipped
             assert unequip_ack == [6], unequip_ack
-            if appearance[property_index] != 0:
-                assert_minimal_change(restored_appearance, role_id, property_index, 0)
-            else:
-                assert_full_refresh(restored_appearance, role_id, appearance)
+            # 卸下路径同样统一回全量锁定外观刷新帧；先复位权威快照再比较。
             appearance[property_index] = 0
+            assert_full_refresh(restored_appearance, role_id, appearance)
 
         # The six APK-defined accessory slots have no independent character
         # sprite property, so their equipment-vector move must still update
@@ -718,6 +886,7 @@ def main() -> None:
             equipped = expect(game_sock, 1008, cipher)
             equip_ack = expect(game_sock, 1009, cipher)
             panel_refresh = expect(game_sock, 1017, cipher)
+            expect(game_sock, 1039, cipher)
             assert equipped[0:5] == [3, item_id, 1, 1, slot], equipped
             assert equip_ack == [5], equip_ack
             assert_full_refresh(panel_refresh, role_id, appearance)
@@ -726,6 +895,7 @@ def main() -> None:
             unequipped = expect(game_sock, 1008, cipher)
             unequip_ack = expect(game_sock, 1009, cipher)
             panel_refresh = expect(game_sock, 1017, cipher)
+            expect(game_sock, 1039, cipher)
             assert unequipped[0:5] == [3, item_id, 1, 1, 50], unequipped
             assert unequip_ack == [6], unequip_ack
             assert_full_refresh(panel_refresh, role_id, appearance)

@@ -1,6 +1,6 @@
 # APK 内协议补充审计
 
-> 审计对象：`implementation_staging/piaomiao_local_login.apk` 对应的完整反编译目录 `implementation_staging/build/dex-smali/`。本文件补充 Python 本地服协议文档，重点回答 APK 内还保留了哪些协议以及调用位置。没有访问任何外部服务器。
+> 审计对象：`implementation_staging/build_artifacts/apk/piaomiao_local_login.apk` 对应的完整反编译目录 `implementation_staging/build_artifacts/build/dex-smali/`。本文件补充 Python 本地服协议文档，重点回答 APK 内还保留了哪些协议以及调用位置。没有访问任何外部服务器。
 
 ## 结论
 
@@ -31,7 +31,7 @@
 | 1072 | 封魔榜/BOSS 目标；`pmsj/work/e/v.smali:117-511` | BOSS 榜单或挑战；已确认模块 |
 | 1075、1153 | 关卡/副本界面；`pmsj/work/e/bg.smali:945-1458`、`pmsj/work/e/ek.smali:393-1251` | 副本、进度与挑战；已确认模块 |
 | 1082 | 好友在线/离线列表；`pmsj/work/e/bo.smali:764-1632` | 好友/联系人；已确认模块 |
-| 1083 | 仙晶、银两显示；`pmsj/work/e/ac.smali:598-1490` | 货币/兑换相关；具体 action 待确认 |
+| 1083 | 仙晶交易所（求购单/出售单）；`pmsj/work/e/ac.smali:598-1490`、`e/ad.smali` | 已确认并接入：见 `docs/protocol/1083-crystal-exchange.md` |
 | 1084 | 背包、银两和物品详情界面；`pmsj/work/e/al.smali:741-2255`、`pmsj/work/e/am.smali:334` | 背包/交易相关；具体 action 待确认 |
 | 1092 | 累计金额与领取界面；`pmsj/work/e/ab.smali:215-948` | 累计充值/奖励类；待确认 |
 | 1094 | 斗胜值、排名、挑战次数；`pmsj/work/e/be.smali:654-1081` | 竞技/挑战；已确认模块线索 |
@@ -53,12 +53,12 @@
 | ID | APK 方向 | 静态调用/处理位置 | 当前状态 |
 |---:|---|---|---|
 | 1003 | S→C | 接收 main/e.f，分发:8731 | 未使用/无发送调用证据 |
-| 1004 | 双向 | 接收内联 main/e:5786<br>发送 pmsj/work/main/e.smali:9401 | APK静态使用；本地服未接入 |
+| 1004 | 双向 | 接收内联 main/e:5786<br>发送 pmsj/work/main/e.smali:9401 | 本地服已接入（social 聊天中继：私聊定向/同图广播） |
 | 1005 | 双向 | 接收内联 main/e:6685<br>发送 pmsj/work/b/ab.smali:699 | APK静态使用；本地服未接入 |
 | 1014 | S→C | 接收 main/e.T，分发:6680 | 未使用/无发送调用证据 |
 | 1015 | S→C | 接收 main/e.am，分发:8436 | 未使用/无发送调用证据 |
-| 1019 | 双向 | 接收 main/e.ah，分发:7444<br>发送 pmsj/work/e/ae.smali:253（7处） | APK静态使用；本地服未接入 |
-| 1023 | 双向 | 接收 main/e.ag，分发:8421<br>发送 pmsj/work/b/aa.smali:429（42处） | 本地服已接入创建与解散最小闭环 |
+| 1019 | 双向 | 接收 main/e.ah，分发:7444<br>发送 pmsj/work/e/ae.smali:253（7处） | 本地服已接入（social 加友请求/接受/拒绝/删除/列表） |
+| 1023 | 双向 | 接收 main/e.ag，分发:8421<br>发送 pmsj/work/b/aa.smali:429（42处） | 本地服已接入创建/解散闭环 + social 组队邀请（2/3/4/6） |
 | 1024 | 双向 | 接收 main/e.t，分发:8776<br>发送 pmsj/work/e/bt.smali:869（16处） | APK静态使用；本地服未接入 |
 | 1025 | 双向 | 接收 main/e.A，分发:8736<br>发送 pmsj/work/e/dv.smali:570（2处） | APK静态使用；本地服未接入 |
 | 1026 | S→C | 接收 main/e.aj，分发:8426 | 本地服已用于创建队伍后的队长成员记录推送 |
@@ -68,7 +68,7 @@
 | 1038 | S→C | 接收 main/e.ai，分发:6925 | 未使用/无发送调用证据 |
 | 1050 | 双向 | 接收 main/e.n，分发:8791<br>发送 pmsj/work/e/aw.smali:1100（5处） | APK静态使用；本地服未接入 |
 | 1054 | 双向 | 接收 main/e.v，分发:8766<br>发送 pmsj/work/e/ak.smali:265（8处） | APK静态使用；本地服未接入 |
-| 1056 | 双向 | 接收内联 main/e:7449<br>发送 pmsj/work/e/er.smali:1441（7处） | APK静态使用；本地服未接入 |
+| 1056 | 双向 | 接收内联 main/e:7449<br>发送 pmsj/work/e/er.smali:1441（7处） | 本地服已接入（social 玩家交易握手+锁定结算） |
 | 1059 | 双向 | 接收 main/e.m，分发:8796<br>发送 pmsj/work/e/by.smali:304（6处） | APK静态使用；本地服未接入 |
 | 1065 | 双向 | 接收 main/e.I，分发:8691<br>发送 pmsj/work/e/dk.smali:392 | APK静态使用；本地服未接入 |
 | 1066 | S→C | 接收 main/e.J，分发:8671 | 未使用/无发送调用证据 |
@@ -84,7 +84,7 @@
 | 1079 | 双向 | 接收 main/e.j，分发:8811<br>发送 pmsj/work/e/ex.smali:126（3处） | APK静态使用；本地服未接入 |
 | 1081 | 双向 | 接收 main/e.F，分发:8711<br>发送 pmsj/work/e/av.smali:893（3处） | APK静态使用；本地服未接入 |
 | 1082 | 双向 | 接收 main/e.w，分发:8761<br>发送 pmsj/work/e/bo.smali:764（11处） | APK静态使用；本地服未接入 |
-| 1083 | 双向 | 接收 main/e.p，分发:8781<br>发送 pmsj/work/e/ac.smali:598（10处） | APK静态使用；本地服未接入 |
+| 1083 | 双向 | 接收 main/e.p，分发:8781<br>发送 pmsj/work/e/ac.smali:598（10处） | 已接入 `systems/exchange/`（screen 350/351） |
 | 1084 | 双向 | 接收 main/e.o，分发:8632<br>发送 pmsj/work/e/al.smali:741（7处） | APK静态使用；本地服未接入 |
 | 1085 | C→S | 发送 pmsj/work/e/eg.smali:348（3处） | APK静态使用；本地服未接入 |
 | 1087 | 双向 | 接收 main/e.i，分发:8816<br>发送 pmsj/work/e/ey.smali:1985 | APK静态使用；本地服未接入 |
@@ -110,12 +110,12 @@
 | 1143 | 双向 | 接收 main/e.D，分发:8721<br>发送 pmsj/work/e/db.smali:697（7处） | APK静态使用；本地服未接入 |
 | 1144 | S→C | 接收 main/e.at，分发:8647 | 未使用/无发送调用证据 |
 | 1145 | 双向 | 接收 main/e.av，分发:8666<br>发送 pmsj/work/e/ca.smali:1856（6处） | APK静态使用；本地服未接入 |
-| 1157 | 双向 | 接收内联 main/e:5478<br>发送 pmsj/work/e/cu.smali:93（5处） | APK静态使用；本地服未接入 |
-| 1158 | 双向 | 接收内联 main/e:8385<br>发送 pmsj/work/e/cy.smali:921（3处） | APK静态使用；本地服未接入 |
+| 1157 | 双向 | 接收内联 main/e:5478<br>发送 pmsj/work/e/cu.smali:93（5处） | 本地服已接入（social 切磋请求/自动应答，即时裁决） |
+| 1158 | 双向 | 接收内联 main/e:8385<br>发送 pmsj/work/e/cy.smali:921（3处） | 本地服已接入（social PK 请求/确认，即时裁决） |
 | 1159 | C→S | 发送 pmsj/work/e/dw.smali:603（2处） | APK静态使用；本地服未接入 |
 | 1167 | 双向 | 接收内联 main/e:4973<br>发送 pmsj/work/e/aq.smali:83（3处） | APK静态使用；本地服未接入 |
 | 1170 | S→C | 接收 main/e.G，分发:8706 | 未使用/无发送调用证据 |
-| 1303 | 双向 | 接收内联 main/e:8481<br>发送 pmsj/work/e/be.smali:813（8处） | APK静态使用；本地服未接入 |
+| 1303 | 双向 | 接收内联 main/e:8481<br>发送 pmsj/work/e/be.smali:813（8处） | 本地服已接入（social 查看玩家资料快照） |
 | 1500 | 双向 | 接收 main/e.au，分发:8652<br>发送 pmsj/work/e/bh.smali:761（8处） | APK静态使用；本地服未接入 |
 | 1504 | 双向 | 接收 main/e.aq，分发:8554<br>发送 pmsj/work/e/bd.smali:787 | APK静态使用；本地服未接入 |
 | 1505 | S→C | 接收 main/e.Y，分发:8559 | 未使用/无发送调用证据 |
@@ -184,7 +184,7 @@
 
 优先级建议只基于 APK 已有 UI 与发送链，不代表要求立即实现：
 
-1. 社交与组队：1019、1056、1082、1137、1138、1158、1731。
+1. 社交与组队：1019、1056、1082、1137、1138、1158、1731。（1019、1056、1158 已由 social 系统接入，见 15 号文档。）
 2. 活动/副本/挑战：1050、1061、1075、1094、1153、1403。
 3. 宠物、技能、修真、帮派：1071、1103、1107、1128、1132、1135。
 4. 经济和背包扩展：1033、1083、1084、1092、1127。

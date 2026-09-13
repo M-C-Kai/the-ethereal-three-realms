@@ -33,7 +33,7 @@ APK 中可作为通用余额消费和交易的货币共三种。`1006` 人物属
 |---|---:|---|
 | 仙石 | 49 | `pmsj/work/e/dh.smali` 人物状态页；`pmsj/work/e/dp.smali` 仙石商店 |
 | 银两 | 50 | `pmsj/work/b/ab.j()`；背包、交易和仓库界面 |
-| 仙晶 | 52 | `pmsj/work/b/ab.i()`；兑换、商城和人物状态页 |
+| 仙晶 | 52 | `pmsj/work/b/ab.i()`；兑换、商城和人物状态页；仙晶交易所 1083（`systems/exchange/`，见 `docs/protocol/1083-crystal-exchange.md`） |
 
 体力值、活力值、神炼值和斗胜值是人物状态资源，曜灵石是物品，均不并入通用货币。
 角色存档使用独立的 `currencies` 字典持久化三种余额；新角色每种初始化为

@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from map_o import MapO, MapOError, load_spec
+from systems.map.protocol import MapO, MapOError, load_spec
 
 
 PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'

@@ -34,7 +34,8 @@
       "npcs": [
         {"id": 1900002, "name": "孙思邈", "label": "药王", "appearance_key": "npc_95750", "x": 50, "y": 64},
         {"id": 1900003, "name": "接引真人", "label": "接引", "appearance_key": "npc_96010", "x": 34, "y": 50},
-        {"id": 1900004, "name": "赵公明", "label": "寄售商人", "introduction": "财货流通，自有章法。可在此寄售、购买或取回已寄售物品。", "appearance_key": "npc_95520", "x": 11, "y": 21, "service": "consignment_merchant"}
+        {"id": 1900004, "name": "赵公明", "label": "寄售商人", "introduction": "财货流通，自有章法。可在此寄售、购买或取回已寄售物品。", "appearance_key": "npc_95520", "x": 11, "y": 21, "service": "consignment_merchant"},
+        {"id": 1900005, "name": "帮派管理员", "label": "帮派", "introduction": "江湖浩大，何不创立自己的帮派？缴纳一万两白银，即可开宗立派。帮主亦可在此解散帮派。", "appearance_key": "npc_96020", "x": 12, "y": 68, "service": "gang_admin"}
       ],
       "npc_appearance_gallery": true,
       "portals": [
@@ -139,5 +140,7 @@
   },
   "heartbeat_interval_seconds": 25,
   "role_data_file": "data/roles.json",
-  "consignment_data_file": "data/consignment_listings.json"
+  "consignment_data_file": "data/consignment_listings.json",
+  "exchange_data_file": "data/exchange_orders.json",
+  "exchange_fee_rate": 0.02
 }

@@ -33,12 +33,13 @@ C:\Users\Kail\Documents\Codex\2026-08-24\new-chat\outputs\piaomiao_local_login
 
 | 文件 | 作用 |
 |---|---|
-| `server.py` | asyncio TCP 登录服和游戏服，协议路由、角色、物品、心跳、地图流程 |
+| `server.py` | asyncio TCP 登录服和游戏服：依赖装配、`app.router.SystemRouter` 总线路由、网络收发与心跳 |
+| `systems/` | 按玩法域拆分的系统层（商店/技能/地图/角色/背包/战斗/任务/帮派/宠物/寄售/福缘），每个系统含 handler/service/protocol/registry/events 五层，见 `systems/README.md` |
 | `protocol.py` | 字段编码/解码、帧格式、客户端游戏阶段加密 |
-| `map_o.py` | `.map.o` 解析、序列化和 RLE |
+| `protocol.py` 之下不再保留玩法模块 | 原 `map_o.py`、`item_registry.py`、`task_*.py`、`pet_*.py`、`consignment_*.py`、`fuyuan.py`、`sect_registry.py`、`strengthening.py`、`mount_*.py`、`battle_escape_guard.py`、`character_update_bus.py` 已分别并入对应系统的五层文件 |
 | `config.json` | 监听地址、手机跳转地址、地图和角色数据路径 |
 | `test_client.py` | 两次真实 TCP 连接的端到端客户端 |
-| `tests/` | 无网络单元测试，当前应为 16 项 |
+| `tests/` | 统一测试套件：架构边界、系统协议帧与业务流（无网络）；网络链路用 `test_client.py` 验证 |
 | `tools/` | APK 端点补丁、人物快捷键补丁、地图生成与渲染工具 |
 | `maps/` | 当前可运行的 58 号地图及实验地图 |
 | `EQUIPMENT_RESOURCE_CATALOG.md` | 装备槽位、图标与角色外观资源结论 |
@@ -118,13 +119,13 @@ listening on ('0.0.0.0', 6805); advertising 192.168.0.104:6805
 
 - `data/roles.json` 是手机测试存档；改数据结构时必须向后迁移，不能直接覆盖或删除。
 - 手机测试只使用临时账号密码，协议会明文传输凭据。
-- 当前手机使用的 APK 是 `piaomiao_local_login.apk`。普通服务端改动不需要重新安装 APK。
+- 当前手机使用的 APK 是 `build_artifacts/apk/piaomiao_local_login.apk`。普通服务端改动不需要重新安装 APK。
 - 只有修改客户端 smali 或电脑 IP 时才重建 APK。
-- 覆盖安装必须继续使用原目录的 `local-test-keystore.p12`，否则 Android 会拒绝覆盖。
+- 覆盖安装必须继续使用 `build_artifacts/signing/local-test-keystore.p12`，否则 Android 会拒绝覆盖。
 - 不要把 6805 暴露到公网。
 
 ## 9. 交给 OpenCode 的建议首条指令
 
 ```text
-请先完整阅读 AGENTS.md、OPENCODE_HANDOFF.md、README.md、EQUIPMENT_RESOURCE_CATALOG.md，运行 14 项单元测试和 test_client.py，确认现状后再修改。一次只实现一个手机可验证的协议闭环。所有字段必须从 references/smali、完整反编译目录或 JAR 中取得证据，不要猜协议；保留 data/roles.json，完成后重启最新服务并告诉我手机端怎么测试。
+请先完整阅读 AGENTS.md、OPENCODE_HANDOFF.md、README.md、EQUIPMENT_RESOURCE_CATALOG.md，运行统一测试套件（unittest discover）和 test_client.py，确认现状后再修改。一次只实现一个手机可验证的协议闭环。所有字段必须从 references/smali、完整反编译目录或 JAR 中取得证据，不要猜协议；保留 data/roles.json，完成后重启最新服务并告诉我手机端怎么测试。
 ```

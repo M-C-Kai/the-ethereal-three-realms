@@ -5,7 +5,7 @@
 
 来源：
 
-- `implementation_staging/build/weapon-apk-extracted/assets/res/images/images.o`
+- `implementation_staging/build_artifacts/build/weapon-apk-extracted/assets/res/images/images.o`
 - 同目录 `png*.p`
 
 使用项目已有脚本：
