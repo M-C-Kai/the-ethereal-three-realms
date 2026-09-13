@@ -2,6 +2,8 @@
 
 目录核查日期：2026-09-12。本项目是《飘渺三界2》Android 客户端的本地 TCP 登录／游戏兼容服务，主体使用 Python；APK 补丁、地图资源和离线诊断工具与服务端共同维护。
 
+> **开发前必读：**任何人工开发者或智能体在修改项目之前，必须先阅读根 `AGENTS.md` 和 `docs/development/APK_PROTOCOL_FIRST.md`，再读取目标目录的 `AGENTS.md`、相关协议证据与测试。所有修改都必须执行 APK Verification Gate；涉及客户端可观察行为的实现至少需要 B 级 APK 证据。
+
 ## 当前目录
 
 ```text
@@ -34,6 +36,7 @@
 │  ├─ tools/maps/               后续地图可视化与编辑工具入口
 │  └─ outputs/                  生成器默认输出目录
 ├─ docs/
+│  ├─ development/             项目级开发规范与 APK-first 门禁
 │  ├─ protocol/                协议结构、消息号、调用链与审计
 │  ├─ diagnostics/             人物外观诊断图与结果
 │  └─ superpowers/             功能设计 specs 与实施计划 plans
@@ -61,13 +64,15 @@
 
 ## 阅读顺序
 
-1. `implementation_staging/AGENTS.md`：开发约束与验证要求。
-2. `implementation_staging/README.md`：功能说明、配置与手机测试。
-3. `implementation_staging/PROTOCOL_LOCK.md` 和 `EQUIPMENT_RESOURCE_CATALOG.md`：协议与资源约束。
-4. `docs/protocol/README.md`：协议文档索引。
-5. 对应模块源码和 `implementation_staging/tests/` 中的测试。
+1. `AGENTS.md`：全仓最高级智能体开发规则，任何修改前必读。
+2. `docs/development/APK_PROTOCOL_FIRST.md`：APK 协议优先规范、A/B/C/D 证据等级和 Protocol Review 门禁。
+3. `implementation_staging/AGENTS.md`：实现目录的开发约束与验证要求。
+4. `implementation_staging/README.md`：功能说明、配置与手机测试。
+5. `implementation_staging/PROTOCOL_LOCK.md` 和 `EQUIPMENT_RESOURCE_CATALOG.md`：协议与资源约束。
+6. `docs/protocol/README.md`：协议文档索引。
+7. 对应模块源码和 `implementation_staging/tests/` 中的测试。
 
-`implementation_staging/OPENCODE_HANDOFF.md` 是历史交接资料，其中主目录路径和测试数量已过时；当前工作区及实际代码应作为目录与入口的依据。旧 README 中直接启动 `server.py` 的命令也不等同于当前集成启动流程。
+`implementation_staging/OPENCODE_HANDOFF.md` 是历史交接资料，其中主目录路径和测试数量已过时；当前工作区及实际代码应作为目录与入口的依据。旧 README 中直接启动 `server.py` 的命令也不等同于当前集成启动流程。历史交接内容不得覆盖根 `AGENTS.md` 与 APK-first 开发规范。
 
 ## 当前整理事项
 

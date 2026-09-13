@@ -2,6 +2,17 @@
 
 更新时间：2026-08-25
 
+## 0. 所有智能体必读
+
+本文件是历史交接资料，不得覆盖当前项目开发规范。任何 OpenCode、Codex、ChatGPT 或其他智能体在修改项目之前，必须先完整阅读：
+
+1. 仓库根目录 `../AGENTS.md`；
+2. `../docs/development/APK_PROTOCOL_FIRST.md`；
+3. 当前目录 `AGENTS.md`；
+4. 与任务相关的协议证据文档、源码和测试。
+
+任何修改都必须执行 APK Verification Gate。涉及客户端可观察行为的修改至少需要 B 级 APK 证据；C/D 级只能继续逆向、诊断和记录，不得猜测业务语义。纯内部重构也必须证明 wire contract、字段类型/顺序、状态转换和资源映射不变。
+
 ## 1. 项目目标
 
 这是《飘渺三界2》Android 客户端的纯本地登录/游戏服兼容原型。目标是逐步补齐客户端已经存在的玩法协议，让手机只连接局域网内的本地服务。不要访问、扫描、修改或尝试登录任何官方/第三方服务器。
@@ -84,7 +95,7 @@ C:\Users\Kail\Documents\Codex\2026-08-24\new-chat\outputs\piaomiao_local_login
 6. 技能、队伍、宠物、聊天等独立系统。
 7. 新地图统一添加到 `config.json/maps`，独立声明资源、实体和传送点；只有取得可靠资源或协议样本后，再继续原服地图复原。
 
-每个阶段都应：先从 smali/JAR 确认请求字段和响应字段，再添加编码函数和测试，最后让手机验证。不要根据消息号名称猜字段。
+每个阶段都应：先从 smali/JAR 确认请求字段和响应字段，再添加编码函数和测试，最后让手机验证。不要根据消息号名称猜字段。更严格的证据门槛以 `../docs/development/APK_PROTOCOL_FIRST.md` 为准。
 
 ## 7. 开发与验证命令
 
@@ -127,5 +138,5 @@ listening on ('0.0.0.0', 6805); advertising 192.168.0.104:6805
 ## 9. 交给 OpenCode 的建议首条指令
 
 ```text
-请先完整阅读 AGENTS.md、OPENCODE_HANDOFF.md、README.md、EQUIPMENT_RESOURCE_CATALOG.md，运行统一测试套件（unittest discover）和 test_client.py，确认现状后再修改。一次只实现一个手机可验证的协议闭环。所有字段必须从 references/smali、完整反编译目录或 JAR 中取得证据，不要猜协议；保留 data/roles.json，完成后重启最新服务并告诉我手机端怎么测试。
+请先完整阅读仓库根 AGENTS.md、docs/development/APK_PROTOCOL_FIRST.md、implementation_staging/AGENTS.md、OPENCODE_HANDOFF.md、README.md 和任务相关协议证据/测试，再做任何修改。每次修改先执行 APK Verification Gate；客户端可观察行为至少需要 B 级 APK 证据，C/D 级只允许逆向和诊断，不得猜协议。保留 data/roles.json；实现后运行统一测试和需要的 test_client.py；真机结果未经用户确认必须标记 pending real-device verification。
 ```
