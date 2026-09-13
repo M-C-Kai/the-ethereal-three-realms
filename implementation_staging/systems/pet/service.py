@@ -1,7 +1,10 @@
-"""宠物系统业务：宠物模型、改名、放生与属性重算。"""
+"""宠物系统业务：实例、核心状态、属性计算与技能学习。"""
 from __future__ import annotations
 
-from systems.pet.registry import PetRegistry
+from dataclasses import dataclass
+
+from systems.inventory.protocol import find_item, role_items
+from systems.pet.registry import PetRegistry, PetSkillRegistry
 
 
 def role_pets(role: dict[str, object]) -> list[dict[str, object]]:
@@ -65,7 +68,7 @@ def create_starter_pet(role_id: int, registry: PetRegistry) -> dict[str, object]
 
 
 def ensure_pet_schema(role: dict[str, object], registry: PetRegistry) -> bool:
-    """Migrate pet instances without duplicating the existing starter pet."""
+    """Migrate pet instances idempotently without duplicating the starter pet."""
     changed = False
     pets = role.get('pets')
     if not isinstance(pets, list):
@@ -111,14 +114,23 @@ def ensure_pet_schema(role: dict[str, object], registry: PetRegistry) -> bool:
             if key not in pet:
                 pet[key] = list(value) if isinstance(value, list) else value
                 changed = True
+        raw_skill_ids = pet.get('skill_ids')
+        if not isinstance(raw_skill_ids, list):
+            pet['skill_ids'] = []
+            changed = True
+        else:
+            normalized: list[int] = []
+            for raw_skill_id in raw_skill_ids:
+                try:
+                    skill_id = int(raw_skill_id)
+                except (TypeError, ValueError):
+                    continue
+                if skill_id > 0 and skill_id not in normalized:
+                    normalized.append(skill_id)
+            if normalized != raw_skill_ids:
+                pet['skill_ids'] = normalized
+                changed = True
     return changed
-
-
-
-from dataclasses import dataclass
-
-from systems.pet.service import find_pet, role_pets
-from systems.pet.registry import PetRegistry
 
 
 @dataclass(frozen=True)
@@ -130,6 +142,17 @@ class PetMutation:
     name: str = ''
     was_walking: bool = False
     was_deployed: bool = False
+
+
+@dataclass(frozen=True)
+class PetSkillMutation:
+    changed: bool
+    pet_id: int = 0
+    skill_id: int = 0
+    forgotten_skill_id: int = 0
+    consumed_item_id: int = 0
+    item_remaining: int = 0
+    reason: str = ''
 
 
 def _bag_pet(role: dict[str, object], pet_id: int) -> dict[str, object] | None:
@@ -166,7 +189,6 @@ def release_pet(role: dict[str, object], pet_id: int) -> PetMutation:
     return PetMutation(
         True,
         pet_id,
-        reason='',
         was_walking=was_walking,
         was_deployed=was_deployed,
     )
@@ -177,9 +199,8 @@ def recalculate_pet_properties(pet: dict[str, object], registry: PetRegistry) ->
     level = max(1, int(pet.get('level', definition.base_level)))
     stats = list(pet.get('base_stats', definition.base_stats))
     stats = (stats + list(definition.base_stats))[:5]
-
-    # Keep one centralized derived-stat rule so detail and incremental updates agree.
     strength, endurance, intelligence, spirit, agility = [max(0, int(value)) for value in stats]
+
     max_hp = max(1, int(definition.base_hp) + ((level - 1) * 10) + endurance * 2)
     max_mp = max(1, int(definition.base_mp) + ((level - 1) * 5) + spirit)
     physical_attack = max(0, int(definition.physical_attack) + ((level - 1) * 2) + strength)
@@ -238,3 +259,52 @@ def allocate_stats(
     derived = recalculate_pet_properties(pet, registry)
     updates.extend((property_id, derived[property_id]) for property_id in range(38, 47))
     return PetMutation(True, pet_id, updates=tuple(updates))
+
+
+def learn_pet_skill(
+    role: dict[str, object],
+    pet_id: int,
+    book_template_id: int,
+    book_instance_id: int,
+    skill_registry: PetSkillRegistry,
+) -> PetSkillMutation:
+    """Learn one APK-native pet skill from an exact owned book instance."""
+    pet = _bag_pet(role, pet_id)
+    if pet is None:
+        return PetSkillMutation(False, pet_id, reason='unknown_pet')
+
+    definition = skill_registry.for_book(book_template_id)
+    if definition is None:
+        return PetSkillMutation(False, pet_id, reason='unknown_skill_book')
+
+    item = find_item(role, book_instance_id)
+    if item is None or str(item.get('location', 'bag')) != 'bag':
+        return PetSkillMutation(False, pet_id, skill_id=definition.skill_id, reason='book_not_owned')
+    if int(item.get('template_id', 0)) != int(book_template_id):
+        return PetSkillMutation(False, pet_id, skill_id=definition.skill_id, reason='book_mismatch')
+    quantity = int(item.get('quantity', 1))
+    if quantity <= 0:
+        return PetSkillMutation(False, pet_id, skill_id=definition.skill_id, reason='book_empty')
+
+    skill_ids = pet.get('skill_ids')
+    if not isinstance(skill_ids, list):
+        skill_ids = []
+        pet['skill_ids'] = skill_ids
+    if int(definition.skill_id) in [int(value) for value in skill_ids]:
+        return PetSkillMutation(False, pet_id, skill_id=definition.skill_id, reason='already_known')
+
+    skill_ids.append(int(definition.skill_id))
+    remaining = quantity - 1
+    if remaining <= 0:
+        role_items(role).remove(item)
+        remaining = 0
+    else:
+        item['quantity'] = remaining
+    return PetSkillMutation(
+        True,
+        pet_id,
+        skill_id=int(definition.skill_id),
+        forgotten_skill_id=0,
+        consumed_item_id=int(book_instance_id),
+        item_remaining=remaining,
+    )

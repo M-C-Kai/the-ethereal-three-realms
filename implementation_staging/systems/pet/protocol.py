@@ -1,25 +1,48 @@
-"""宠物系统协议帧：1127 详情、1103 技能、1130 状态与地图挂载。"""
+"""宠物系统 APK 原生协议帧与请求解析。"""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from protocol import (
+    Field,
+    TYPE_BYTE,
+    TYPE_INT,
+    TYPE_SHORT,
+    TYPE_STRING,
+    byte,
+    encode_frame,
+    integer,
+    short,
+    string,
+)
+from systems.pet.registry import (
+    PetRegistry,
+    PetSkillDefinition,
+    PetSkillRegistry,
+    default_pet_skill_registry,
+)
 from systems.pet.service import (
-    create_starter_pet,
     ensure_pet_schema,
     find_pet,
+    recalculate_pet_properties,
     role_pets,
 )
-from systems.pet.registry import PetRegistry
-from systems.pet.service import recalculate_pet_properties
-from protocol import Field, TYPE_BYTE, TYPE_INT, byte, encode_frame, integer, string
 
 
 PET_ACTION_CREATE = 1
 PET_ACTION_DETAIL = 9
 PET_SKILL_ACTION_LIST = 10
+PET_SKILL_ACTION_LEARN = 50
 PET_STATE_DEPLOYED = 10
 PET_STATE_WALKING = 48
 PET_PROPERTY_UPDATE_ACTION = 0
+PET_RENAME_ACTION = 15
+PET_RELEASE_ACTION = 1
+PET_STAT_ACTION = 2
+PET_MAP_ATTACH_ACTION = 13
+PET_MAP_DETACH_ACTION = 102
+PET_SKILL_RECORD_WIDTH = 27
 
 
 @dataclass(frozen=True)
@@ -142,18 +165,84 @@ def pet_detail_frame(pet: dict[str, object], registry: PetRegistry) -> bytes:
     return encode_frame(1127, fields)
 
 
-def pet_skill_list_frame(pet: dict[str, object]) -> bytes:
-    return encode_frame(1103, [
+def pet_skill_record_fields(definition: PetSkillDefinition) -> list[Field]:
+    """Encode one b/w-compatible 27-property skill record.
+
+    Reverse-engineering locks property 0 as display name and property 1 as
+    skill id.  The known runtime-safe numeric slots below are populated from
+    the catalog; every still-unresolved property remains zero rather than
+    inventing protocol semantics.
+    """
+    values = [0] * PET_SKILL_RECORD_WIDTH
+    values[1] = int(definition.skill_id)
+    values[2] = 1
+    values[3] = int(definition.level)
+    values[4] = int(definition.icon_id)
+    values[5] = int(definition.hp_cost)
+    values[6] = int(definition.mp_cost)
+    values[10] = int(definition.category)
+    values[11] = int(definition.probability)
+    fields: list[Field] = [string(definition.name)]
+    fields.extend(integer(values[index]) for index in range(1, PET_SKILL_RECORD_WIDTH))
+    return fields
+
+
+def pet_skill_list_frame(
+    pet: dict[str, object],
+    skill_registry: PetSkillRegistry | None = None,
+) -> bytes:
+    if skill_registry is None:
+        skill_registry = default_pet_skill_registry()
+    definitions: list[PetSkillDefinition] = []
+    raw_ids = pet.get('skill_ids', [])
+    if isinstance(raw_ids, list):
+        for raw_skill_id in raw_ids:
+            try:
+                definition = skill_registry.require(int(raw_skill_id))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if definition not in definitions:
+                definitions.append(definition)
+    definitions = definitions[:255]
+    fields: list[Field] = [
         byte(PET_SKILL_ACTION_LIST),
         integer(int(pet['id'])),
         byte(0),
-        byte(0),
+        byte(len(definitions)),
+    ]
+    for definition in definitions:
+        fields.extend(pet_skill_record_fields(definition))
+    return encode_frame(1103, fields)
+
+
+def parse_pet_skill_learn_request(fields: list[Field]) -> tuple[int, int, int] | None:
+    if (
+        len(fields) != 4
+        or fields[0].type_id != TYPE_BYTE
+        or int(fields[0].value) != PET_SKILL_ACTION_LEARN
+        or any(field.type_id != TYPE_INT for field in fields[1:])
+    ):
+        return None
+    return int(fields[1].value), int(fields[2].value), int(fields[3].value)
+
+
+def pet_skill_learn_result_frame(
+    pet_id: int,
+    *,
+    success: bool,
+    forgotten_skill_id: int = 0,
+) -> bytes:
+    return encode_frame(1130, [
+        byte(PET_SKILL_ACTION_LEARN),
+        integer(int(pet_id)),
+        integer(1 if success else 0),
+        integer(int(forgotten_skill_id)),
     ])
 
 
 def pet_property_update_frame(
     pet_id: int,
-    updates: list[tuple[int, int]] | tuple[tuple[int, int], ...],
+    updates: Sequence[tuple[int, int]],
 ) -> bytes:
     fields: list[Field] = [
         byte(PET_PROPERTY_UPDATE_ACTION),
@@ -202,27 +291,6 @@ def apply_pet_state_request(role: dict[str, object], fields: list[Field]) -> Pet
     )
 
 
-
-from collections.abc import Sequence
-
-from protocol import (
-    Field,
-    TYPE_BYTE,
-    TYPE_INT,
-    TYPE_SHORT,
-    TYPE_STRING,
-    byte,
-    encode_frame,
-    integer,
-    string,
-)
-
-PET_RENAME_ACTION = 15
-PET_RELEASE_ACTION = 1
-PET_STAT_ACTION = 2
-PET_PROPERTY_UPDATE_ACTION = 0
-
-
 def parse_pet_rename_request(fields: list[Field]) -> tuple[int, str] | None:
     if (
         len(fields) != 3
@@ -267,30 +335,7 @@ def parse_pet_stat_request(fields: list[Field]) -> tuple[int, tuple[int, int, in
     return int(fields[0].value), (values[0], values[1], values[2], values[3], values[4])
 
 
-def pet_property_update_frame(pet_id: int, updates: Sequence[tuple[int, int]]) -> bytes:
-    fields: list[Field] = [byte(PET_PROPERTY_UPDATE_ACTION), integer(pet_id), integer(len(updates))]
-    for property_id, value in updates:
-        fields.extend((byte(property_id), integer(value)))
-    return encode_frame(1134, fields)
-
-
-
-from systems.pet.protocol import PET_STATE_WALKING, PetStateResult, pet_property_update_frame
-from protocol import byte, encode_frame, integer, short
-
-
-PET_MAP_ATTACH_ACTION = 13
-PET_MAP_DETACH_ACTION = 102
-
-
 def pet_map_attach_frame(pet_id: int, role_id: int) -> bytes:
-    """Attach an already-known pet instance to the local map player.
-
-    APK ``main/e.aa`` 1127/action=13 reads field 1 as the pet id and the final
-    field as the owner/player id. For the local player it resolves the pet
-    from ``b/f.k``, assigns ``b/v.E``, calls ``pet.b()`` and refreshes the
-    follower position with ``player.ae()``.
-    """
     return encode_frame(1127, [
         byte(PET_MAP_ATTACH_ACTION),
         integer(int(pet_id)),
@@ -299,12 +344,6 @@ def pet_map_attach_frame(pet_id: int, role_id: int) -> bytes:
 
 
 def pet_map_detach_frame(role_id: int) -> bytes:
-    """Remove the walking pet from one map player.
-
-    APK 1010/action=102 passes field 0 to ``b/m.q(playerId)``. For the local
-    player that calls ``b/v.X()``, which disposes ``b/v.E`` and refreshes the
-    map render list.
-    """
     return encode_frame(1010, [
         integer(int(role_id)),
         short(0),
@@ -316,7 +355,6 @@ def pet_map_detach_frame(role_id: int) -> bytes:
 
 
 def pet_state_response_frames(role_id: int, result: PetStateResult) -> tuple[bytes, ...]:
-    """Return property-state acks plus the map-side walking-pet operation."""
     frames = [
         pet_property_update_frame(pet_id, [(property_id, value)])
         for pet_id, property_id, value in result.updates
