@@ -117,6 +117,7 @@ def battle_image_resource(image_id: int) -> tuple[int, int, int, int, int, int, 
     in the original client JAR, so that extracted set is used as a fallback.
     """
     image_dirs = (
+        Path(__file__).resolve().parents[2] / 'maps' / '60011' / 'images',
         *(
             build_dir / resource_set / 'res' / 'images'
             for build_dir in _build_artifact_dirs()

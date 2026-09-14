@@ -15,6 +15,18 @@ MAP_DIR = ROOT / 'maps' / '60011'
 
 
 class Map60011PackageTests(unittest.TestCase):
+    def test_scene_images_answer_native_1502_requests(self):
+        from protocol import decode_frame
+        from systems.battle.protocol import battle_image_frames
+
+        for image_id in range(60011000, 60011040):
+            frames = battle_image_frames(0, image_id)
+            self.assertEqual(len(frames), 3, f'image {image_id} must answer 1502')
+            message_id, fields = decode_frame(frames[0])
+            self.assertEqual(message_id, 1501)
+            self.assertEqual(fields[4].value, image_id)
+            self.assertGreater(len(fields[-1].value), 0)
+
     def test_package_materializes_and_wires_registry(self):
         map_spec = MAP_DIR / 'map.json'
         map_ref_spec = MAP_DIR / 'map.ref.json'

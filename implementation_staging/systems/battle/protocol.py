@@ -437,6 +437,7 @@ def battle_image_resolve_debug(image_id: int) -> dict[str, object]:
     and is not used by ``battle_image_resource`` to choose a payload.
     """
     image_dirs = (
+        Path(__file__).resolve().parents[2] / 'maps' / '60011' / 'images',
         *(
             build_dir / resource_set / 'res' / 'images'
             for build_dir in _build_artifact_dirs()
