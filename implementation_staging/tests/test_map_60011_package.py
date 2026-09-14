@@ -15,6 +15,15 @@ MAP_DIR = ROOT / 'maps' / '60011'
 
 
 class Map60011PackageTests(unittest.TestCase):
+    def test_cold_login_moves_old_blocked_position_to_current_spawn(self):
+        from systems.map.service import relocate_role_for_cold_login
+
+        settings = server.Settings.load(ROOT / 'config.json')
+        role = {'id': 10084, 'map_id': 60011, 'map_x': 18, 'map_y': 30}
+        self.assertTrue(relocate_role_for_cold_login(settings, role))
+        self.assertEqual((role['map_x'], role['map_y']), (50, 33))
+        self.assertFalse(relocate_role_for_cold_login(settings, role))
+
     def test_scene_images_answer_native_1502_requests(self):
         from protocol import decode_frame
         from systems.battle.protocol import battle_image_frames

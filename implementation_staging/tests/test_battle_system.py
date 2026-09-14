@@ -28,6 +28,12 @@ def make_game():
 
 
 class LocalBattleStateTests(unittest.TestCase):
+    def test_image_resolution_diagnostic_handles_map_image(self):
+        from systems.battle.protocol import battle_image_resolve_debug
+
+        result = battle_image_resolve_debug(60011000)
+        self.assertEqual(result['requested_id'], 60011000)
+
     def test_begin_and_basic_attack(self):
         state = LocalBattleState()
         state.begin(7, 100, player_stats=None, monster_ids=(100, 101))
@@ -165,6 +171,18 @@ class BattleHandlerTests(unittest.TestCase):
         result = self.system.handle(self._context(), 1502, [_F(9), _F(1), _F(123)])
         self.assertTrue(result.handled)
         self.assertEqual(result.frames, ())
+
+    def test_map_image_query_completes_without_disconnect_exception(self):
+        class _F:
+            def __init__(self, value):
+                self.value = value
+                self.type_id = None
+
+        result = self.system.handle(self._context(), 1502,
+                                    [_F(0), _F(1), _F(60011000)])
+        self.assertTrue(result.handled)
+        self.assertEqual([decode_frame(frame)[0] for frame in result.frames],
+                         [1501, 1501, 1502])
 
 
 if __name__ == '__main__':

@@ -314,6 +314,25 @@ def relocate_role_for_cold_login(
         map_id = int(role.get('map_id', settings.default_map_id))
     except (TypeError, ValueError):
         map_id = int(settings.default_map_id)
+    if map_id == 60011:
+        # Old saves may retain a coordinate from the earlier 60011 layout.
+        # Keep the role on this map, but move blocked/out-of-bounds positions
+        # to the current package's verified walkable spawn before entry frames.
+        definition = settings.map_registry.require(map_id)
+        spec_path = default_maps_root() / '60011' / 'map.json'
+        scene = MapO.from_spec(json.loads(spec_path.read_text(encoding='utf-8')))
+        try:
+            x, y = int(role.get('map_x')), int(role.get('map_y'))
+        except (TypeError, ValueError):
+            x = y = -1
+        if not (0 <= x < scene.width and 0 <= y < scene.height) or scene.collision[y * scene.width + x]:
+            LOG.warning('MAP_60011_RELOCATE role_id=%s from=%s,%s to=%d,%d',
+                        role.get('id'), role.get('map_x'), role.get('map_y'),
+                        definition.spawn_x, definition.spawn_y)
+            role['map_x'] = definition.spawn_x
+            role['map_y'] = definition.spawn_y
+            role['map_name'] = definition.name
+            return True
     if map_id not in COLD_LOGIN_RELOCATE_MAP_IDS:
         return False
     home = settings.map_registry.require(settings.default_map_id)
@@ -378,5 +397,4 @@ def update_role_position(
     role['map_x'] = new_x
     role['map_y'] = new_y
     return True
-
 

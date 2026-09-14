@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import struct
 import time
+from pathlib import Path
 
 from protocol import (
     Field, TYPE_BYTE, TYPE_INT, TYPE_SHORT,
