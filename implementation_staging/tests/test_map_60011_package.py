@@ -49,6 +49,7 @@ class Map60011PackageTests(unittest.TestCase):
 
         entry = settings.map_registry.portal(58, 580007)
         self.assertIsNotNone(entry)
+        self.assertEqual((entry.x, entry.y), (50, 70))
         self.assertEqual(
             (entry.target_map_id, entry.target_x, entry.target_y),
             (60011, 18, 30),
