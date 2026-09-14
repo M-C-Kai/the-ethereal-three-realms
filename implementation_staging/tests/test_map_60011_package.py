@@ -1,4 +1,4 @@
-"""Regression contract for standalone dynamic map 60011 (翠溪村)."""
+"""Regression contract for standalone image-backed dynamic map 60011 (翠溪村)."""
 from __future__ import annotations
 
 import tempfile
@@ -39,14 +39,15 @@ class Map60011PackageTests(unittest.TestCase):
             self.assertTrue(built.map_ref_path.is_file())
 
             ref_info = inspect_map_ref(built.map_ref_path.read_bytes())
-            self.assertEqual(ref_info.image_ids, tuple(range(60011000, 60011006)))
-            self.assertEqual(ref_info.image_record_count, 6)
-            self.assertEqual(ref_info.composite_tile_count, 6)
+            self.assertEqual(ref_info.image_ids, tuple(range(60011000, 60011040)))
+            self.assertEqual(ref_info.image_record_count, 40)
+            self.assertEqual(ref_info.composite_tile_count, 40)
 
             map_o = MapO.from_file(built.map_o_path.read_bytes())
             self.assertEqual((map_o.width, map_o.height), (90, 90))
-            self.assertFalse(map_o.collision[(35 * 90) + 50])
-            self.assertFalse(map_o.collision[(37 * 90) + 52])
+            self.assertFalse(map_o.collision[(33 * 90) + 50])
+            self.assertFalse(map_o.collision[(35 * 90) + 52])
+            self.assertTrue(map_o.collision[0])
 
         settings = server.Settings.load(ROOT / 'config.json')
         definition = settings.map_registry.require(60011)
@@ -56,19 +57,19 @@ class Map60011PackageTests(unittest.TestCase):
             (definition.fallback_width, definition.fallback_height),
             (90, 90),
         )
-        self.assertEqual((definition.spawn_x, definition.spawn_y), (50, 35))
+        self.assertEqual((definition.spawn_x, definition.spawn_y), (50, 33))
 
         entry = settings.map_registry.portal(58, 580007)
         self.assertIsNotNone(entry)
         self.assertEqual((entry.x, entry.y), (50, 70))
         self.assertEqual(
             (entry.target_map_id, entry.target_x, entry.target_y),
-            (60011, 50, 35),
+            (60011, 50, 33),
         )
 
         back = settings.map_registry.portal(60011, 6001101)
         self.assertIsNotNone(back)
-        self.assertEqual((back.x, back.y), (52, 37))
+        self.assertEqual((back.x, back.y), (52, 35))
         self.assertEqual(
             (back.target_map_id, back.target_x, back.target_y),
             (58, 60, 67),
