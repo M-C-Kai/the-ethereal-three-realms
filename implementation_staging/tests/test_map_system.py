@@ -286,11 +286,12 @@ class SameMapVisibilityTests(unittest.TestCase):
         original_hook = self.system._team_movement_frame_hook
         self.addCleanup(setattr, self.system, '_team_movement_frame_hook', original_hook)
         self.system._team_movement_frame_hook = (
-            lambda leader, member, x, y: follow_chain_frame(leader, member, x, y)
+            lambda leader, member, x, y: follow_chain_frame(leader, member, [member], x, y)
         )
         self._move(me, 61, 68)
         self.assertEqual(self._frames_for(self.pushed[10002], 1005), [])
-        chains = self._frames_for(self.pushed[10002], 1028)
+        # 跟随链帧 = S→C 1038（e.ai）；1028 在 APK 主分发表中不存在。
+        chains = self._frames_for(self.pushed[10002], 1038)
         self.assertEqual(len(chains), 1)
         self.assertEqual([int(field.value) for field in chains[0]],
                          [1_010_001, 0, 0, 61, 68, 1, 10002])

@@ -48,6 +48,22 @@ class TeamRegistry:
         self.member_to_leader[member_id] = team.leader_id
         return team
 
+    def promote(self, new_leader_id: int) -> TeamState | None:
+        """提升新队长：aa.a 语义要求队长行在所有客户端都排首位。"""
+        new_leader_id = int(new_leader_id)
+        team = self.team_of(new_leader_id)
+        if team is None or team.leader_id == new_leader_id:
+            return team
+        old_leader_id = team.leader_id
+        team.members.remove(new_leader_id)
+        team.members.insert(0, new_leader_id)
+        team.leader_id = new_leader_id
+        self.teams.pop(old_leader_id, None)
+        self.teams[new_leader_id] = team
+        for member_id in team.members:
+            self.member_to_leader[member_id] = new_leader_id
+        return team
+
     def leave(self, role_id: int) -> tuple[TeamState | None, list[int]]:
         role_id = int(role_id)
         team = self.team_of(role_id)
