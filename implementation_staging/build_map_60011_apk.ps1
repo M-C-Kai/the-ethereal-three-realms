@@ -18,7 +18,7 @@ foreach ($required in @($SourceApk, $ZipAlign, $ApkSigner, $Keystore, $Python,
 }
 New-Item -ItemType Directory -Force -Path (Split-Path $Unsigned), (Split-Path $OutputApk) | Out-Null
 & $Python (Join-Path $PSScriptRoot 'tools\build_map_60011_apk.py') `
-    --source-apk $SourceApk --unsigned-apk $Unsigned
+    $SourceApk $Unsigned
 if ($LASTEXITCODE -ne 0) { throw 'Map resource generation failed' }
 & $ZipAlign -p -f 4 $Unsigned $Aligned
 if ($LASTEXITCODE -ne 0) { throw 'zipalign failed' }

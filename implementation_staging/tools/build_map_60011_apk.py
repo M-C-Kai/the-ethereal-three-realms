@@ -21,6 +21,7 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 PNG_IEND = b"\x00\x00\x00\x00IEND\xaeB`\x82"
 PNG_CONTAINER_RE = re.compile(r"^assets/res/images/png(\d+)\.p$")
 MAP_ID = 60011
+IMAGES_PER_CONTAINER = 3
 MAP_DIR = ROOT / "maps" / str(MAP_ID)
 ASSET_BUNDLE = MAP_DIR / "60011_apk_assets.zip"
 
@@ -245,7 +246,8 @@ def build_unsigned_apk(
             if (match := PNG_CONTAINER_RE.match(name))
         ]
         first_container = (max(existing_containers) + 1) if existing_containers else 0
-        last_container = first_container + len(resources) - 1
+        container_count = (len(resources) + IMAGES_PER_CONTAINER - 1) // IMAGES_PER_CONTAINER
+        last_container = first_container + container_count - 1
         if last_container > 255:
             raise ImagePackError(
                 f"need png{first_container}.p..png{last_container}.p, "
@@ -254,14 +256,22 @@ def build_unsigned_apk(
 
         packed_members: dict[str, bytes] = {}
         additions: list[tuple[int, int, int]] = []
+        container_blobs: dict[int, bytearray] = {}
         for index, item in enumerate(resources):
             image_id = int(item["image_id"])
-            container = first_container + index
+            container = first_container + index // IMAGES_PER_CONTAINER
             png_name = f"slices/{item['file']}"
-            packed_members[f"assets/res/images/png{container}.p"] = pack_png_for_client_bytes(
-                assets.read(png_name)
-            )
-            additions.append((image_id, container, 0))
+            packed = pack_png_for_client_bytes(assets.read(png_name))
+            blob = container_blobs.setdefault(container, bytearray())
+            offset = len(blob)
+            if offset > 0xFFFF or offset + len(packed) > 0x10000:
+                raise ImagePackError(f"png{container}.p offsets exceed uint16")
+            blob.extend(packed)
+            additions.append((image_id, container, offset))
+        packed_members = {
+            f"assets/res/images/png{container}.p": bytes(blob)
+            for container, blob in container_blobs.items()
+        }
 
         replacements = {
             index_name: patch_images_index(index_data, additions),
