@@ -66,8 +66,13 @@ class MapSystemHandlerTests(unittest.TestCase):
         role = None
         fields = self._fields([12], [4])
         result = self.system.handle(self._context(role), 1010, fields)
-        message_ids = [decode_frame(frame)[0] for frame in result.frames]
-        self.assertIn(1010, message_ids)
+        decoded = [decode_frame(frame) for frame in result.frames]
+        self.assertEqual([message_id for message_id, _ in decoded],
+                         [1010, 1407, 1407, 1407, 1407, 1407, 1010])
+        self.assertEqual([fields[0].value for message_id, fields in decoded
+                          if message_id == 1407], [0, 1, 3, 5, 7])
+        self.assertEqual(decoded[-1][1][4].value, 1)
+        self.assertEqual(decoded[-1][1][5].value, 12)
 
     def test_pathfind_known_target(self):
         # 采集目标 6001 位于 58 号地图 (12,8)
