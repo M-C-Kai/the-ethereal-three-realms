@@ -17,6 +17,8 @@
     9,
     14
   ],
+  "collision_source": "source_scene.png",
+  "collision_method": "scene-coordinate walkable polygons minus solid scenery, 7px inset",
   "resources": [
     {
       "image_id": 60011000,

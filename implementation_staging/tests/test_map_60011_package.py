@@ -6,6 +6,7 @@ import unittest
 import io
 import json
 import zipfile
+from collections import deque
 from pathlib import Path
 
 from PIL import Image, ImageChops
@@ -26,6 +27,7 @@ class Map60011PackageTests(unittest.TestCase):
             manifest = json.loads(archive.read('resource_manifest.json'))
             self.assertEqual(manifest['scene_size'], [675, 900])
             self.assertEqual(manifest['grid'], [9, 14])
+            self.assertEqual(manifest['collision_source'], 'source_scene.png')
             self.assertEqual(len(manifest['resources']), 126)
             canvas = Image.new('RGB', (675, 900))
             covered = Image.new('L', (675, 900))
@@ -101,6 +103,25 @@ class Map60011PackageTests(unittest.TestCase):
             self.assertFalse(map_o.collision[(42 * 127) + 59])
             self.assertFalse(map_o.collision[(44 * 127) + 61])
             self.assertTrue(map_o.collision[0])
+            for x, y in ((26, 50), (51, 25), (76, 80)):
+                self.assertTrue(map_o.collision[(y * 127) + x], (x, y))
+            for x, y in ((59, 42), (61, 45), (117, 89)):
+                self.assertFalse(map_o.collision[(y * 127) + x], (x, y))
+
+            pending = deque([(59, 42)])
+            reachable = {(59, 42)}
+            while pending:
+                x, y = pending.popleft()
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    point = (x + dx, y + dy)
+                    if not (0 <= point[0] < 127 and 0 <= point[1] < 127):
+                        continue
+                    if point in reachable or map_o.collision[(point[1] * 127) + point[0]]:
+                        continue
+                    reachable.add(point)
+                    pending.append(point)
+            self.assertIn((61, 44), reachable)
+            self.assertIn((117, 89), reachable)
 
         settings = server.Settings.load(ROOT / 'config.json')
         definition = settings.map_registry.require(60011)

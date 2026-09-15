@@ -6,7 +6,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,25 @@ SCENE_WIDTH, SCENE_HEIGHT = 675, 900
 COLUMNS, ROWS = 9, 14
 SCENE_X, SCENE_Y = -337, 190
 COORDINATE_SHIFT = 9
+
+# Traced against source_scene.png after resizing to SCENE_WIDTH x SCENE_HEIGHT.
+# White polygons are ground/road surfaces. Dark polygons remove visible solid
+# scenery which shares grass colours with the walkable floor.
+WALKABLE_POLYGONS = (
+    ((282, 300), (360, 275), (455, 265), (535, 285), (675, 305),
+     (675, 900), (505, 900), (482, 858), (490, 810), (520, 760),
+     (568, 706), (610, 646), (620, 590), (590, 536), (540, 492),
+     (480, 454), (410, 430), (350, 414), (302, 382), (270, 342)),
+)
+BLOCKED_POLYGONS = (
+    # House, steps, barrels and chest.
+    ((468, 48), (675, 35), (675, 329), (575, 316), (500, 286), (463, 226)),
+    # Central cliff, large tree and dense foreground vegetation.
+    ((118, 450), (252, 415), (397, 458), (505, 520), (525, 617),
+     (492, 724), (438, 812), (292, 900), (80, 900), (58, 746), (87, 570)),
+    # Stone lantern and its base.
+    ((526, 620), (591, 616), (613, 719), (553, 760), (516, 709)),
+)
 
 
 def anchor_for_rect(x: int, y: int, width: int, height: int) -> tuple[int, int, int, int]:
@@ -35,27 +54,34 @@ def anchor_for_rect(x: int, y: int, width: int, height: int) -> tuple[int, int, 
     return tile_x, tile_y, offset_x, offset_y
 
 
-def shifted_grid(rows: list, fill):
-    result = [[fill for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
-    for old_y, row in enumerate(rows):
-        for old_x, value in enumerate(row):
-            new_x, new_y = old_x + COORDINATE_SHIFT, old_y + COORDINATE_SHIFT
-            if new_x < MAP_WIDTH and new_y < MAP_HEIGHT:
-                result[new_y][new_x] = value
-    return result
+def build_collision(scene: Image.Image) -> tuple[list[str], Image.Image]:
+    mask = Image.new("L", scene.size, 0)
+    draw = ImageDraw.Draw(mask)
+    for polygon in WALKABLE_POLYGONS:
+        draw.polygon(polygon, fill=255)
+    for polygon in BLOCKED_POLYGONS:
+        draw.polygon(polygon, fill=0)
+    # Keep the actor footprint away from traced scenery edges.
+    safe = mask.filter(ImageFilter.MinFilter(15))
+    collision: list[str] = []
+    for tile_y in range(MAP_HEIGHT):
+        row = []
+        for tile_x in range(MAP_WIDTH):
+            screen_x = 10 * (tile_x - tile_y) - SCENE_X
+            screen_y = 5 * (tile_x + tile_y + 2) - SCENE_Y
+            inside = 0 <= screen_x < SCENE_WIDTH and 0 <= screen_y < SCENE_HEIGHT
+            row.append("." if inside and safe.getpixel((screen_x, screen_y)) else "#")
+        collision.append("".join(row))
+
+    overlay = scene.convert("RGBA")
+    tint = Image.new("RGBA", scene.size, (30, 220, 70, 0))
+    tint.putalpha(safe.point(lambda value: 105 if value else 0))
+    overlay.alpha_composite(tint)
+    return collision, overlay
 
 
 def generate() -> None:
     old_map = json.loads((MAP_DIR / "map.json").read_text(encoding="utf-8"))
-    if old_map["width"] == MAP_WIDTH and old_map["height"] == MAP_HEIGHT:
-        old_map["collision"] = [
-            row[COORDINATE_SHIFT:COORDINATE_SHIFT + 90]
-            for row in old_map["collision"][COORDINATE_SHIFT:COORDINATE_SHIFT + 90]
-        ]
-        old_map["mirror"] = [
-            row[COORDINATE_SHIFT:COORDINATE_SHIFT + 90]
-            for row in old_map["mirror"][COORDINATE_SHIFT:COORDINATE_SHIFT + 90]
-        ]
     scene = Image.open(SOURCE).convert("RGB").resize(
         (SCENE_WIDTH, SCENE_HEIGHT), Image.Resampling.LANCZOS
     )
@@ -107,8 +133,8 @@ def generate() -> None:
     if index != COLUMNS * ROWS:
         raise AssertionError(index)
 
-    collision = shifted_grid([list(row) for row in old_map["collision"]], "#")
-    mirror = shifted_grid([list(row) for row in old_map["mirror"]], ".")
+    collision, collision_preview = build_collision(scene)
+    mirror = ["." * MAP_WIDTH for _ in range(MAP_HEIGHT)]
     map_spec = {
         "format": "piaomiao-dynamic-map-v1", "map_id": 60011,
         "width": MAP_WIDTH, "height": MAP_HEIGHT, "map_type": old_map["map_type"],
@@ -138,7 +164,10 @@ def generate() -> None:
         "source_size": list(Image.open(SOURCE).size),
         "scene_size": [SCENE_WIDTH, SCENE_HEIGHT],
         "scene_origin": [SCENE_X, SCENE_Y],
-        "grid": [COLUMNS, ROWS], "resources": resources,
+        "grid": [COLUMNS, ROWS],
+        "collision_source": "source_scene.png",
+        "collision_method": "scene-coordinate walkable polygons minus solid scenery, 7px inset",
+        "resources": resources,
     }
 
     (MAP_DIR / "map.json").write_text(
@@ -151,6 +180,7 @@ def generate() -> None:
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     scene.save(MAP_DIR / "preview.png")
+    collision_preview.save(MAP_DIR / "collision_preview.png")
     with zipfile.ZipFile(ASSET_BUNDLE, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("resource_manifest.json", json.dumps(manifest, ensure_ascii=False))
         for filename, payload in slice_payloads.items():
