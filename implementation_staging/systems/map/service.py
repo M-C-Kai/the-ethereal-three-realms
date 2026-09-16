@@ -325,7 +325,8 @@ def relocate_role_for_cold_login(
             x, y = int(role.get('map_x')), int(role.get('map_y'))
         except (TypeError, ValueError):
             x = y = -1
-        legacy_positions = {(50, 33): (59, 42), (52, 35): (61, 44)}
+        legacy_positions = {point: (definition.spawn_x, definition.spawn_y)
+                            for point in ((50, 33), (52, 35))}
         if (x, y) in legacy_positions:
             new_x, new_y = legacy_positions[(x, y)]
             LOG.warning('MAP_60011_LAYOUT_SHIFT role_id=%s from=%d,%d to=%d,%d',

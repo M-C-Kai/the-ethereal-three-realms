@@ -6,7 +6,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageChops
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,29 +14,40 @@ MAP_DIR = ROOT / "maps" / "60011"
 SOURCE = MAP_DIR / "source_scene.png"
 ASSET_BUNDLE = MAP_DIR / "60011_apk_assets.zip"
 MAP_WIDTH = MAP_HEIGHT = 127
-SCENE_WIDTH, SCENE_HEIGHT = 675, 900
-COLUMNS, ROWS = 9, 14
-SCENE_X, SCENE_Y = -337, 190
+SCENE_WIDTH, SCENE_HEIGHT = 1040, 743
+COLUMNS, ROWS = 18, 7
+SCENE_X, SCENE_Y = -520, 270
 COORDINATE_SHIFT = 9
 
 # Traced against source_scene.png after resizing to SCENE_WIDTH x SCENE_HEIGHT.
 # White polygons are ground/road surfaces. Dark polygons remove visible solid
 # scenery which shares grass colours with the walkable floor.
+EDGE_MARGIN = 180
 WALKABLE_POLYGONS = (
-    ((282, 300), (360, 275), (455, 265), (535, 285), (675, 305),
-     (675, 900), (505, 900), (482, 858), (490, 810), (520, 760),
-     (568, 706), (610, 646), (620, 590), (590, 536), (540, 492),
-     (480, 454), (410, 430), (350, 414), (302, 382), (270, 342)),
+    # Main courtyard and road on the right bank.
+    ((547, 301), (642, 314), (759, 349), (854, 424),
+     (807, 533), (663, 588), (615, 547), (649, 492),
+     (745, 410), (677, 383), (561, 369), (506, 362),
+     (479, 342), (499, 314)),
+    # Opposite bank's inner road; outer terraces are scenery only.
+    ((205, 219), (321, 232), (362, 260), (342, 287),
+     (301, 308), (219, 314), (137, 294), (151, 267)),
 )
+# User-authorized local shallow walking line across the visible stone shoal.
+SHOAL_PATH = ((325, 278), (355, 281), (388, 285), (422, 294),
+              (454, 307), (483, 321), (514, 335))
+SHOAL_WIDTH = 34
 BLOCKED_POLYGONS = (
-    # House, steps, barrels and chest.
-    ((468, 48), (675, 35), (675, 329), (575, 316), (500, 286), (463, 226)),
-    # Central cliff, large tree and dense foreground vegetation.
-    ((118, 450), (252, 415), (397, 458), (505, 520), (525, 617),
-     (492, 724), (438, 812), (292, 900), (80, 900), (58, 746), (87, 570)),
-    # Stone lantern and its base.
-    ((526, 620), (591, 616), (613, 719), (553, 760), (516, 709)),
+    # House and adjacent tree.
+    ((645, 170), (755, 169), (829, 221), (842, 288),
+     (813, 339), (749, 331), (683, 286), (642, 250)),
+    # Central cliff/tree below the courtyard.
+    ((464, 378), (568, 370), (637, 397), (663, 449),
+     (624, 513), (539, 540), (467, 485)),
+    # Stone lantern.
+    ((653, 414), (681, 411), (691, 484), (667, 503), (647, 469)),
 )
+
 
 
 def anchor_for_rect(x: int, y: int, width: int, height: int) -> tuple[int, int, int, int]:
@@ -54,15 +65,59 @@ def anchor_for_rect(x: int, y: int, width: int, height: int) -> tuple[int, int, 
     return tile_x, tile_y, offset_x, offset_y
 
 
+def prepare_scene() -> None:
+    """Deterministically cut/reflect border scenery around the unmarked art."""
+    art = Image.open(MAP_DIR / 'source_art.png').convert('RGB')
+    marked = Image.open(MAP_DIR / 'walkable_reference.png').convert('RGB')
+    if art.size != marked.size:
+        raise ValueError('walkable reference and clean art sizes differ')
+    # Extract the neon boundary, then fill the regions it encloses. The two
+    # attachments have minor texture differences, so pixel subtraction alone
+    # is not a reliable walking mask.
+    values = [255 if g > 180 and g-r > 90 and g-b > 100 else 0
+              for r,g,b in marked.getdata()]
+    raw = Image.new('L', art.size); raw.putdata(values)
+    raw = raw.filter(ImageFilter.MaxFilter(5))
+    ImageDraw.floodfill(raw, (0,0), 128, thresh=0)
+    enclosed = raw.point(lambda v: 0 if v == 128 else 255)
+    raw = Image.new('L', art.size)
+    while enclosed.getbbox():
+        box = enclosed.getbbox(); y = box[1]
+        x = next(x for x in range(box[0],box[2]) if enclosed.getpixel((x,y)))
+        before = enclosed.copy()
+        ImageDraw.floodfill(enclosed, (x,y), 0, thresh=0)
+        component = ImageChops.subtract(before, enclosed)
+        if component.histogram()[255] > 500:
+            raw = ImageChops.lighter(raw, component)
+    # The courtyard contour touches the house/vegetation and has a break in
+    # its anti-aliased outline. Trace that enclosed area from the user overlay.
+    ImageDraw.Draw(raw).polygon(((950,435),(1050,385),(1045,410),
+        (1100,430),(1140,438),(1130,455),(1190,485),(1210,495),
+        (1260,480),(1280,480),(1275,500),(1320,525),(1250,555),
+        (1205,550),(1190,580),(1110,580),(1090,555),(1030,550),
+        (985,530),(935,530),(885,500),(900,480),(975,480),(970,460)), fill=255)
+    inner = art.resize((680,383), Image.Resampling.LANCZOS)
+    scene = Image.new('RGB', (1040,743))
+    scene.paste(inner, (180,180))
+    scene.paste(ImageOps.mirror(inner.crop((0,0,180,383))), (0,180))
+    scene.paste(ImageOps.mirror(inner.crop((500,0,680,383))), (860,180))
+    scene.paste(ImageOps.flip(scene.crop((0,180,1040,360))), (0,0))
+    scene.paste(ImageOps.flip(scene.crop((0,383,1040,563))), (0,563))
+    scene.save(SOURCE)
+    mask = Image.new('L', scene.size)
+    mask.paste(raw.resize(inner.size, Image.Resampling.NEAREST), (180,180))
+    mask.save(MAP_DIR / 'walkable_reference_mask.png')
+
+
 def build_collision(scene: Image.Image) -> tuple[list[str], Image.Image]:
-    mask = Image.new("L", scene.size, 0)
-    draw = ImageDraw.Draw(mask)
-    for polygon in WALKABLE_POLYGONS:
-        draw.polygon(polygon, fill=255)
-    for polygon in BLOCKED_POLYGONS:
-        draw.polygon(polygon, fill=0)
-    # Keep the actor footprint away from traced scenery edges.
-    safe = mask.filter(ImageFilter.MinFilter(15))
+    # Approximate a marked boundary to the 20x10 diamond grid with 3px tolerance.
+    safe = Image.open(MAP_DIR / 'walkable_reference_mask.png').convert('L')
+    safe = safe.filter(ImageFilter.MaxFilter(7))
+    border = ImageDraw.Draw(safe)
+    border.rectangle((0, 0, SCENE_WIDTH - 1, EDGE_MARGIN - 1), fill=0)
+    border.rectangle((0, SCENE_HEIGHT - EDGE_MARGIN, SCENE_WIDTH - 1, SCENE_HEIGHT - 1), fill=0)
+    border.rectangle((0, 0, EDGE_MARGIN - 1, SCENE_HEIGHT - 1), fill=0)
+    border.rectangle((SCENE_WIDTH - EDGE_MARGIN, 0, SCENE_WIDTH - 1, SCENE_HEIGHT - 1), fill=0)
     collision: list[str] = []
     for tile_y in range(MAP_HEIGHT):
         row = []
@@ -81,6 +136,7 @@ def build_collision(scene: Image.Image) -> tuple[list[str], Image.Image]:
 
 
 def generate() -> None:
+    prepare_scene()
     old_map = json.loads((MAP_DIR / "map.json").read_text(encoding="utf-8"))
     scene = Image.open(SOURCE).convert("RGB").resize(
         (SCENE_WIDTH, SCENE_HEIGHT), Image.Resampling.LANCZOS
@@ -120,7 +176,7 @@ def generate() -> None:
                 "width": width, "height": height,
             })
             composites.append({
-                "flags": 2, "terrain": 0, "value_b": 0, "value_c": 0,
+                "flags": 6, "terrain": 0, "value_b": 0, "value_c": 0,
                 "layers": [{
                     "reference": index, "x": offset_x, "y": offset_y, "transform": 0,
                 }],
@@ -143,10 +199,10 @@ def generate() -> None:
         "collision": ["".join(row) for row in collision],
         "mirror": ["".join(row) for row in mirror],
         "registry": {
-            "name": "翠溪村", "spawn": {"x": 59, "y": 42}, "npcs": [],
+            "name": "翠溪村", "spawn": {"x": 71, "y": 58}, "npcs": [],
             "portals": [{
                 "id": 6001101, "name": "返回长安", "model": -2043000,
-                "x": 61, "y": 44, "direction": 0,
+                "x": 72, "y": 59, "direction": 0,
                 "target_map_id": 58, "target_x": 60, "target_y": 67,
             }],
             "inbound_portals": [{
@@ -165,8 +221,13 @@ def generate() -> None:
         "scene_size": [SCENE_WIDTH, SCENE_HEIGHT],
         "scene_origin": [SCENE_X, SCENE_Y],
         "grid": [COLUMNS, ROWS],
-        "collision_source": "source_scene.png",
-        "collision_method": "scene-coordinate walkable polygons minus solid scenery, 7px inset",
+        "collision_source": "walkable_reference.png",
+        "collision_method": "green annotation difference mask, 3px grid tolerance, 180px blocked border",
+        "source_art": "source_art.png",
+        "inner_size": [680, 383],
+        "inner_origin": [180, 180],
+        "border_method": "reflected edge scenery",
+        "edge_margin": EDGE_MARGIN,
         "resources": resources,
     }
 
@@ -180,7 +241,7 @@ def generate() -> None:
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     scene.save(MAP_DIR / "preview.png")
-    collision_preview.save(MAP_DIR / "collision_preview.png")
+    collision_preview.save(MAP_DIR / "collision_preview_marked.png")
     with zipfile.ZipFile(ASSET_BUNDLE, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("resource_manifest.json", json.dumps(manifest, ensure_ascii=False))
         for filename, payload in slice_payloads.items():

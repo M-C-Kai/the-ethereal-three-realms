@@ -25,21 +25,51 @@ class Map60011PackageTests(unittest.TestCase):
         bundle = MAP_DIR / '60011_apk_assets.zip'
         with zipfile.ZipFile(bundle) as archive:
             manifest = json.loads(archive.read('resource_manifest.json'))
-            self.assertEqual(manifest['scene_size'], [675, 900])
-            self.assertEqual(manifest['grid'], [9, 14])
-            self.assertEqual(manifest['collision_source'], 'source_scene.png')
+            self.assertEqual(manifest['scene_size'], [1040, 743])
+            self.assertEqual(manifest['grid'], [18, 7])
+            self.assertEqual(manifest['collision_source'], 'walkable_reference.png')
             self.assertEqual(len(manifest['resources']), 126)
-            canvas = Image.new('RGB', (675, 900))
-            covered = Image.new('L', (675, 900))
+            canvas = Image.new('RGB', (1040, 743))
+            covered = Image.new('L', (1040, 743))
             for item in manifest['resources']:
                 tile = Image.open(io.BytesIO(archive.read(f"slices/{item['file']}"))).convert('RGB')
                 self.assertEqual(tile.size, (item['width'], item['height']))
                 canvas.paste(tile, (item['x'], item['y']))
+                ref = json.loads((MAP_DIR / 'map.ref.json').read_text(encoding='utf-8'))
+                layer = ref['composite_tiles'][item['image_id'] - 60011000]['layers'][0]
+                self.assertEqual(10 * (item['tile_x'] - item['tile_y']) + layer['x'], item['screen_x'])
+                self.assertEqual(5 * (item['tile_x'] + item['tile_y'] + 2) + layer['y'], item['screen_y'])
                 covered.paste(255, (item['x'], item['y'],
                                     item['x'] + item['width'], item['y'] + item['height']))
             self.assertIsNone(ImageChops.invert(covered).getbbox())
             expected = Image.open(MAP_DIR / 'preview.png').convert('RGB')
+            source = Image.open(MAP_DIR / 'source_scene.png').convert('RGB')
+            self.assertEqual(source.size, (1040, 743))
+            self.assertIsNone(ImageChops.difference(expected, source.resize((1040, 743), Image.Resampling.LANCZOS)).getbbox())
             self.assertIsNone(ImageChops.difference(canvas, expected).getbbox())
+            clean = Image.open(MAP_DIR / 'source_art.png').convert('RGB')
+            self.assertIsNone(ImageChops.difference(expected.crop((180,180,860,563)), clean.resize((680,383), Image.Resampling.LANCZOS)).getbbox())
+
+    def test_walkable_cells_keep_scenery_margin_on_every_side(self):
+        spec = json.loads((MAP_DIR / 'map.json').read_text(encoding='utf-8'))
+        count = 0
+        for y, row in enumerate(spec['collision']):
+            for x, cell in enumerate(row):
+                if cell != '.':
+                    continue
+                px, py = 10 * (x-y) + 520, 5 * (x+y+2) - 270
+                self.assertTrue(180 <= px < 860 and 180 <= py < 563, (x,y,px,py))
+                count += 1
+        self.assertGreater(count, 100)
+
+    def test_flat_scene_slices_use_apk_background_pass(self):
+        # APK b/o.a()Z checks flags & 4. b/m draws those composites into
+        # its background; otherwise they become b/l objects mixed with actors.
+        from tools.map_ref_generator import from_spec, serialize_map_ref, parse_map_ref
+        spec = json.loads((MAP_DIR / 'map.ref.json').read_text(encoding='utf-8'))
+        records, tiles = parse_map_ref(serialize_map_ref(*from_spec(spec)))
+        self.assertEqual(len(tiles), 126)
+        self.assertTrue(all(tile.flags & 4 for tile in tiles))
 
     def test_cold_login_moves_old_blocked_position_to_current_spawn(self):
         from systems.map.service import relocate_role_for_cold_login
@@ -47,7 +77,7 @@ class Map60011PackageTests(unittest.TestCase):
         settings = server.Settings.load(ROOT / 'config.json')
         role = {'id': 10084, 'map_id': 60011, 'map_x': 18, 'map_y': 30}
         self.assertTrue(relocate_role_for_cold_login(settings, role))
-        self.assertEqual((role['map_x'], role['map_y']), (59, 42))
+        self.assertEqual((role['map_x'], role['map_y']), (71, 58))
         self.assertFalse(relocate_role_for_cold_login(settings, role))
 
     def test_cold_login_shifts_positions_saved_by_the_90x90_layout(self):
@@ -56,7 +86,7 @@ class Map60011PackageTests(unittest.TestCase):
         settings = server.Settings.load(ROOT / 'config.json')
         role = {'id': 10084, 'map_id': 60011, 'map_x': 50, 'map_y': 33}
         self.assertTrue(relocate_role_for_cold_login(settings, role))
-        self.assertEqual((role['map_x'], role['map_y']), (59, 42))
+        self.assertEqual((role['map_x'], role['map_y']), (71, 58))
 
     def test_scene_images_answer_native_1502_requests(self):
         from protocol import decode_frame
@@ -100,16 +130,16 @@ class Map60011PackageTests(unittest.TestCase):
 
             map_o = MapO.from_file(built.map_o_path.read_bytes())
             self.assertEqual((map_o.width, map_o.height), (127, 127))
-            self.assertFalse(map_o.collision[(42 * 127) + 59])
-            self.assertFalse(map_o.collision[(44 * 127) + 61])
+            self.assertFalse(map_o.collision[(58 * 127) + 71])
+            self.assertFalse(map_o.collision[(59 * 127) + 72])
             self.assertTrue(map_o.collision[0])
-            for x, y in ((26, 50), (51, 25), (76, 80)):
+            for x, y in ((61, 66), (62, 51), (92, 106)):
                 self.assertTrue(map_o.collision[(y * 127) + x], (x, y))
-            for x, y in ((59, 42), (61, 45), (117, 89)):
+            for x, y in ((71, 58), (73, 59), (81, 75)):
                 self.assertFalse(map_o.collision[(y * 127) + x], (x, y))
 
-            pending = deque([(59, 42)])
-            reachable = {(59, 42)}
+            pending = deque([(71, 58)])
+            reachable = {(71, 58)}
             while pending:
                 x, y = pending.popleft()
                 for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
@@ -120,8 +150,15 @@ class Map60011PackageTests(unittest.TestCase):
                         continue
                     reachable.add(point)
                     pending.append(point)
-            self.assertIn((61, 44), reachable)
-            self.assertIn((117, 89), reachable)
+            self.assertIn((72, 59), reachable)
+            self.assertIn((81, 75), reachable)
+            # Cross the central stepping-stone shoal to the left-bank road.
+            self.assertIn((55, 70), reachable)
+            self.assertIn((61, 63), reachable)
+            self.assertIn((37, 57), reachable)
+            self.assertIn((58, 42), reachable)
+            # Open river away from the shoal stays impassable.
+            self.assertTrue(map_o.collision[66 * 127 + 61])
 
         settings = server.Settings.load(ROOT / 'config.json')
         definition = settings.map_registry.require(60011)
@@ -131,19 +168,19 @@ class Map60011PackageTests(unittest.TestCase):
             (definition.fallback_width, definition.fallback_height),
             (127, 127),
         )
-        self.assertEqual((definition.spawn_x, definition.spawn_y), (59, 42))
+        self.assertEqual((definition.spawn_x, definition.spawn_y), (71, 58))
 
         entry = settings.map_registry.portal(58, 580007)
         self.assertIsNotNone(entry)
         self.assertEqual((entry.x, entry.y), (50, 70))
         self.assertEqual(
             (entry.target_map_id, entry.target_x, entry.target_y),
-            (60011, 59, 42),
+            (60011, 71, 58),
         )
 
         back = settings.map_registry.portal(60011, 6001101)
         self.assertIsNotNone(back)
-        self.assertEqual((back.x, back.y), (61, 44))
+        self.assertEqual((back.x, back.y), (72, 59))
         self.assertEqual(
             (back.target_map_id, back.target_x, back.target_y),
             (58, 60, 67),
