@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
-from protocol import TYPE_BYTE, TYPE_INT, Field, byte, encode_frame, integer, short, string
+from protocol import TYPE_BYTE, TYPE_INT, TYPE_SHORT, Field, byte, encode_frame, integer, short, string
 from systems.consignment.registry import CONSIGNMENT_ITEM_CATEGORIES
 
 
@@ -42,10 +42,11 @@ CONSIGNMENT_ACTION_REMOVE_MARKET = 16
 
 # After screen 44 is opened by action 13, the native page requests the actual
 # market rows with one of these request actions.  The response is action 1.
-CONSIGNMENT_MARKET_REQUEST_ACTIONS = frozenset({0, 23})
+CONSIGNMENT_MARKET_REQUEST_ACTIONS = frozenset({0, 1, 23})
 
 CONSIGNMENT_OBJECT_ITEM = 1
 CONSIGNMENT_OBJECT_PET = 3
+CONSIGNMENT_DIRECT_MARKET_CATEGORIES = frozenset({26, 27})
 
 
 
@@ -60,7 +61,7 @@ class ConsignmentWireRecord:
     quantity: int
     price: int
     display_name: str
-    seller_role_id: int
+    icon_code: int
     seller_name: str = ''
 
     def own_fields(self) -> list[Field]:
@@ -72,7 +73,7 @@ class ConsignmentWireRecord:
             integer(self.quantity),
             integer(self.price),
             string(self.display_name),
-            integer(self.seller_role_id),
+            integer(self.icon_code),
         ]
 
     def market_fields(self) -> list[Field]:
@@ -80,15 +81,23 @@ class ConsignmentWireRecord:
         return [*self.own_fields(), string(self.seller_name)]
 
 
-def wire_record_from_listing(listing: Mapping[str, object]) -> ConsignmentWireRecord:
+def wire_record_from_listing(
+    listing: Mapping[str, object],
+    item_registry=None,
+) -> ConsignmentWireRecord:
+    resolved = (
+        item_registry.resolve({'template_id': int(listing['template_id'])})
+        if item_registry is not None
+        else {}
+    )
     return ConsignmentWireRecord(
         object_type=CONSIGNMENT_OBJECT_ITEM,
         item_instance_id=int(listing['item_instance_id']),
         template_id=int(listing['template_id']),
         quantity=int(listing['quantity']),
         price=int(listing['unit_price']) * int(listing['quantity']),
-        display_name=str(listing.get('display_name', '')),
-        seller_role_id=int(listing['seller_role_id']),
+        display_name=str(resolved.get('name', listing.get('display_name', ''))),
+        icon_code=int(resolved.get('icon_code', 0) or 0),
         seller_name=str(listing.get('seller_name', '')),
     )
 
@@ -142,11 +151,26 @@ def is_consignment_buy_request(fields: list[Field]) -> bool:
 
 def is_consignment_market_list_request(fields: list[Field]) -> bool:
     return bool(
-        fields
-        and len(fields) == 1
-        and fields[0].type_id == TYPE_BYTE
-        and int(fields[0].value) in CONSIGNMENT_MARKET_REQUEST_ACTIONS
+        (
+            len(fields) == 1
+            and fields[0].type_id == TYPE_BYTE
+            and int(fields[0].value) in {0, 23}
+        )
+        or (
+            len(fields) == 5
+            and tuple(field.type_id for field in fields)
+            == (TYPE_BYTE, TYPE_INT, TYPE_INT, TYPE_SHORT, TYPE_BYTE)
+            and int(fields[0].value) in CONSIGNMENT_MARKET_REQUEST_ACTIONS
+        )
     )
+
+
+def consignment_market_category(fields: list[Field]) -> int | None:
+    """Decode screen 73's ``category_id * 10 + subfilter`` value."""
+    if len(fields) != 5:
+        return None
+    category_id = int(fields[2].value) // 10
+    return category_id if 0 <= category_id < len(CONSIGNMENT_ITEM_CATEGORIES) else None
 
 
 def consignment_category_frame() -> bytes:
@@ -156,7 +180,12 @@ def consignment_category_frame() -> bytes:
         byte(len(CONSIGNMENT_ITEM_CATEGORIES)),
     ]
     for category_id, name in enumerate(CONSIGNMENT_ITEM_CATEGORIES):
-        fields.extend((byte(category_id), string(name)))
+        # ev.a(w) splits the payload into fixed-width rows.  The inherited
+        # cd helpers read row[0] as the category id and row[1] as its label;
+        # ev.b(...) reads row[2] as an int branch flag.  Flag 1 opens screen
+        # 44 and sends 1138/action 13 for the selected category.
+        branch_flag = 0 if category_id in CONSIGNMENT_DIRECT_MARKET_CATEGORIES else 1
+        fields.extend((integer(category_id), string(name), integer(branch_flag)))
     return encode_frame(CONSIGNMENT_MESSAGE_ID, fields)
 
 

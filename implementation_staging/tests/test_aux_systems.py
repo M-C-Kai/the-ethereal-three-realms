@@ -7,7 +7,10 @@ import unittest
 from pathlib import Path
 
 from app.context import SystemContext
-from protocol import Field, TYPE_BYTE, TYPE_INT, byte, decode_frame, integer, short
+from protocol import (
+    Field, TYPE_BYTE, TYPE_INT, TYPE_SHORT, TYPE_STRING,
+    byte, decode_frame, integer, short,
+)
 from systems.consignment.handler import ConsignmentSystem
 from systems.fuyuan.handler import FuyuanSystem
 from systems.pet.handler import PetSystem
@@ -137,6 +140,15 @@ class ConsignmentSystemTests(unittest.TestCase):
         message_id, payload = decode(result.frames[0])
         self.assertEqual(message_id, 1138)
         self.assertEqual(int(payload[1].value), 28)  # 原生 28 个分类
+        self.assertEqual(len(payload), 2 + (28 * 3))
+        self.assertEqual(
+            [(field.type_id, field.value) for field in payload[2:5]],
+            [(TYPE_INT, 0), (TYPE_STRING, '所有武器'), (TYPE_INT, 1)],
+        )
+        tool_row = 2 + (26 * 3)
+        material_row = 2 + (27 * 3)
+        self.assertEqual(int(payload[tool_row + 2].value), 0)
+        self.assertEqual(int(payload[material_row + 2].value), 0)
 
     def test_list_search_buy_roundtrip(self):
         role = {
@@ -159,6 +171,22 @@ class ConsignmentSystemTests(unittest.TestCase):
         self.assertTrue(result.handled)
         # 自己的寄售列表应有 1 行
         self.assertEqual(len(self.system.service.my_listings(424242)), 1)
+        # 道具分类直达 screen 73；p.i() 发送完整的原生分页请求。
+        market = self.system.handle(context, 1138, fields(
+            [1, 1900004, 260, 0, 12],
+            [TYPE_BYTE, TYPE_INT, TYPE_INT, TYPE_SHORT, TYPE_BYTE],
+        ))
+        market_message_id, market_payload = decode(market.frames[0])
+        self.assertEqual(market_message_id, 1138)
+        self.assertEqual(int(market_payload[0].value), 1)
+        self.assertEqual(int(market_payload[3].value), 1)
+        # APK pmsj/work/e/p.a(row) resolves the icon/name from template id at
+        # row[2], while row[5]/row[6] carry catalog name/icon_code.
+        self.assertEqual(int(market_payload[6].value), 260000001)
+        self.assertEqual(str(market_payload[9].value), '小还丹')
+        self.assertEqual(int(market_payload[10].value), 6109)
+        _, own_payload = decode(result.frames[-1])
+        self.assertEqual(int(own_payload[8].value), 6109)
         # 由另一名买家购买（不允许购买自己的寄售）；卖家需在角色存储中以便打款
         buyer = {
             'id': 999999,

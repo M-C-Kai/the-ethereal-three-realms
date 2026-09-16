@@ -7,7 +7,26 @@
 - action 7 / 9 / 14 / 15 -> screen 70 (`0x46`)，"已寄售物品"（我的寄售）
 - action 13 -> screen 44 (`0x2c`) 后紧接 screen 70，分类计数
 
+action 3 的 S→C 分类帧布局为
+`[BYTE 3, BYTE count, (INT category_id, STRING label, INT branch_flag) * count]`。
+`ev.a(w)` 按固定宽度切分记录，`cd.C()/cd.a()` 分别读取第 0/1 字段；
+`ev.b(...)` 读取第 2 字段为 `INT`，值 `1` 时打开 screen 44 并发送 action 13。
+装备分类使用该分支；“道具”和“材料”的分支值为 `0`，由 `ev.b(...)` 直接打开
+screen 73，避免进入只适用于装备的品阶筛选页。screen 73 的原生列表请求为
+`[BYTE action, INT client_hint, INT filter, SHORT page, BYTE page_size]`；`filter`
+以 `category_id * 10 + subfilter` 编码，服务端以整除 `10` 还原分类。
+
 因此 action 13 不能只返回 `[13, 0]` 这种通用空计数；screen 44 使用 count/filter vector，随后客户端再通过 action 0/23 请求市场行，服务端以 action 1 返回市场记录。
+
+市场行固定 8 字段、我的寄售行固定 7 字段。APK `pmsj/work/e/p.smali` 与
+`pmsj/work/e/t.smali` 都以第 2 字段的模板 ID 调用客户端物品资料库，并把第 5/6
+字段分别作为显示名称与图标编号 `icon_code`；第 7 字段才是市场行卖家名。
+第 6 字段不是品质：完整反编译 `pmsj/work/a/k.a(IIII)` 将该参数乘 10，
+再与 `b/j.j(template_id)` 得到的模板末位品质组合成 `#(0,icon_code*10+quality)`。
+背包 `b/j.q()` 使用完全相同的调用，其 `q:S` 来自 1008 第 12 字段（图标编号）。
+证据等级 B；服务端必须通过统一 `ItemRegistry` 解析名称和图标编号，不能填入
+卖家角色 ID 或品质。2026-09-15 修正先前“视觉品质参数”的错误结论。
+回归覆盖 1138/action 1、action 9 图标字段；真机状态：pending real-device verification。
 
 ## 寄售途径（screen 70 的原生上架入口）
 
@@ -35,15 +54,13 @@ action 7 即可；上架成功的 action 9 应答会再次路由回 screen 70 �
 | 4 | 寄售仙晶 | exchange 系统认领，`1010` 开屏 351（mode 1 卖出仙晶下单页） |
 | 5 | 求购仙晶 | exchange 系统认领，`1010` 开屏 351（mode 0 买入仙晶下单页） |
 
-## 角色 id 校验（真机兼容）
+## 请求身份绑定（真机兼容）
 
-寄售请求（action 7/9/2/4）携带的角色 id 来自客户端 `pmsj/work/b/m.h()`（字段
-`b/m.ad`，默认 0）。本客户端构建中该值**恒为 0**：1014 出现流明确跳过自己的
-actor，地图入场帧（1010 action 13/14/105）也不回填此字段，唯一写入点是
-`1010` 开屏 action 63（服务端未使用）。因此服务端把每个请求绑定到**会话当前
-角色**，客户端携带的 id 只作提示性校验：`> 0 且不匹配会话角色` 时才拒绝
-（例如切换角色后残留的旧页面）。切勿恢复"必须精确匹配"的旧校验，否则真机
-全部寄售/购买操作都会报"寄售角色信息已失效"。
+寄售请求（action 7/9/2/4）的该 `INT` 字段来自客户端 `pmsj/work/b/m.h()`。
+2026-09-15 真机日志确认：角色 `10084` 点击寄售商人 `1900004` 后，screen 70 发送
+`1138 [7, INT 1900004]`，因此该值不能视为可靠的当前角色 ID，也不得用于查找或切换角色。
+服务端将所有寄售请求只绑定到已认证连接的**会话当前角色**，并忽略该客户端提示值。
+这不会放宽跨角色权限：资产操作仍始终针对 `context.active_role`。
 
 ## C->S 发送点（已逐行确认）
 

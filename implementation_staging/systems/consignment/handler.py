@@ -9,7 +9,7 @@ from protocol import encode_frame, integer, short
 from systems.consignment.protocol import (
     CONSIGNMENT_ACTION_LIST, CONSIGNMENT_ITEM_CATEGORIES, CONSIGNMENT_OBJECT_ITEM,
     CONSIGNMENT_OBJECT_PET, consignment_category_counts_frame,
-    consignment_category_frame, consignment_market_list_frame,
+    consignment_category_frame, consignment_market_category, consignment_market_list_frame,
     consignment_my_listings_frame, consignment_my_screen_frame,
     consignment_remove_market_frame,
     consignment_remove_owned_frame, consignment_screen_frame,
@@ -34,18 +34,6 @@ CONSIGNMENT_MY_LISTINGS_OPTION = 2
 EXCHANGE_MERCHANT_DIALOGUE_OPTION = 3
 EXCHANGE_SELL_DIALOGUE_OPTION = 4
 EXCHANGE_BUY_DIALOGUE_OPTION = 5
-
-
-def client_role_id_mismatch(requested_role: int, role_id: int) -> bool:
-    """Whether the client-declared role id contradicts the session role.
-
-    The APK trade screens read the player id from ``pmsj.work.b/m.h()``, which
-    this client build never populates (it stays 0 unless a server frame
-    explicitly sets it), so the server binds every request to the session's
-    active role and only treats a *positive* contradicting id as an error
-    (e.g. a stale screen left open after a role switch).
-    """
-    return int(requested_role) > 0 and int(requested_role) != int(role_id)
 
 
 class ConsignmentSystem:
@@ -97,9 +85,12 @@ class ConsignmentSystem:
             return RouteResult.handled((consignment_category_counts_frame([total]),))
 
         if is_consignment_market_list_request(fields):
+            requested_category = consignment_market_category(fields)
+            if requested_category is not None:
+                session['consignment.category'] = requested_category
             category_id = int(session.get('consignment.category', 0))
             rows = self.service.search(category_id)
-            records = [wire_record_from_listing(row) for row in rows]
+            records = [wire_record_from_listing(row, self._item_registry) for row in rows]
             LOG.info(
                 'CONSIGNMENT_MARKET_LIST user=%r role_id=%d category=%d count=%d request_action=%d',
                 username,
@@ -112,7 +103,7 @@ class ConsignmentSystem:
 
         if is_consignment_my_listings_request(fields):
             requested_role = int(fields[1].value)
-            if role is None or client_role_id_mismatch(requested_role, role_id):
+            if role is None:
                 LOG.warning(
                     'CONSIGNMENT_MY_REJECT user=%r role_id=%d requested=%d',
                     username, role_id, requested_role,
@@ -121,7 +112,7 @@ class ConsignmentSystem:
             rows = self.service.my_listings(role_id)
             return RouteResult.handled((
                 consignment_my_listings_frame(
-                    [wire_record_from_listing(row) for row in rows]
+                    [wire_record_from_listing(row, self._item_registry) for row in rows]
                 ),
             ))
 
@@ -151,7 +142,7 @@ class ConsignmentSystem:
         requested_role = int(fields[3].value)
         quantity = int(fields[4].value)
         unit_price = int(fields[5].value)
-        if role is None or client_role_id_mismatch(requested_role, role_id):
+        if role is None:
             return RouteResult.handled((top_message_frame('寄售角色信息已失效'),))
         if object_type == CONSIGNMENT_OBJECT_PET:
             return RouteResult.handled((top_message_frame('宠物寄售暂未开放'),))
@@ -177,7 +168,7 @@ class ConsignmentSystem:
             ))
         own = self.service.my_listings(role_id)
         updates.append(consignment_my_listings_frame(
-            [wire_record_from_listing(row) for row in own],
+            [wire_record_from_listing(row, self._item_registry) for row in own],
             action=CONSIGNMENT_ACTION_LIST,
         ))
         LOG.info(
@@ -197,7 +188,6 @@ class ConsignmentSystem:
         requested_role = int(fields[3].value)
         if (
             role is None
-            or client_role_id_mismatch(requested_role, role_id)
             or object_type != CONSIGNMENT_OBJECT_ITEM
         ):
             return RouteResult.handled((top_message_frame('下架请求无效'),))
@@ -216,7 +206,7 @@ class ConsignmentSystem:
         username = context.username
         item_id = int(fields[1].value)
         requested_buyer = int(fields[2].value)
-        if role is None or client_role_id_mismatch(requested_buyer, role_id):
+        if role is None:
             return RouteResult.handled((top_message_frame('购买请求无效'),))
         result = self.service.buy(role, item_id)
         if not result.ok:
