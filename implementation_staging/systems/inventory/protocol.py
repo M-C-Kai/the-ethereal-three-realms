@@ -162,10 +162,16 @@ def item_frame(
         innate_attributes = list(item.get('innate_attributes', resolved.get('innate_attributes', [0, 0, 0, 0, 0])))
         acquired_attributes = list(item.get('acquired_attributes', resolved.get('acquired_attributes', [0, 0, 0, 0, 0])))
         extra_attributes = list(item.get('extra_attributes', resolved.get('extra_attributes', [0, 0, 0, 0, 0])))
-        fields.extend(short(int(value)) for value in (base_attributes + [0] * 4)[:4])
+        category = (int(item['template_id']) // 10_000_000) % 100
+        # APK main/e.Z -> b/g.c(): only categories 1..10 consume these
+        # four blocks. The additional short slots are unknown, not durability.
+        native_equipment = 1 <= category <= 10
+        short_count = 8 if native_equipment else 4
+        fields.extend(short(int(value)) for value in (base_attributes + [0] * short_count)[:short_count])
         fields.extend(byte(int(value)) for value in (innate_attributes + [0] * 5)[:5])
         fields.extend(byte(int(value)) for value in (acquired_attributes + [0] * 5)[:5])
-        fields.extend(short(int(value)) for value in (extra_attributes + [0] * 5)[:5])
+        extra_encoder = integer if native_equipment else short
+        fields.extend(extra_encoder(int(value)) for value in (extra_attributes + [0] * 5)[:5])
     return encode_frame(1008, fields)
 
 

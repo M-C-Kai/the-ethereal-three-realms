@@ -36,6 +36,29 @@ def weapon_of(role, registry):
 
 
 class InventoryHelperTests(unittest.TestCase):
+    def test_equipment_record_matches_apk_blocks_without_attribute_shift(self):
+        from protocol import TYPE_SHORT, TYPE_BYTE, TYPE_INT
+        from systems.inventory.protocol import item_frame
+        item = {'id': 8, 'template_id': 10000001, 'location': 'bag',
+                'equipment_attributes': [11, 12, 13, 14],
+                'innate_attributes': [1, 2, 3, 4, 5],
+                'acquired_attributes': [6, 7, 8, 9, 10],
+                'extra_attributes': [40000, 2, 3, 4, 5]}
+        message, fields = decode_frame(item_frame(item))
+        self.assertEqual(message, 1008)
+        self.assertEqual(len(fields), 39)
+        self.assertEqual([(f.type_id, f.value) for f in fields[16:24]],
+                         [(TYPE_SHORT, v) for v in [11, 12, 13, 14, 0, 0, 0, 0]])
+        self.assertEqual([(f.type_id, f.value) for f in fields[24:34]],
+                         [(TYPE_BYTE, v) for v in range(1, 11)])
+        self.assertEqual([(f.type_id, f.value) for f in fields[34:39]],
+                         [(TYPE_INT, v) for v in [40000, 2, 3, 4, 5]])
+
+    def test_non_equipment_record_keeps_common_fields_only(self):
+        from systems.inventory.protocol import item_frame
+        _, fields = decode_frame(item_frame({'id': 8, 'template_id': 260000001}))
+        self.assertEqual(len(fields), 16)
+
     @classmethod
     def setUpClass(cls):
         cls.settings, cls.game = make_game()
