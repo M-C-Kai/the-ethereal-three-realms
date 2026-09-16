@@ -13,6 +13,8 @@ __pycache__/
 /implementation_staging/data/roles.*.json
 /implementation_staging/data/accounts.json
 /implementation_staging/data/gangs.json
+/implementation_staging/data/consignment_listings.json
+/implementation_staging/data/exchange_orders.json
 /implementation_staging/data/sprite_catalog.json
 /implementation_staging/logs/
 /implementation_staging/runtime/
