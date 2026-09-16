@@ -119,6 +119,37 @@ class SocialSystemTests(unittest.TestCase):
         self.assertEqual(message_id, 1049)  # 顶部提示
 
     # ------------------------------------------------------------------
+    # 1089/action=2 附加列编码（e/ey.b(w) + k()，B 级）
+    # ------------------------------------------------------------------
+    def test_character_view_rows_default_is_empty_table(self):
+        from systems.social.protocol import character_view_rows_frame
+        message_id, fields = self._decode(character_view_rows_frame())
+        self.assertEqual(message_id, 1089)
+        self.assertEqual(int(fields[0].value), 2)   # action=2
+        self.assertEqual(int(fields[1].value), 0)   # field1 占位 int
+        self.assertEqual(int(fields[2].value), 0)   # 0 列
+        self.assertEqual(len(fields), 3)            # 总数 3+2*0
+
+    def test_character_view_rows_with_columns(self):
+        from systems.social.protocol import character_view_rows_frame
+        columns = [(1001, 250), (-7, 88)]
+        message_id, fields = self._decode(character_view_rows_frame(columns))
+        self.assertEqual(message_id, 1089)
+        self.assertEqual(int(fields[0].value), 2)
+        self.assertEqual(int(fields[1].value), 0)
+        self.assertEqual(int(fields[2].value), 2)   # 列数 N=2
+        self.assertEqual(len(fields), 3 + 2 * 2)    # 总数 3+2N
+        self.assertEqual(int(fields[3].value), 1001)  # 列0 图标下标
+        self.assertEqual(int(fields[4].value), 250)   # 列0 数值
+        self.assertEqual(int(fields[5].value), -7)    # 列1 图标下标
+        self.assertEqual(int(fields[6].value), 88)    # 列1 数值
+
+    def test_character_view_rows_rejects_wrong_column_shape(self):
+        from systems.social.protocol import character_view_rows_frame
+        with self.assertRaises(ValueError):
+            character_view_rows_frame([(1,)])  # 非法列（须为 (图标, 数值)）
+
+    # ------------------------------------------------------------------
     # 加友（1019）
     # ------------------------------------------------------------------
     def test_friend_request_prompt_and_accept(self):

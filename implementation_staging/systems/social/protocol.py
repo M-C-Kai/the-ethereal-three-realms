@@ -67,12 +67,24 @@ def player_view_frame(settings, role: dict[str, object], actor_id: int) -> bytes
     return encode_frame(1303, fields)
 
 
-def character_view_rows_frame() -> bytes:
-    """S→C 1089/action=2：e/ey.b(w) 查看面板附加行（当前为空表）。
+def character_view_rows_frame(columns: list[tuple[int, int]] | None = None) -> bytes:
+    """S→C 1089/action=2：e/ey.b(w) 查看面板附加列。
 
-    e/ey.b 只读字段 2 的行数（byte）；0 行时直接刷新面板。
+    帧布局 `[byte 2, int 0, byte N, int...]`（N=列数）：
+        - field 2 为列数（byte），客户端 `rows=(字段总数-3)/columns`；
+        - 之后每列 2 个 int：数字图标图集下标、数值（>0 绿 / ≤0 黄）。
+        每列恰 2 值，故字段总数为 3+2N。
+    APK 证据：ey.smali `b(w)`(1758) + `k()`(674)、a/c/x.smali `a(IIw)`(2138)，
+    证据等级 B 级（见 docs/development/APK_VERIFICATION_1089_ACTION2.md v1.1）。
+
+    columns 为空（None/[]）时输出 `[byte 2, int 0, byte 0]`，客户端 0 行刷新，
+    保持既有安全默认（属性→图标映射仍为 C 级，内容由上层配置决定）。
     """
-    return encode_frame(1089, [byte(2), integer(0), byte(0)])
+    columns = columns or []
+    fields: list[object] = [byte(2), integer(0), byte(len(columns))]
+    for icon, value in columns:
+        fields.extend([integer(int(icon)), integer(int(value))])
+    return encode_frame(1089, fields)
 
 
 # ---------------------------------------------------------------------------
