@@ -24,6 +24,13 @@ def load_settings():
 
 
 class RoleStoreTests(unittest.TestCase):
+    def test_battle_speed_matches_live_character_attribute(self):
+        from systems.role.service import combat_stats, effective_character_stats
+        role = {'level': 1, 'stats': [10, 10, 10, 10, 23], 'items': []}
+        self.assertEqual(combat_stats(role).speed, 23)
+        role['stats'][4] = 41
+        self.assertEqual(combat_stats(role).speed, effective_character_stats(role)[4])
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.settings = load_settings()

@@ -72,6 +72,7 @@ class CombatStats:
     max_hp: int
     physical_attack: int
     physical_defence: int
+    speed: int = 0
 
 
 def equipped_attribute_totals(
@@ -178,6 +179,7 @@ def combat_stats(
         max_hp=fuyuan.hp_limit(role, 100 + ((level - 1) * 10) + base_stats[1]),
         physical_attack=(10 + base_stats[0] + ((level - 1) * 2) + equipment[0]),
         physical_defence=base_stats[1] + (level - 1) + equipment[1],
+        speed=effective_character_stats(role, registry)[4],
     )
 MAX_ROLE_LEVEL = 99
 LEVEL_BASE_STAT_GAIN = 1
