@@ -625,6 +625,17 @@ def map_npc_for_object_id(
 
 
 
+def map_auto_grind_start_frame() -> bytes:
+    """1010 action is SHORT field 5 in APK main/e (not C->S field 0).
+
+    Action 280 reads no other fields; unused header fields stay zero.
+    The APK records the current tile as its client-side roaming origin.
+    """
+    return encode_frame(1010, [
+        integer(0), short(0), short(0), integer(0), integer(0), short(280),
+    ])
+
+
 def map_object_remove_frame(object_id: int) -> bytes:
     """Remove a generic 1126 actor via verified ``1010/action=18``.
 

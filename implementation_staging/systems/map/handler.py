@@ -16,7 +16,7 @@ from systems.map.protocol import (
     ROAMING_BOSS_TARGET_X, ROAMING_BOSS_TARGET_Y,
     dynamic_map_enter_frames, is_map_pathfind_request,
     is_roaming_boss_definition, map_actor_move_frame,
-    map_data_frames, map_movement_final_tile, map_npc_frame,
+    map_auto_grind_start_frame, map_data_frames, map_movement_final_tile, map_npc_frame,
     map_npc_dialogue_frames, map_npc_for_object_id, map_monster_for_object_id,
     map_npcs_near, map_object_interaction_ack_frame, map_object_interaction_values,
     map_object_remove_frame, map_pathfind_frame, npc_dialogue_option_frames,
@@ -303,6 +303,9 @@ class MapSystem:
         if not values:
             return RouteResult.not_handled()
         action = int(values[0])
+        if action == 280:
+            LOG.info('client requested native auto grind start')
+            return RouteResult.handled((map_auto_grind_start_frame(),))
         if action == 12:
             current_settings = settings_for_role(self.settings, role)
             LOG.info('client requested map data map=%d', current_settings.id)

@@ -74,6 +74,24 @@ class MapSystemHandlerTests(unittest.TestCase):
         self.assertEqual(decoded[-1][1][4].value, 1)
         self.assertEqual(decoded[-1][1][5].value, 12)
 
+    def test_auto_grind_request_returns_native_short_start_ack(self):
+        # APK k menu sends 1010/SHORT 280; e's matching branch records
+        # the local origin. Missing ack leaves client-side roaming inactive.
+        from protocol import TYPE_SHORT
+        role = {'id': 10001, 'map_id': 58, 'map_x': 60, 'map_y': 67}
+        original = dict(role)
+        context = self._context(role, {})
+        for _ in range(2):
+            result = self.system.handle(context, 1010, [Field(TYPE_SHORT, 280)])
+            self.assertTrue(result.handled)
+            self.assertEqual(len(result.frames), 1)
+            message_id, fields = decode_frame(result.frames[0])
+            self.assertEqual(message_id, 1010)
+            self.assertEqual([(field.type_id, field.value) for field in fields],
+                             [(TYPE_INT, 0), (TYPE_SHORT, 0), (TYPE_SHORT, 0),
+                              (TYPE_INT, 0), (TYPE_INT, 0), (TYPE_SHORT, 280)])
+        self.assertEqual(role, original)
+
     def test_pathfind_known_target(self):
         # 采集目标 6001 位于 58 号地图 (12,8)
         role = {'map_id': 58}
