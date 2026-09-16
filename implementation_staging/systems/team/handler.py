@@ -61,7 +61,7 @@ class TeamSystem:
                 self.registry.clear_pending_for(member_id)
                 if member_id != role_id and member_id in online:
                     self.push_to_role(member_id, (
-                        team_role_flag_frame(member_id, False), disband_frame(),
+                        leader_flag_frame(member_id, False), disband_frame(),
                     ))
             return RouteResult.handled((leader_flag_frame(role_id, False), disband_frame()))
 
@@ -96,11 +96,14 @@ class TeamSystem:
                         self._entry_id(member_id, target_id)),))
             if target_id != role_id and target_id in online:
                 self.push_to_role(target_id, (
-                    team_role_flag_frame(target_id, False), disband_frame(),
+                    leader_flag_frame(target_id, False), disband_frame(),
                 ))
             self._push_follow_chains(team, online)
             if target_id == role_id:
-                return RouteResult.handled((disband_frame(),))
+                # 主动离队：1023/11 清花名册，同时清自己的 prop0 队员位
+                return RouteResult.handled((
+                    leader_flag_frame(role_id, False), disband_frame(),
+                ))
             return RouteResult.handled((
                 member_removed_frame(target_id), top_message_frame('队员已离队'),
             ))
@@ -386,14 +389,31 @@ class TeamSystem:
                  role_id, team.leader_id, team.members)
 
     def on_disconnect(self, role_id: int) -> None:
+        """断线清理：注册表移除 + 留存客户端的花名册/prop0/跟随链同步。
+
+        队员掉线：其余成员按各自视角收 1023/1（他人 = actor id，
+        aa.a(id) 才能在本机行内命中并移除该行），随后重建 1038 链。
+        队长掉线 = 解散：1023/11 清花名册，并清每个留存者的 prop0 位
+        （aa.i() 不清 prop0，缺位会让"队伍"菜单仍判已组队）。
+        """
+        role_id = int(role_id)
         self.registry.clear_pending_for(role_id)
         team, remaining = self.registry.leave(role_id)
         if team is None:
             return
-        frame = disband_frame() if team.leader_id == role_id else member_removed_frame(role_id)
+        online = self.online_role_ids()
+        if team.leader_id == role_id:
+            for member_id in remaining:
+                if member_id != role_id and member_id in online:
+                    self.push_to_role(member_id, (
+                        leader_flag_frame(member_id, False), disband_frame(),
+                    ))
+            return
         for member_id in remaining:
-            if member_id != role_id and member_id in self.online_role_ids():
-                self.push_to_role(member_id, (frame,))
+            if member_id != role_id and member_id in online:
+                self.push_to_role(member_id, (member_removed_frame(
+                    self._entry_id(member_id, role_id)),))
+        self._push_follow_chains(team, online)
 
     def follow_movement_frame(self, leader_id: int, member_id: int, x: int, y: int) -> bytes | None:
         """Replace the member's 1005 leader update with a native 1038 chain.

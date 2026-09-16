@@ -178,6 +178,88 @@ class TeamSystemTests(unittest.TestCase):
                             for mid, fields in self.decoded(10002)))
         self.assertTrue(any(mid == 1038 for mid, _ in self.decoded(10002)))
 
+    def test_self_leave_clears_member_flag_and_roster(self):
+        self.send(self.alice, 0, 10001)
+        self.send(self.alice, 2, player_actor_object_id(10002))
+        self.send(self.bob, 3, 10001)
+        # 乙已带 0x200000 队员位；离队后应答必须把它清零
+        result = self.send(self.bob, 1, 10002)
+        flags = [fields for mid, fields in (decode_frame(frame) for frame in result.frames)
+                 if mid == 1017]
+        self.assertTrue(flags and int(flags[0][4].value) == 0)
+        self.assertTrue(any(mid == 1023 and fields[0].value == 11
+                            for mid, fields in (decode_frame(frame) for frame in result.frames)))
+        self.assertIsNone(self.team.registry.team_of(10002))
+
+    def test_kicked_member_gets_flag_cleared(self):
+        self.send(self.alice, 0, 10001)
+        self.send(self.alice, 2, player_actor_object_id(10002))
+        self.send(self.bob, 3, 10001)
+        self.pushed = {10001: [], 10002: []}
+        # et 菜单发的是行内条目 id（他人 = actor id）
+        self.send(self.alice, 12, player_actor_object_id(10002))
+        flags = [fields for mid, fields in self.decoded(10002) if mid == 1017]
+        self.assertTrue(flags and int(flags[0][4].value) == 0)
+        self.assertTrue(any(mid == 1023 and fields[0].value == 11
+                            for mid, fields in self.decoded(10002)))
+        # 留存者（队长）收到按其视角定制的移除行（他人=actor id）
+        self.assertTrue(any(mid == 1023 and fields[0].value == 1
+                            and int(fields[1].value) == player_actor_object_id(10002)
+                            for mid, fields in self.decoded(10001)))
+
+    def test_promote_by_actor_id_input_reorders_and_reflags(self):
+        self.send(self.alice, 0, 10001)
+        self.send(self.alice, 2, player_actor_object_id(10002))
+        self.send(self.bob, 3, 10001)
+        self.pushed = {10001: [], 10002: []}
+        # et 行内条目 id（乙在甲端 = actor id）
+        result = self.send(self.alice, 20, player_actor_object_id(10002))
+        team = self.team.registry.team_of(10002)
+        self.assertEqual(team.leader_id, 10002)
+        self.assertEqual(team.members, [10002, 10001])
+        for role_id in (10001, 10002):
+            frames = self.decoded(role_id)
+            entry = player_actor_object_id(10002) if role_id != 10002 else 10002
+            self.assertTrue(any(mid == 1023 and fields[0].value == 20
+                                and int(fields[1].value) == entry
+                                for mid, fields in frames))
+            # 新队长旗(0x40)+旧队长降为队员位(0x200000) 都按接收方定制
+            flags = [fields for mid, fields in frames if mid == 1017]
+            self.assertEqual(len(flags), 2)
+            values = {(int(f[1].value), int(f[4].value)) for f in flags}
+            new_leader_entry = player_actor_object_id(10002) if role_id != 10002 else 10002
+            old_leader_entry = player_actor_object_id(10001) if role_id != 10001 else 10001
+            self.assertIn((new_leader_entry, 0x40), values)
+            self.assertIn((old_leader_entry, 0x200000), values)
+
+    def test_member_disconnect_removes_roster_row_on_leader(self):
+        self.send(self.alice, 0, 10001)
+        self.send(self.alice, 2, player_actor_object_id(10002))
+        self.send(self.bob, 3, 10001)
+        self.pushed = {10001: [], 10002: []}
+        self.team.on_disconnect(10002)
+        self.assertIsNone(self.team.registry.team_of(10002))
+        # 队长收到 1023/1，目标 = 乙的 actor id（甲端行内条目 id）
+        self.assertTrue(any(mid == 1023 and fields[0].value == 1
+                            and int(fields[1].value) == player_actor_object_id(10002)
+                            for mid, fields in self.decoded(10001)))
+        # 仅剩队长一人时无跟随者，无需 1038；1023/1 的原生 aa.h()
+        # 分支会在队长客户端清掉指向已移除成员的旧链。
+
+    def test_leader_disconnect_disbands_and_clears_member_flags(self):
+        self.send(self.alice, 0, 10001)
+        self.send(self.alice, 2, player_actor_object_id(10002))
+        self.send(self.bob, 3, 10001)
+        self.pushed = {10001: [], 10002: []}
+        self.team.on_disconnect(10001)
+        # 全队解散，乙的 prop0 位被清零
+        self.assertIsNone(self.team.registry.team_of(10002))
+        frames = self.decoded(10002)
+        self.assertTrue(any(mid == 1023 and fields[0].value == 11
+                            for mid, fields in frames))
+        flags = [fields for mid, fields in frames if mid == 1017]
+        self.assertTrue(flags and int(flags[0][4].value) == 0)
+
     def test_router_has_single_team_owner(self):
         game = server.LocalGameServer(self.settings)
         self.assertEqual(
