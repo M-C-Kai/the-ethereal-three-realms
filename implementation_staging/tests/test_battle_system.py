@@ -28,6 +28,29 @@ def make_game():
 
 
 class LocalBattleStateTests(unittest.TestCase):
+    def test_all_living_monsters_act_in_speed_order(self):
+        from systems.battle.protocol import battle_round_action_frames
+        state = LocalBattleState()
+        state.begin(7, 100, monster_ids=(100, 101, 102))
+        state.initiative = {7: (10, 2), 100: (20, 0), 101: (10, 3), 102: (10, 2)}
+        frames, ended = battle_round_action_frames(state, 1, target_id=102)
+        self.assertEqual([decode_frame(f)[1][1].value for f in frames], [100, 101, 7, 102])
+        self.assertEqual(state.player_hp, 70)
+        self.assertFalse(ended)
+
+    def test_dead_monster_and_player_do_not_act(self):
+        from systems.battle.protocol import battle_round_action_frames
+        state = LocalBattleState()
+        state.begin(7, 100, monster_ids=(100, 101))
+        state.player_attack = 1000
+        frames, _ = battle_round_action_frames(state, 1, target_id=100)
+        self.assertEqual([decode_frame(f)[1][1].value for f in frames], [7, 101])
+        state.begin(7, 100, monster_ids=(100, 101))
+        state.player_hp = 1
+        state.initiative = {100: (1, 0)}
+        frames, _ = battle_round_action_frames(state, 1, target_id=101)
+        self.assertEqual([decode_frame(f)[1][1].value for f in frames], [100])
+
     def test_image_resolution_diagnostic_handles_map_image(self):
         from systems.battle.protocol import battle_image_resolve_debug
 
@@ -156,6 +179,13 @@ class BattleHandlerTests(unittest.TestCase):
         # 1040 action=2 ack（怪物血量归零）
         state.apply_basic_attack(damage=10 ** 6, target_id=monster_id)
         result = self.system.handle(self._context(), 1040, [_F(2), _F(1)])
+        if not state.all_monsters_defeated():
+            self.assertEqual(result.frames, ())
+            self.assertTrue(state.active)
+        for actor in state.monster_ids:
+            state.apply_basic_attack(damage=10 ** 6, target_id=actor)
+        state.phase = 'round_ack'
+        result = self.system.handle(self._context(), 1040, [_F(2), _F(2)])
         self.assertTrue(result.handled)
         message_ids = [decode_frame(frame)[0] for frame in result.frames]
         self.assertIn(1040, message_ids)   # battle_end

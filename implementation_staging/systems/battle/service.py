@@ -17,6 +17,19 @@ from systems.role.service import CombatStats, MAX_ROLE_LEVEL, apply_one_level
 LOG = logging.getLogger('piaomiao-local')
 
 
+def ordered_combatants(ids, initiative, preferred_id):
+    """User-confirmed rule; missing authoritative values remain unknown/zero.
+
+    Stable input order resolves monster-only ties, a local compatibility rule.
+    No APK Property or character level is guessed as an initiative source.
+    """
+    return sorted(ids, key=lambda actor: (
+        -initiative.get(actor, (0, 0))[0],
+        -initiative.get(actor, (0, 0))[1],
+        actor != preferred_id,
+    ))
+
+
 @dataclass
 class PvpDuel:
     """一场双人即时对决（切磋/PK）的共享权威状态。
@@ -32,6 +45,7 @@ class PvpDuel:
     b_id: int
     stats: dict[int, CombatStats]
     hp: dict[int, int]
+    initiative: dict[int, tuple[int, int]] = field(default_factory=dict)
     round: int = 0
     finished: bool = False
     seq: int = 0
@@ -75,6 +89,7 @@ class LocalBattleState:
     monster_id: int = 0
     monster_ids: tuple[int, ...] = ()
     monster_hp_by_id: dict[int, int] = field(default_factory=dict)
+    initiative: dict[int, tuple[int, int]] = field(default_factory=dict)
     player_hp: int = 100
     player_max_hp: int = 100
     monster_hp: int = 100
@@ -122,6 +137,8 @@ class LocalBattleState:
         self.player_id = player_id
         self.monster_id = monster_id
         self.monster_ids = encounter_ids
+        self.initiative.clear()
+        self.initiative[player_id] = (selected_stats.speed, 0)
         self.player_max_hp = max(1, selected_stats.max_hp)
         self.player_hp = self.player_max_hp
         self.monster_max_hp = 100

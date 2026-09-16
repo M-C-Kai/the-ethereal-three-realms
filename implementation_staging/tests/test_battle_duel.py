@@ -56,6 +56,22 @@ class DuelEngineTests(unittest.TestCase):
         self.assertTrue(self.system.start_duel(self.roles[10001], self.roles[10002]))
         self.assertIsNone(self.system.start_duel(self.roles[10001], self.roles[10002]))
 
+    def test_equal_initiative_defender_acts_first(self):
+        self.system.start_duel(self.roles[10001], self.roles[10002])
+        result = self.system.handle(self.alice_ctx, 1041, [integer(1)])
+        self.assertEqual([decode_frame(f)[1][1].value for f in result.frames
+                          if decode_frame(f)[0] == 1042], [10002, 10001])
+
+    def test_speed_then_divine_level_override_defender_tie(self):
+        for priorities in ({10001: (20, 0), 10002: (10, 99)},
+                           {10001: (10, 2), 10002: (10, 1)}):
+            self.system.duels.clear()
+            self.system.start_duel(self.roles[10001], self.roles[10002])
+            self.system.duels[10001].initiative = priorities
+            result = self.system.handle(self.bob_ctx, 1041, [integer(1)])
+            self.assertEqual([decode_frame(f)[1][1].value for f in result.frames
+                              if decode_frame(f)[0] == 1042], [10001, 10002])
+
     def test_duel_round_applies_damage_to_both_sides(self):
         self.system.start_duel(self.roles[10001], self.roles[10002])
         self.pushed.clear()

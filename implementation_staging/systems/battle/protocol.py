@@ -616,37 +616,38 @@ def battle_round_action_frames(
 ) -> tuple[list[bytes], bool]:
     """Resolve one supported player command and keep wire HP effects in sync."""
     action_round = state.round if round_number is None else round_number
-    if command_code == 1:
-        selected_target = state.monster_id if target_id is None else int(target_id)
-        if selected_target not in state.monster_ids or state.monster_hp_for(selected_target) <= 0:
-            return [], False
-        player_damage = state.player_basic_attack_damage()
-        monster_defeated = state.apply_basic_attack(player_damage, target_id=selected_target)
-        frames = [battle_action_frame(
-            state,
-            action_round,
-            target_id=selected_target,
-            damage=player_damage,
-        )]
-    elif command_code == 2:
-        monster_defeated = False
-        frames = [battle_defend_frame(state, action_round)]
-    else:
+    from systems.battle.service import ordered_combatants
+    selected_target = state.monster_id if target_id is None else int(target_id)
+    if command_code not in (1, 2):
         return [], False
-
-    counterattacker = state.monster_id if command_code == 2 else selected_target
-    if not monster_defeated and state.monster_hp_for(counterattacker) > 0:
-        monster_damage = state.monster_basic_attack_damage(defending=command_code == 2)
-        state.player_hp = max(0, state.player_hp - monster_damage)
-        frames.append(battle_action_frame(
-            state,
-            action_round,
-            actor_id=counterattacker,
-            target_id=state.player_id,
-            damage=monster_damage,
-            label='妖兽攻击',
-        ))
-    return frames, monster_defeated
+    if command_code == 1 and (selected_target not in state.monster_ids
+                             or state.monster_hp_for(selected_target) <= 0):
+        return [], False
+    frames = []
+    defending = False
+    for actor in ordered_combatants(
+        (state.player_id, *state.monster_ids), state.initiative, state.player_id,
+    ):
+        if state.player_hp <= 0 or state.all_monsters_defeated():
+            break
+        if actor == state.player_id:
+            if command_code == 2:
+                defending = True
+                frames.append(battle_defend_frame(state, action_round))
+            else:
+                damage = state.player_basic_attack_damage()
+                state.apply_basic_attack(damage, target_id=selected_target)
+                frames.append(battle_action_frame(
+                    state, action_round, target_id=selected_target, damage=damage,
+                ))
+        elif state.monster_hp_for(actor) > 0:
+            damage = state.monster_basic_attack_damage(defending=defending)
+            state.player_hp = max(0, state.player_hp - damage)
+            frames.append(battle_action_frame(
+                state, action_round, actor_id=actor, target_id=state.player_id,
+                damage=damage, label='妖兽攻击',
+            ))
+    return frames, state.all_monsters_defeated()
 
 
 def battle_move_frame(

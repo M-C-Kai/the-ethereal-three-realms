@@ -108,6 +108,7 @@ class BattleSystem:
             a_id=challenger_id,
             b_id=defender_id,
             stats=stats,
+            initiative={actor: (values.speed, 0) for actor, values in stats.items()},
             hp={
                 challenger_id: stats[challenger_id].max_hp,
                 defender_id: stats[defender_id].max_hp,
@@ -196,25 +197,23 @@ class BattleSystem:
             self.duels.pop(duel.b_id, None)
             return RouteResult.handled((battle_end_frame(),))
         frames: list[bytes] = []
-        if command_code == 1:
-            damage = duel.attack_damage(attacker_id, defender_id)
-            duel.apply_damage(defender_id, damage)
+        from systems.battle.service import ordered_combatants
+        defending = False
+        for actor in ordered_combatants(duel.participants(), duel.initiative, duel.b_id):
+            if duel.someone_dead():
+                break
+            if actor == attacker_id and command_code == 2:
+                defending = True
+                frames.append(duel_defend_frame(duel, action_round, actor_id=actor))
+                continue
+            target = duel.opponent_of(actor)
+            damage = duel.attack_damage(actor, target)
+            if target == attacker_id and defending:
+                damage = max(1, damage // 2)
+            duel.apply_damage(target, damage)
             frames.append(duel_action_frame(
-                duel, action_round,
-                actor_id=attacker_id, target_id=defender_id,
+                duel, action_round, actor_id=actor, target_id=target,
                 damage=damage, label='普通攻击',
-            ))
-        else:
-            frames.append(duel_defend_frame(duel, action_round, actor_id=attacker_id))
-        if duel.hp[defender_id] > 0:
-            counter = duel.attack_damage(defender_id, attacker_id)
-            if command_code == 2:
-                counter = max(1, counter // 2)
-            duel.apply_damage(attacker_id, counter)
-            frames.append(duel_action_frame(
-                duel, action_round,
-                actor_id=defender_id, target_id=attacker_id,
-                damage=counter, label='反击',
             ))
         for viewer, opponent in (
             (attacker, defender),
@@ -334,7 +333,7 @@ class BattleSystem:
         )
         if battle_state.phase != 'round_ack':
             return RouteResult.handled()
-        if battle_state.monster_hp <= 0:
+        if battle_state.all_monsters_defeated():
             frames = self._settle_victory(context, role, battle_state)
             return RouteResult.handled(frames)
         if battle_state.player_hp <= 0:
@@ -396,7 +395,7 @@ class BattleSystem:
         # end frame and start a second battle.
         result_frames = [
             battle_end_frame(),
-            map_object_remove_frame(battle_state.monster_id),
+            *(map_object_remove_frame(actor) for actor in battle_state.monster_ids),
             *task_frames,
         ]
         if role is not None and reward_item is not None:
