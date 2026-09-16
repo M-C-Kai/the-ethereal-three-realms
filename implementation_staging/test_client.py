@@ -543,25 +543,26 @@ def main() -> None:
             tabs = expect(game_sock, 1083, cipher)
             assert tabs[:3] == [4, 2, '玩家求购单'] and tabs[3] == '玩家出售单', tabs
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(5), byte(0)])))
-            assert expect(game_sock, 1083, cipher) == [5, 0], 'own buy ids'
+            assert expect(game_sock, 1083, cipher) == [5, 4, 0, '仙晶数量', '发布者', '银两总额'], 'market columns'
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(0), byte(0), byte(20), byte(0)])))
             assert expect(game_sock, 1083, cipher) == [0, 0, 0, 0], 'empty market rows'
 
             crystals_before = int(player_properties[52])
             silver_before = int(player_properties[50])
             # 出售单：挂 100 仙晶 @500 银两（托管 100 仙晶 + 2% 委托费 1000 银两）。
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(16), integer(100), integer(500)])))
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(15), integer(100), integer(500)])))
             posted = expect(game_sock, 1083, cipher)
-            assert posted == [16], posted
+            assert posted == [15], posted
             sell_sync = expect(game_sock, 1017, cipher)
             sell_props = dict(zip(sell_sync[3::2], sell_sync[4::2]))
             assert sell_props[52] == crystals_before - 100, sell_sync
             assert sell_props[50] == silver_before - 1000, sell_sync
+            assert expect(game_sock, 1083, cipher)[:2] == [17, 1], 'sell row refresh'
             # 我的出售单（screen 351 分页）与行情页各见一行。
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(11), byte(0), byte(20), byte(1)])))
             my_sell = expect(game_sock, 1083, cipher)
             assert my_sell[:3] == [11, 1, 1], my_sell
-            assert my_sell[3:7] == [1, '100', '出售单', '500'], my_sell
+            assert my_sell[3:6] == [1, '500', '100'] and my_sell[6], my_sell
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(0), byte(0), byte(20), byte(1)])))
             sell_rows = expect(game_sock, 1083, cipher)
             assert sell_rows[:4] == [0, 1, 1, 1], sell_rows
@@ -579,14 +580,15 @@ def main() -> None:
             assert cancel_props[52] == crystals_before, cancel_sync
             # 求购单：挂 10 仙晶 @100 银两（托管 1000 银两 + 委托费 20 银两）。
             silver_after_sell_cycle = silver_before - 1000
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(15), integer(10), integer(100)])))
-            assert expect(game_sock, 1083, cipher) == [15], 'buy posted'
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(16), integer(10), integer(100)])))
+            assert expect(game_sock, 1083, cipher) == [16], 'buy posted'
             buy_sync = expect(game_sock, 1017, cipher)
             buy_props = dict(zip(buy_sync[3::2], buy_sync[4::2]))
             assert buy_props[50] == silver_after_sell_cycle - 1020, buy_sync
+            assert expect(game_sock, 1083, cipher)[:2] == [17, 1], 'buy row refresh'
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(0), byte(0), byte(20), byte(0)])))
             buy_rows = expect(game_sock, 1083, cipher)
-            assert buy_rows[:4] == [0, 1, 0, 1], buy_rows
+            assert buy_rows[:4] == [0, 1, 1, 0], buy_rows
             buy_order_id = int(buy_rows[4])
             # 撤单求购单，恢复银两。
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(13), integer(buy_order_id)])))
@@ -602,18 +604,19 @@ def main() -> None:
             game_sock.sendall(cipher.encrypt_frame(encode_frame(2032, [byte(4), byte(101), string('')])))
             assert expect(game_sock, 1010, cipher) == [0, 0, 0, 0, 0, 7], 'entry ack'
             assert expect(game_sock, 1010, cipher) == [0, 0, 0, 1, 351, 69], 'screen 351 sell'
-            # 原生 screen 351 初始化发送 [10, mode]，服务端返回摘要行 + 帮助文本。
+            # 原生 screen 351 初始化发送 [10, mode]，应返回两个页签 + 帮助文本。
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(10), byte(1)])))
             entry_rows = expect(game_sock, 1083, cipher)
-            assert entry_rows[0] == 10 and entry_rows[1] == 0, entry_rows  # 无挂单
-            assert len(entry_rows) == 3 and '玩家求购单' in entry_rows[2], entry_rows
+            assert entry_rows[0] == 10 and entry_rows[1] == 2, entry_rows
+            assert len(entry_rows) == 5 and '玩家求购单' in entry_rows[4], entry_rows
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(11), byte(0), byte(20), byte(1)])))
             assert expect(game_sock, 1083, cipher)[:3] == [11, 0, 0], 'empty my sell orders'
 
-            # 寄售仙晶页提交出售单（等同 [16]）并撤单。
-            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(16), integer(50), integer(200)])))
-            assert expect(game_sock, 1083, cipher) == [16], 'sell posted from 351'
+            # 寄售仙晶页提交出售单（APK mode 1 -> confirm 4 -> action 15）并撤单。
+            game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(15), integer(50), integer(200)])))
+            assert expect(game_sock, 1083, cipher) == [15], 'sell posted from 351'
             expect(game_sock, 1017, cipher)
+            assert expect(game_sock, 1083, cipher)[:2] == [17, 1], '351 row refresh'
             game_sock.sendall(cipher.encrypt_frame(encode_frame(1083, [byte(11), byte(0), byte(20), byte(1)])))
             my_sell_rows = expect(game_sock, 1083, cipher)
             assert my_sell_rows[:3] == [11, 1, 1], my_sell_rows

@@ -16,13 +16,15 @@ from systems.exchange.protocol import (
     EXCHANGE_TAB_BUY_ORDERS,
     EXCHANGE_TAB_SELL_ORDERS,
     exchange_cancelled_frame,
+    exchange_accept_rejected_frame,
     exchange_entry_rows_frame,
     exchange_entry_screen_frame,
     exchange_fee_frame,
     exchange_market_frame,
-    exchange_my_ids_frame,
+    exchange_columns_frame,
     exchange_my_orders_frame,
     exchange_posted_frame,
+    exchange_order_refresh_frame,
     exchange_row_removed_frame,
     exchange_screen_frame,
     exchange_tabs_frame,
@@ -98,17 +100,15 @@ class ExchangeSystem:
 
         if is_my_ids_request(fields):
             tab = int(fields[1].value)
-            ids = self.service.my_order_ids(role_id, tab) if role is not None else []
-            return RouteResult.handled((exchange_my_ids_frame(tab, ids),))
+            return RouteResult.handled((exchange_columns_frame(tab),))
 
         if is_entry_page_request(fields):
             mode = int(fields[1].value)
-            rows = self._entry_rows(role_id, mode)
             LOG.info(
-                'EXCHANGE_ENTRY_PAGE user=%r role_id=%d mode=%d rows=%d',
-                username, role_id, mode, len(rows),
+                'EXCHANGE_ENTRY_PAGE user=%r role_id=%d mode=%d tabs=2',
+                username, role_id, mode,
             )
-            return RouteResult.handled((exchange_entry_rows_frame(mode, rows),))
+            return RouteResult.handled((exchange_entry_rows_frame(mode),))
 
         if is_my_orders_request(fields):
             page = int(fields[1].value)
@@ -177,7 +177,7 @@ class ExchangeSystem:
         fields: list,
     ) -> RouteResult:
         buy = is_post_buy_request(fields)
-        action = 15 if buy else 16
+        action = 16 if buy else 15
         if role is None:
             return RouteResult.handled()
         crystals = int(fields[1].value)
@@ -207,6 +207,9 @@ class ExchangeSystem:
         return RouteResult.handled((
             exchange_posted_frame(action),
             character_appearance_frame(role_id, crystal_sync_properties(role)),
+            exchange_order_refresh_frame(
+                result.order, len(self.service.my_orders(role_id, 0 if buy else 1)),
+            ),
         ))
 
     def _handle_cancel(
@@ -257,6 +260,7 @@ class ExchangeSystem:
                 'insufficient_silver': '银两不足',
             }
             return RouteResult.handled((
+                exchange_accept_rejected_frame(),
                 top_message_frame('应单失败：' + reasons.get(result.reason, result.reason)),
             ))
 

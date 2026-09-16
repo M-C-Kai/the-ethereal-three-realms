@@ -16,7 +16,7 @@ from pathlib import Path
 
 from app.context import SystemContext
 from app.router import SystemRouter
-from protocol import Field, TYPE_BYTE, TYPE_INT, decode_frame
+from protocol import Field, TYPE_BYTE, TYPE_INT, TYPE_STRING, decode_frame
 from systems.consignment.handler import (
     CONSIGNMENT_MERCHANT_OPTION,
     EXCHANGE_MERCHANT_DIALOGUE_OPTION,
@@ -255,8 +255,8 @@ class ExchangeHandlerTests(unittest.TestCase):
         self.assertTrue(is_my_orders_request(fields([11, 0, 20, 0], [TYPE_BYTE] * 4)))
         self.assertTrue(is_fee_request(fields([12, 1, 100, 500], [TYPE_BYTE, TYPE_BYTE, TYPE_INT, TYPE_INT])))
         self.assertTrue(is_cancel_request(fields([13, 7], [TYPE_BYTE, TYPE_INT])))
-        self.assertTrue(is_post_buy_request(fields([15, 100, 500], [TYPE_BYTE, TYPE_INT, TYPE_INT])))
-        self.assertTrue(is_post_sell_request(fields([16, 100, 500], [TYPE_BYTE, TYPE_INT, TYPE_INT])))
+        self.assertTrue(is_post_buy_request(fields([16, 100, 500], [TYPE_BYTE, TYPE_INT, TYPE_INT])))
+        self.assertTrue(is_post_sell_request(fields([15, 100, 500], [TYPE_BYTE, TYPE_INT, TYPE_INT])))
         self.assertTrue(is_accept_request(fields([3, 7], [TYPE_BYTE, TYPE_INT])))
 
     def test_tabs_request_returns_native_tabs(self):
@@ -274,8 +274,8 @@ class ExchangeHandlerTests(unittest.TestCase):
         message_id, payload = decode_frame(result.frames[0])
         self.assertEqual(int(payload[0].value), EXCHANGE_ACTION_MARKET_ROWS)
         self.assertEqual(int(payload[1].value), 1)  # total SHORT
-        self.assertEqual(int(payload[2].value), 0)  # tab
-        self.assertEqual(int(payload[3].value), 1)  # row count
+        self.assertEqual(int(payload[2].value), 1)  # row count, ad.a(w) index 2
+        self.assertEqual(int(payload[3].value), 0)  # tab, ad.a(w) index 3
         row = payload[4:]
         self.assertEqual([f.value for f in row], [1, '100', '卖家', '50000'])
 
@@ -284,14 +284,27 @@ class ExchangeHandlerTests(unittest.TestCase):
         result = self.handle([10, 1], [TYPE_BYTE, TYPE_BYTE])
         _, payload = decode_frame(result.frames[0])
         self.assertEqual(int(payload[0].value), 10)
-        self.assertEqual(int(payload[1].value), 1)  # 一行摘要
+        self.assertEqual(int(payload[1].value), 2)  # 下单/我的订单页签，不是摘要行
         result = self.handle([11, 0, 20, 1], [TYPE_BYTE] * 4)
         _, payload = decode_frame(result.frames[0])
         self.assertEqual(int(payload[0].value), EXCHANGE_ACTION_MY_ORDERS)
         self.assertEqual(int(payload[1].value), 1)
         self.assertEqual(int(payload[2].value), 1)
         row = payload[3:]
-        self.assertEqual([f.value for f in row], [1, '50', '出售单', '200'])
+        self.assertEqual([f.value for f in row[:3]], [1, '200', '50'])
+        self.assertTrue(row[3].value)
+
+    def test_empty_entry_initializes_two_tabs_in_both_modes(self):
+        for mode in (0, 1):
+            with self.subTest(mode=mode):
+                result = self.handle([10, mode], [TYPE_BYTE, TYPE_BYTE])
+                message_id, payload = decode_frame(result.frames[0])
+                self.assertEqual(message_id, 1083)
+                self.assertEqual([f.type_id for f in payload],
+                                 [TYPE_BYTE, TYPE_BYTE, TYPE_STRING, TYPE_STRING, TYPE_STRING])
+                self.assertEqual(int(payload[1].value), 2)
+                self.assertTrue(payload[2].value)
+                self.assertTrue(payload[3].value)
 
     def test_fee_request_returns_commission(self):
         result = self.handle([12, 1, 100, 500], [TYPE_BYTE, TYPE_BYTE, TYPE_INT, TYPE_INT])
@@ -301,8 +314,16 @@ class ExchangeHandlerTests(unittest.TestCase):
         self.assertIn('1000', payload[1].value)
 
     def test_post_sell_order_clears_inputs_and_syncs_currency(self):
-        result = self.handle([16, 50, 200], [TYPE_BYTE, TYPE_INT, TYPE_INT])
-        self.assertEqual(len(result.frames), 2)
+        result = self.handle([15, 50, 200], [TYPE_BYTE, TYPE_INT, TYPE_INT])
+        self.assertEqual(len(result.frames), 3)
+        self.assertEqual(self.system.service.my_orders(self.role['id'], 1)[0]['kind'], 'sell')
+        refresh_id, refresh = decode_frame(result.frames[2])
+        self.assertEqual(refresh_id, 1083)
+        self.assertEqual([f.type_id for f in refresh],
+                         [TYPE_BYTE, 3, TYPE_INT, TYPE_STRING, TYPE_STRING, TYPE_STRING])
+        self.assertEqual([f.value for f in refresh[:5]], [17, 1, 1, '200', '50'])
+        self.assertTrue(refresh[5].value)
+
         message_id, payload = decode_frame(result.frames[0])
         self.assertEqual(message_id, 1083)
         self.assertEqual(int(payload[0].value), EXCHANGE_ACTION_POST_SELL)
@@ -314,12 +335,35 @@ class ExchangeHandlerTests(unittest.TestCase):
         ])
         self.assertEqual(self.role['currencies']['immortal_crystals'], 950)
 
+    def test_market_column_header_is_not_own_order_ids(self):
+        result = self.handle([5, 1], [TYPE_BYTE, TYPE_BYTE])
+        _, payload = decode_frame(result.frames[0])
+        self.assertEqual([f.value for f in payload],
+                         [5, 4, 1, '仙晶数量', '发布者', '银两总额'])
+
     def test_post_buy_order_with_insufficient_silver_is_rejected(self):
         self.role['currencies']['silver'] = 10
-        result = self.handle([15, 100, 500], [TYPE_BYTE, TYPE_INT, TYPE_INT])
+        result = self.handle([16, 100, 500], [TYPE_BYTE, TYPE_INT, TYPE_INT])
         message_id, payload = decode_frame(result.frames[0])
         self.assertEqual(message_id, 1049)  # 顶部提示
         self.assertIn('银两不足', payload[1].value)
+
+    def test_self_trade_closes_wait_before_hint_without_asset_changes(self):
+        import copy
+        for kind in ('buy', 'sell'):
+            with self.subTest(kind=kind):
+                order = self.system.service.post_order(self.role, kind, 11, 1).order
+                snapshot = copy.deepcopy(self.role)
+                result = self.handle([3, int(order['order_id'])], [TYPE_BYTE, TYPE_INT])
+                self.assertEqual(len(result.frames), 2)
+                ack_id, ack = decode_frame(result.frames[0])
+                self.assertEqual(ack_id, 1083)
+                self.assertEqual([(f.type_id, f.value) for f in ack], [(TYPE_BYTE, 3)])
+                hint_id, hint = decode_frame(result.frames[1])
+                self.assertEqual(hint_id, 1049)
+                self.assertIn('自己的订单', hint[1].value)
+                self.assertEqual(self.role, snapshot)
+                self.assertEqual(self.system.service.my_orders(self.role['id'])[-1]['status'], 'active')
 
     def test_cancel_order_refunds_and_removes_row(self):
         order = self.system.service.post_order(self.role, 'sell', 50, 200).order
@@ -488,11 +532,11 @@ class ConsignmentRoleBindingTests(unittest.TestCase):
         self.assertEqual(int(payload[0].value), 7)
         self.assertEqual(int(payload[1].value), 0)  # 空列表而非拒绝提示
 
-    def test_my_listings_rejects_conflicting_role_id(self):
-        result = self.system.handle(self.context, 1138, fields([7, 202], [TYPE_BYTE, TYPE_INT]))
+    def test_my_listings_ignores_merchant_id_in_client_role_slot(self):
+        result = self.system.handle(self.context, 1138, fields([7, 1900004], [TYPE_BYTE, TYPE_INT]))
         message_id, payload = decode_frame(result.frames[0])
-        self.assertEqual(message_id, 1049)  # 顶部提示
-        self.assertIn('寄售角色信息已失效', payload[1].value)
+        self.assertEqual(message_id, 1138)
+        self.assertEqual(int(payload[0].value), 7)
 
     def test_list_item_accepts_zero_client_role_id(self):
         result = self.system.handle(self.context, 1138, fields(
@@ -503,15 +547,14 @@ class ConsignmentRoleBindingTests(unittest.TestCase):
         self.assertEqual(message_id, 1138)
         self.assertEqual(len(self.system.service.my_listings(101)), 1)
 
-    def test_list_item_rejects_conflicting_role_id(self):
+    def test_list_item_ignores_positive_client_role_hint(self):
         result = self.system.handle(self.context, 1138, fields(
             [9, 9001, 1, 202, 5, 100],
             [TYPE_BYTE, TYPE_INT, TYPE_BYTE, TYPE_INT, TYPE_BYTE, TYPE_INT],
         ))
-        message_id, payload = decode_frame(result.frames[0])
-        self.assertEqual(message_id, 1049)
-        self.assertIn('寄售角色信息已失效', payload[1].value)
-        self.assertEqual(len(self.system.service.my_listings(101)), 0)
+        message_id, _ = decode_frame(result.frames[-1])
+        self.assertEqual(message_id, 1138)
+        self.assertEqual(len(self.system.service.my_listings(101)), 1)
 
 
 if __name__ == '__main__':

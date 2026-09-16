@@ -12,7 +12,7 @@ Client request points confirmed in smali:
 - screen 350 row menu 出售/购买 confirm: ``[3, order_id]`` (应单).
 - screen 351 ``y(I)``: ``[10, mode]`` (mode 0 = 买入仙晶, 1 = 卖出仙晶).
 - screen 351 fee button: ``[12, mode, num, price]`` (委托费用查询).
-- screen 351 submit confirm: ``[16, num, price]`` (出售单) / ``[15, num, price]``
+- screen 351 submit confirm: ``[15, num, price]`` (出售单) / ``[16, num, price]``
   (求购单); cancel menu 撤单: ``[13, order_id]``; pager: ``[11, page, size, mode]``.
 
 The client parses concrete field types at fixed payload indexes, so every
@@ -22,6 +22,7 @@ builder below keeps BYTE/SHORT/INT/STRING types explicit.
 from __future__ import annotations
 
 from typing import Iterable, Mapping, Sequence
+from datetime import datetime, timezone, timedelta
 
 from protocol import (
     TYPE_BYTE,
@@ -72,8 +73,8 @@ EXCHANGE_ACTION_ENTRY_ROWS = 10
 EXCHANGE_ACTION_MY_ORDERS = 11
 EXCHANGE_ACTION_FEE = 12
 EXCHANGE_ACTION_CANCEL = 13
-EXCHANGE_ACTION_POST_BUY = 15
-EXCHANGE_ACTION_POST_SELL = 16
+EXCHANGE_ACTION_POST_BUY = 16
+EXCHANGE_ACTION_POST_SELL = 15
 
 
 def _exact(fields: list, types: tuple[int, ...], action: int) -> bool:
@@ -100,7 +101,7 @@ def is_tabs_request(fields: list) -> bool:
 
 
 def is_my_ids_request(fields: list) -> bool:
-    """screen 350 open: [5, tab]."""
+    """screen 350 column-header request: [5, tab] (legacy function name)."""
     return _exact(fields, (TYPE_BYTE, TYPE_BYTE), EXCHANGE_ACTION_MY_IDS)
 
 
@@ -125,12 +126,12 @@ def is_cancel_request(fields: list) -> bool:
 
 
 def is_post_buy_request(fields: list) -> bool:
-    """screen 351 buy-order confirm: [15, num, price]."""
+    """screen 351 buy-order confirm (event 3): [16, num, price]."""
     return _exact(fields, (TYPE_BYTE, TYPE_INT, TYPE_INT), EXCHANGE_ACTION_POST_BUY)
 
 
 def is_post_sell_request(fields: list) -> bool:
-    """screen 351 sell-order confirm: [16, num, price]."""
+    """screen 351 sell-order confirm (event 4): [15, num, price]."""
     return _exact(fields, (TYPE_BYTE, TYPE_INT, TYPE_INT), EXCHANGE_ACTION_POST_SELL)
 
 
@@ -145,18 +146,17 @@ def market_row_fields(order: Mapping[str, object]) -> list:
 
 
 def my_order_row_fields(order: Mapping[str, object]) -> list:
-    """screen 351 row: [INT id, STRING crystals, STRING caption, STRING price].
+    """screen 351 row: [INT id, STRING price, STRING crystals, STRING time].
 
     The renderer shows field 2 as the row caption, field 1 in the second
     column and field 3 on the right.
     """
-    kind = str(order.get('kind', 'buy'))
-    caption = '求购单' if kind == 'buy' else '出售单'
     return [
         integer(int(order['order_id'])),
-        string(str(int(order['crystals']))),
-        string(caption),
         string(str(int(order['unit_price']))),
+        string(str(int(order['crystals']))),
+        string(datetime.fromtimestamp(int(order.get('created_at', 0)),
+                                     timezone(timedelta(hours=8))).strftime('%m-%d %H:%M')),
     ]
 
 
@@ -174,8 +174,8 @@ def exchange_market_frame(
     fields: list = [
         byte(EXCHANGE_ACTION_MARKET_ROWS),
         short(len(rows) if total is None else max(0, int(total))),
-        byte(int(tab)),
         byte(len(rows)),
+        byte(int(tab)),
     ]
     for order in rows:
         fields.extend(market_row_fields(order))
@@ -193,13 +193,13 @@ def exchange_tabs_frame() -> bytes:
     return encode_frame(EXCHANGE_MESSAGE_ID, fields)
 
 
-def exchange_my_ids_frame(tab: int, order_ids: Iterable[int]) -> bytes:
-    """S->C action 5: this role's own order ids inside ``tab``."""
-    ids = [int(value) for value in order_ids]
+def exchange_columns_frame(tab: int) -> bytes:
+    """ad.a(w) action 5 stores one header vector [tab, left, middle, right]."""
     fields: list = [
         byte(EXCHANGE_ACTION_MY_IDS),
-        byte(len(ids)),
-        *(integer(value) for value in ids),
+        byte(4),
+        integer(int(tab)),
+        string('仙晶数量'), string('发布者'), string('银两总额'),
     ]
     return encode_frame(EXCHANGE_MESSAGE_ID, fields)
 
@@ -214,12 +214,19 @@ def exchange_row_removed_frame(tab: int, order_id: int, total: int) -> bytes:
     ])
 
 
-def exchange_entry_rows_frame(mode: int, rows: Sequence[str]) -> bytes:
-    """S->C action 10: screen 351 caption rows plus the help footer."""
+def exchange_entry_rows_frame(mode: int) -> bytes:
+    """S->C action 10: two screen 351 tabs, NOT order summaries.
+
+    ac.a(w) divides the tab control width by this count.  Zero causes an
+    exception before main/t.a(false,false) can dismiss the loading overlay.
+    Tab 0 is the entry form; tab 1 requests actual order rows via action 11.
+    Captions are local compatibility labels for the APK-confirmed tabs.
+    """
+    tabs = ('买入仙晶', '我的求购') if int(mode) == EXCHANGE_MODE_BUY else ('卖出仙晶', '我的挂售')
     fields: list = [
         byte(EXCHANGE_ACTION_ENTRY_ROWS),
-        byte(len(rows)),
-        *(string(row) for row in rows),
+        byte(len(tabs)),
+        *(string(tab) for tab in tabs),
         string(EXCHANGE_FOOTER),
     ]
     return encode_frame(EXCHANGE_MESSAGE_ID, fields)
@@ -250,6 +257,11 @@ def exchange_fee_frame(fee_text: str) -> bytes:
     ])
 
 
+def exchange_accept_rejected_frame() -> bytes:
+    """main/e.p -> ad.a(w): action 3 only dismisses the wait overlay."""
+    return encode_frame(EXCHANGE_MESSAGE_ID, [byte(EXCHANGE_ACTION_ACCEPT)])
+
+
 def exchange_cancelled_frame(total: int, order_id: int) -> bytes:
     """S->C action 13: 撤单 ack; the client drops the matching row.
 
@@ -266,6 +278,13 @@ def exchange_cancelled_frame(total: int, order_id: int) -> bytes:
 def exchange_posted_frame(action: int) -> bytes:
     """S->C action 15/16: order accepted; screen 351 clears the inputs."""
     return encode_frame(EXCHANGE_MESSAGE_ID, [byte(int(action))])
+
+
+def exchange_order_refresh_frame(order: Mapping[str, object], total: int) -> bytes:
+    """ac.a(w), action 17: insert a row even when own-order cache is loaded."""
+    return encode_frame(EXCHANGE_MESSAGE_ID, [
+        byte(17), short(max(0, int(total))), *my_order_row_fields(order),
+    ])
 
 
 def exchange_screen_frame(*, mode: int = EXCHANGE_MODE_BUY) -> bytes:
