@@ -1,53 +1,297 @@
 {
-  "version": 1,
+  "version": 2,
+  "source_note": "《飘渺三界 OL》生活技能资料整理自用户提供的百度百科词条和多个攻略站点汇总；未给出官方 item_template_id、坐标、公式数值的字段均标记为 compat/local_seed 或 source_unknown。",
   "defaults": {
     "stamina_max": 100,
-    "vitality_max": 100
+    "vitality_max": 100,
+    "official_life_skill_count": 4,
+    "life_skill_screen_slots": 7,
+    "all_four_life_skills_learnable_together": true,
+    "conflict_limit": "none"
   },
+  "quality_grades": [
+    {
+      "quality_id": 1,
+      "quality_key": "common",
+      "name": "普品",
+      "order": 1,
+      "applies_to": [
+        "herb",
+        "ore",
+        "pill"
+      ],
+      "source": "user_table"
+    },
+    {
+      "quality_id": 2,
+      "quality_key": "fine",
+      "name": "佳品",
+      "order": 2,
+      "applies_to": [
+        "herb",
+        "ore",
+        "pill"
+      ],
+      "source": "user_table"
+    },
+    {
+      "quality_id": 3,
+      "quality_key": "rare",
+      "name": "珍品",
+      "order": 3,
+      "applies_to": [
+        "herb",
+        "ore",
+        "pill"
+      ],
+      "source": "user_table"
+    },
+    {
+      "quality_id": 4,
+      "quality_key": "perfect",
+      "name": "绝品",
+      "order": 4,
+      "applies_to": [
+        "herb",
+        "ore",
+        "pill"
+      ],
+      "source": "user_table"
+    }
+  ],
   "skills": [
     {
       "skill_id": 2001,
-      "name": "采药术",
+      "name": "百草术",
+      "aliases": [
+        "采药术"
+      ],
       "icon": 0,
-      "max_level": 3,
-      "tier_count": 1,
+      "category": "official_life",
+      "function_type": "gather_herb",
+      "background_source": "继承自神农氏的秘术",
+      "learn_location": "长安城",
+      "trainer_name": "百草术训练师",
+      "max_level": 50,
+      "tier_count": 4,
+      "upgrade_method": "proficiency_action",
+      "tracks_proficiency": true,
+      "upgrade_action": "采集草药",
       "upgrade_proficiency_required": 100,
       "upgrade_silver_base": 10000,
       "upgrade_exp_base": 500,
-      "upgrade_required_role_level": 1
+      "upgrade_required_role_level": 1,
+      "initial_unlock_count": 2,
+      "initial_unlock_type": "herb_recognition",
+      "later_unlock_method": "trainer_silver_exp",
+      "can_learn_with_other_life_skills": true,
+      "source": "user_table"
     },
     {
       "skill_id": 2002,
       "name": "采矿术",
+      "aliases": [],
       "icon": 0,
-      "max_level": 3,
-      "tier_count": 1,
+      "category": "official_life",
+      "function_type": "gather_ore",
+      "background_source": "传自卞和氏的秘术",
+      "learn_location": "长安城",
+      "trainer_name": "采矿术训练师",
+      "max_level": 50,
+      "tier_count": 4,
+      "upgrade_method": "proficiency_action",
+      "tracks_proficiency": true,
+      "upgrade_action": "采集矿物",
       "upgrade_proficiency_required": 100,
       "upgrade_silver_base": 10000,
       "upgrade_exp_base": 500,
-      "upgrade_required_role_level": 1
+      "upgrade_required_role_level": 1,
+      "initial_unlock_count": 2,
+      "initial_unlock_type": "ore_recognition",
+      "later_unlock_method": "trainer_silver_exp",
+      "can_learn_with_other_life_skills": true,
+      "source": "user_table"
     },
     {
       "skill_id": 2003,
-      "name": "炼药术",
+      "name": "丹药术",
+      "aliases": [
+        "炼药术"
+      ],
       "icon": 0,
-      "max_level": 3,
-      "tier_count": 1,
+      "category": "official_life",
+      "function_type": "craft_pill",
+      "background_source": "只有炼气士才懂的秘术",
+      "learn_location": "长安城",
+      "trainer_name": "丹药术训练师",
+      "max_level": 50,
+      "tier_count": 4,
+      "upgrade_method": "proficiency_action",
+      "tracks_proficiency": true,
+      "upgrade_action": "炼制丹药",
       "upgrade_proficiency_required": 100,
       "upgrade_silver_base": 10000,
       "upgrade_exp_base": 500,
-      "upgrade_required_role_level": 1
+      "upgrade_required_role_level": 1,
+      "initial_unlock_count": 2,
+      "initial_unlock_type": "pill_formula",
+      "later_unlock_method": "trainer_silver_exp",
+      "requires_tool": "盛丹器皿",
+      "tool_source": "药店购买",
+      "quality_bonus_sources": [
+        "skill_level",
+        "material_quality"
+      ],
+      "can_learn_with_other_life_skills": true,
+      "source": "user_table"
     },
     {
       "skill_id": 2004,
-      "name": "炼器术",
+      "name": "工巧术",
+      "aliases": [
+        "炼器术"
+      ],
       "icon": 0,
-      "max_level": 3,
-      "tier_count": 1,
-      "upgrade_proficiency_required": 100,
+      "category": "official_life",
+      "function_type": "craft_moonlight_box",
+      "background_source": "名工匠鲁班传下的秘术",
+      "learn_location": "长安城",
+      "trainer_name": "工巧术训练师",
+      "max_level": 50,
+      "tier_count": 3,
+      "upgrade_method": "trainer_direct",
+      "tracks_proficiency": false,
+      "upgrade_action": "拜访训练师并消耗金钱与经验直接升级",
+      "upgrade_proficiency_required": 0,
       "upgrade_silver_base": 10000,
       "upgrade_exp_base": 500,
-      "upgrade_required_role_level": 1
+      "upgrade_required_role_level": 1,
+      "success_rate_scaling": "skill_level",
+      "material_cost_scaling": "skill_level_reduces_cost",
+      "can_learn_with_other_life_skills": true,
+      "source": "user_table"
+    },
+    {
+      "skill_id": 2005,
+      "name": "珠灵术",
+      "aliases": [],
+      "icon": 0,
+      "category": "auxiliary_life",
+      "function_type": "convert_element_spirit_to_bead",
+      "background_source": "修真灵力系统延伸",
+      "learn_location": "长安城",
+      "trainer_name": "灵珠大师",
+      "max_level": 1,
+      "tier_count": 1,
+      "upgrade_method": "source_unknown",
+      "tracks_proficiency": false,
+      "upgrade_action": "资料未说明标准升级线",
+      "upgrade_proficiency_required": 0,
+      "upgrade_silver_base": 0,
+      "upgrade_exp_base": 0,
+      "upgrade_required_role_level": 1,
+      "uses_spirit_power": true,
+      "can_learn_with_other_life_skills": true,
+      "source": "user_table_auxiliary"
+    }
+  ],
+  "upgrade_rules": [
+    {
+      "rule_id": 3001,
+      "skill_id": 2001,
+      "method": "proficiency_action",
+      "per_level_proficiency_required": 100,
+      "action_name": "采集草药",
+      "cost_model": "trainer_silver_exp_after_proficiency",
+      "level_range": [
+        1,
+        50
+      ],
+      "source": "user_table"
+    },
+    {
+      "rule_id": 3002,
+      "skill_id": 2002,
+      "method": "proficiency_action",
+      "per_level_proficiency_required": 100,
+      "action_name": "采集矿物",
+      "cost_model": "trainer_silver_exp_after_proficiency",
+      "level_range": [
+        1,
+        50
+      ],
+      "source": "user_table"
+    },
+    {
+      "rule_id": 3003,
+      "skill_id": 2003,
+      "method": "proficiency_action",
+      "per_level_proficiency_required": 100,
+      "action_name": "炼制丹药",
+      "cost_model": "trainer_silver_exp_after_proficiency",
+      "level_range": [
+        1,
+        50
+      ],
+      "source": "user_table"
+    },
+    {
+      "rule_id": 3004,
+      "skill_id": 2004,
+      "method": "trainer_direct",
+      "per_level_proficiency_required": 0,
+      "action_name": "拜访训练师",
+      "cost_model": "trainer_silver_exp_direct",
+      "level_range": [
+        1,
+        50
+      ],
+      "source": "user_table"
+    },
+    {
+      "rule_id": 3005,
+      "skill_id": 2005,
+      "method": "source_unknown",
+      "per_level_proficiency_required": 0,
+      "action_name": "灵力转化",
+      "cost_model": "spirit_power_threshold",
+      "level_range": [
+        1,
+        1
+      ],
+      "source": "user_table_auxiliary"
+    }
+  ],
+  "recognition_unlocks": [
+    {
+      "unlock_id": 3101,
+      "skill_id": 2001,
+      "unlock_type": "herb_recognition",
+      "initial_count": 2,
+      "initial_method": "learn_skill",
+      "later_method": "trainer_silver_exp",
+      "description": "初次学习可获得 2 种草药辨识能力；更多草药辨识需找训练师消耗银两和经验学习。",
+      "source": "user_table"
+    },
+    {
+      "unlock_id": 3102,
+      "skill_id": 2002,
+      "unlock_type": "ore_recognition",
+      "initial_count": 2,
+      "initial_method": "learn_skill",
+      "later_method": "trainer_silver_exp",
+      "description": "初次学习可获得 2 种矿石辨识能力；更多矿石辨识需找训练师消耗银两和经验学习。",
+      "source": "user_table"
+    },
+    {
+      "unlock_id": 3103,
+      "skill_id": 2003,
+      "unlock_type": "pill_formula",
+      "initial_count": 2,
+      "initial_method": "learn_skill",
+      "later_method": "trainer_silver_exp",
+      "description": "初次学习被告知 2 种丹药炼制秘方；更多秘方需找训练师消耗银两和经验学习。",
+      "source": "user_table"
     }
   ],
   "recipes": [
@@ -58,11 +302,17 @@
       "name": "精炼丹药",
       "output_template_id": 260000001,
       "output_quantity": 1,
-      "materials": [[322260000, 3]],
+      "materials": [
+        [
+          322260000,
+          3
+        ]
+      ],
       "vitality_cost": 10,
       "required_level": 1,
       "proficiency_gain": 5,
-      "description": "将三颗初级强化石精炼为一枚小还丹。"
+      "description": "兼容种子：将三颗初级强化石精炼为一枚小还丹。正式丹方名称、材料和模板 ID 需等原始数据确认。",
+      "source_status": "compat_local_seed"
     },
     {
       "recipe_id": 4002,
@@ -71,11 +321,17 @@
       "name": "强化石精炼",
       "output_template_id": 322261000,
       "output_quantity": 1,
-      "materials": [[322260000, 4]],
+      "materials": [
+        [
+          322260000,
+          4
+        ]
+      ],
       "vitality_cost": 20,
       "required_level": 1,
-      "proficiency_gain": 8,
-      "description": "将四颗初级强化石精炼为一颗中级强化石。"
+      "proficiency_gain": 0,
+      "description": "兼容种子：旧炼器术测试配方。工巧术正式功能应以月光匣制作为主。",
+      "source_status": "compat_local_seed"
     },
     {
       "recipe_id": 4003,
@@ -84,11 +340,52 @@
       "name": "锻造青锋剑",
       "output_template_id": 100001001,
       "output_quantity": 1,
-      "materials": [[322261000, 2]],
+      "materials": [
+        [
+          322261000,
+          2
+        ]
+      ],
       "vitality_cost": 30,
       "required_level": 1,
-      "proficiency_gain": 12,
-      "description": "以两颗中级强化石锻造一柄青锋剑。"
+      "proficiency_gain": 0,
+      "description": "兼容种子：旧炼器术测试配方。工巧术正式功能应以月光匣制作为主。",
+      "source_status": "compat_local_seed"
+    }
+  ],
+  "craft_products": [
+    {
+      "product_id": 4101,
+      "skill_id": 2004,
+      "name": "绿色月光匣",
+      "product_type": "moonlight_box",
+      "level_min": 1,
+      "level_max": 19,
+      "required_unlock_key": "",
+      "function": "储存飞行次数",
+      "source": "user_table"
+    },
+    {
+      "product_id": 4102,
+      "skill_id": 2004,
+      "name": "蓝色月光匣",
+      "product_type": "moonlight_box",
+      "level_min": 20,
+      "level_max": 39,
+      "required_unlock_key": "",
+      "function": "储存飞行次数；等级段高于绿色月光匣",
+      "source": "user_table"
+    },
+    {
+      "product_id": 4103,
+      "skill_id": 2004,
+      "name": "红色月光匣",
+      "product_type": "moonlight_box",
+      "level_min": 40,
+      "level_max": 50,
+      "required_unlock_key": "luban_secret_record",
+      "function": "储存飞行次数；需先取得《鲁班秘录》",
+      "source": "user_table"
     }
   ],
   "gather_targets": [
@@ -106,7 +403,9 @@
       "reward_template_id": 260000001,
       "reward_quantity": 1,
       "proficiency_gain": 4,
-      "model_id": 1
+      "model_id": 1,
+      "quality_table_key": "herb_quality",
+      "source_status": "compat_local_seed"
     },
     {
       "target_id": 6002,
@@ -122,7 +421,145 @@
       "reward_template_id": 322260000,
       "reward_quantity": 1,
       "proficiency_gain": 4,
-      "model_id": 2
+      "model_id": 2,
+      "quality_table_key": "ore_quality",
+      "source_status": "compat_local_seed"
+    }
+  ],
+  "quality_tables": [
+    {
+      "table_key": "herb_quality",
+      "skill_id": 2001,
+      "resource_type": "herb",
+      "grades": [
+        "common",
+        "fine",
+        "rare",
+        "perfect"
+      ],
+      "high_quality_use": "出售给丹药术玩家或用于特殊用途",
+      "source": "user_table"
+    },
+    {
+      "table_key": "ore_quality",
+      "skill_id": 2002,
+      "resource_type": "ore",
+      "grades": [
+        "common",
+        "fine",
+        "rare",
+        "perfect"
+      ],
+      "high_quality_use": "出售给其他玩家或用于特殊用途",
+      "source": "user_table"
+    },
+    {
+      "table_key": "pill_quality",
+      "skill_id": 2003,
+      "resource_type": "pill",
+      "grades": [
+        "common",
+        "fine",
+        "rare",
+        "perfect"
+      ],
+      "high_quality_chance_factors": [
+        "skill_level",
+        "material_quality"
+      ],
+      "high_quality_use": "师门任务或出售",
+      "source": "user_table"
+    }
+  ],
+  "spirit_bead_conversions": [
+    {
+      "conversion_id": 4201,
+      "skill_id": 2005,
+      "element": "metal",
+      "spirit_name": "金灵力",
+      "bead_name": "金灵珠",
+      "attribute": "力量",
+      "source": "user_table"
+    },
+    {
+      "conversion_id": 4202,
+      "skill_id": 2005,
+      "element": "wood",
+      "spirit_name": "木灵力",
+      "bead_name": "木灵珠",
+      "attribute": "耐力",
+      "source": "user_table"
+    },
+    {
+      "conversion_id": 4203,
+      "skill_id": 2005,
+      "element": "water",
+      "spirit_name": "水灵力",
+      "bead_name": "水灵珠",
+      "attribute": "敏捷",
+      "source": "user_table"
+    },
+    {
+      "conversion_id": 4204,
+      "skill_id": 2005,
+      "element": "fire",
+      "spirit_name": "火灵力",
+      "bead_name": "火灵珠",
+      "attribute": "智力",
+      "source": "user_table"
+    },
+    {
+      "conversion_id": 4205,
+      "skill_id": 2005,
+      "element": "earth",
+      "spirit_name": "土灵力",
+      "bead_name": "土灵珠",
+      "attribute": "精神",
+      "source": "user_table"
+    }
+  ],
+  "special_unlocks": [
+    {
+      "unlock_key": "luban_secret_record",
+      "name": "《鲁班秘录》",
+      "skill_id": 2004,
+      "unlock_effect": "允许学习/制造红色月光匣",
+      "sources": [
+        "高级藏宝图任务",
+        "天关副本"
+      ],
+      "drop_model": "chance",
+      "source": "user_table"
+    },
+    {
+      "unlock_key": "pill_vessel",
+      "name": "盛丹器皿",
+      "skill_id": 2003,
+      "unlock_effect": "用于草药合成丹药",
+      "sources": [
+        "药店购买"
+      ],
+      "source": "user_table"
+    },
+    {
+      "unlock_key": "jade_slip_transform",
+      "name": "玉简·化",
+      "skill_id": 2005,
+      "unlock_effect": "通过化技突破灵力上限",
+      "sources": [
+        "天书真人购买"
+      ],
+      "source": "user_table_auxiliary"
+    },
+    {
+      "unlock_key": "spirit_crystal",
+      "name": "灵晶石",
+      "skill_id": 2005,
+      "unlock_effect": "快速补充灵力",
+      "sources": [
+        "仙灵塔"
+      ],
+      "source": "user_table_auxiliary"
     }
   ],
   "learnable": [
@@ -132,8 +569,8 @@
       "level_requirement": 1,
       "silver_cost": 1000,
       "experience_cost": 0,
-      "display": "学习 采药术",
-      "detail": "可在地图上采集草药。"
+      "display": "学习 百草术",
+      "detail": "在长安城找百草术训练师学习，可采集草药；初学获得 2 种草药辨识能力。"
     },
     {
       "entry_id": 5002,
@@ -142,7 +579,7 @@
       "silver_cost": 1000,
       "experience_cost": 100,
       "display": "学习 采矿术",
-      "detail": "可在地图上采集矿石。"
+      "detail": "在长安城找采矿术训练师学习，可采集矿物；初学获得 2 种矿石辨识能力。"
     },
     {
       "entry_id": 5003,
@@ -150,8 +587,8 @@
       "level_requirement": 1,
       "silver_cost": 2000,
       "experience_cost": 200,
-      "display": "学习 炼药术",
-      "detail": "可将材料炼制为丹药。"
+      "display": "学习 丹药术",
+      "detail": "在长安城找丹药术训练师学习，可用盛丹器皿炼制丹药；初学获得 2 种丹方。"
     },
     {
       "entry_id": 5004,
@@ -159,15 +596,71 @@
       "level_requirement": 1,
       "silver_cost": 2000,
       "experience_cost": 200,
-      "display": "学习 炼器术",
-      "detail": "可将材料锻造成装备。"
+      "display": "学习 工巧术",
+      "detail": "在长安城找工巧术训练师学习，可制作月光匣；升级由训练师消耗金钱与经验完成。"
+    },
+    {
+      "entry_id": 5005,
+      "skill_id": 2005,
+      "level_requirement": 1,
+      "silver_cost": 1000,
+      "experience_cost": 100,
+      "display": "学习 珠灵术",
+      "detail": "在长安城找灵珠大师学习，可将五行灵力转化为五行灵珠。"
     }
   ],
   "trainers": [
     {
       "trainer_id": 7001,
-      "name": "生活技能导师",
-      "entry_ids": [5001, 5002, 5003, 5004]
+      "name": "百草术训练师",
+      "location": "长安城",
+      "entry_ids": [
+        5001
+      ],
+      "auto_path_hint": "长安指定"
+    },
+    {
+      "trainer_id": 7002,
+      "name": "采矿术训练师",
+      "location": "长安城",
+      "entry_ids": [
+        5002
+      ],
+      "auto_path_hint": "长安指定"
+    },
+    {
+      "trainer_id": 7003,
+      "name": "丹药术训练师",
+      "location": "长安城",
+      "entry_ids": [
+        5003
+      ],
+      "auto_path_hint": "长安指定"
+    },
+    {
+      "trainer_id": 7004,
+      "name": "工巧术训练师",
+      "location": "长安城",
+      "entry_ids": [
+        5004
+      ],
+      "auto_path_hint": "长安指定"
+    },
+    {
+      "trainer_id": 7005,
+      "name": "灵珠大师",
+      "location": "长安城",
+      "entry_ids": [
+        5005
+      ],
+      "auto_path_hint": "长安指定"
     }
+  ],
+  "implementation_notes": [
+    "四项正式生活技能可以全部学习，不存在冲突或数量限制。",
+    "百草术、采矿术、丹药术按每级 100 熟练度 + 反复操作升级。",
+    "工巧术不按反复制作积累熟练度升级，应按训练师直接消耗金钱与经验升级。",
+    "珠灵术是人物菜单生活技能界面可见的辅助性技能，但不是四大生活技能栏之一。",
+    "正式草药、矿石、丹药、月光匣 item_template_id 与具体地图坐标未在资料中给出，当前保留兼容种子项以维持已有协议测试。"
   ]
 }
