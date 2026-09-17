@@ -105,12 +105,66 @@ class SocialSystemTests(unittest.TestCase):
         self.assertEqual(int(second_fields[0].value), 2)
         self.assertEqual(int(second_fields[2].value), 0)    # 0 行
 
+    def test_view_equipment_row_publishes_level_required_and_icon_code(self):
+        # 1303 装备行 6 字段与 1008 物品实例同构（main/e.smali Z →
+        # b/j.n=等级需求、b/j.q=图标编号；d/a.a(b/j) 用 q 调 a/c/x.f 查图集）。
+        # 把数量放在第 6 字段会让客户端按 icon_code=1 查 APK 中不存在的
+        # 图集 3_002_424，装备格因此空白无图标。
+        helmet = next(
+            item for item in self.bob['items']
+            if int(item.get('template_id', 0)) == 10001001
+        )
+        helmet['location'] = 'equipped'
+        helmet['equipment_slot'] = 1
+        result = self._handle(self.alice, 1303, [byte(1), integer(player_actor_object_id(10002))])
+        _, fields = self._decode(result.frames[0])
+        self.assertEqual(int(fields[4].value), 1)                  # 1 件装备
+        base = 5
+        self.assertEqual(int(fields[base].value), 10001001)        # 模板
+        self.assertEqual(int(fields[base + 1].value), 1)           # 槽位（头盔）
+        self.assertEqual(str(fields[base + 2].value), '青纹盔')     # 名字
+        self.assertEqual(int(fields[base + 3].value), 1)           # 等级需求
+        self.assertEqual(int(fields[base + 4].value), int(helmet['id']))  # 实例 id
+        self.assertEqual(int(fields[base + 5].value), 109)         # 图标编号
+
     def test_view_by_name_variant(self):
         result = self._handle(self.alice, 1303, [byte(2), integer(0), string('乙')])
         message_id, fields = self._decode(result.frames[0])
         self.assertEqual(message_id, 1303)
         self.assertEqual(int(fields[0].value), 1)
         self.assertEqual(int(fields[1].value), player_actor_object_id(10002))
+
+    def test_view_map_menu_action1_is_answered(self):
+        # APK 地图点击玩家菜单"查看"（main/k.smali:4222，寄存器 v2=1）发
+        # C→S [byte 1, int actor id]；只认 byte 2 会把该请求静默丢弃，
+        # 客户端因此收不到 S→C 1303、根本不打开面板。
+        fields = [byte(1), integer(player_actor_object_id(10002))]
+        self.assertTrue(self.system.can_handle(self._context(self.alice), 1303, fields))
+        result = self._handle(self.alice, 1303, fields)
+        self.assertTrue(result.handled)
+        self.assertEqual(len(result.frames), 2)
+        message_id, decoded = self._decode(result.frames[0])
+        self.assertEqual(message_id, 1303)
+        self.assertEqual(int(decoded[0].value), 1)
+        self.assertEqual(int(decoded[1].value), player_actor_object_id(10002))
+        rows_id, rows = self._decode(result.frames[1])
+        self.assertEqual(rows_id, 1089)
+        self.assertEqual(int(rows[0].value), 2)
+
+    # 排行榜"查看"（e/be.smali:803）发 [byte 3, int 行首列]，目标语义未确认，
+    # 本地服保持不认领（不猜测）。
+    def test_view_rank_list_action3_stays_unclaimed(self):
+        self.assertFalse(
+            self.system.can_handle(self._context(self.alice), 1303, [byte(3), integer(42)]),
+        )
+
+    def test_view_target_on_another_map_reports(self):
+        # e/ey pswitch_11 用 m.n(actor_id) 取活对象；跨图必然落空并关面板，
+        # 因此服务端先给明确提示而不是发一整帧必失败的面板数据。
+        self.bob['map_id'] = 60011
+        result = self._handle(self.alice, 1303, [byte(1), integer(player_actor_object_id(10002))])
+        message_id, _ = self._decode(result.frames[0])
+        self.assertEqual(message_id, 1049)  # 顶部提示
 
     def test_view_offline_target_reports(self):
         self.online.discard(10002)

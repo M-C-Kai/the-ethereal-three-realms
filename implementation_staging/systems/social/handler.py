@@ -35,6 +35,11 @@ SILVER_PROPERTY = 50
 # 1009/81 从角色/背包系统的全量认领中精确剥离（can_handle 逐项收紧）。
 HANDLED_MESSAGE_IDS = (1004, 1009, 1019, 1056, 1089, 1157, 1158, 1303)
 
+# C→S 1303 的请求形态（APK 发送端证据见 can_handle 的 1303 分支）：
+#   1 = 地图点击玩家菜单"查看"（byte 1 + int actor id）
+#   2 = 好友/聊天/列表菜单"查看"（byte 2 + int 0 + string 名字）
+VIEW_REQUEST_ACTIONS = (1, 2)
+
 
 class SocialSystem:
     """玩家对玩家交互：原生点击菜单的请求/确认/推送闭环。"""
@@ -80,10 +85,21 @@ class SocialSystem:
                 isinstance(first, Field) and first.type_id == TYPE_BYTE and int(first.value) == 2,
             )
         if message_id == 1303:
-            # 查看请求固定 byte 2 开头（带 int id 或 int 0 + string 名字）。
+            # 查看请求有两种 byte 形态，都必须应答：
+            #   byte 1 + int actor id —— 地图点击其他玩家菜单"查看"
+            #     （main/k.smali:4222-4240，寄存器 v2=1）；
+            #   byte 2 + int 0 + string 名字 —— 好友/聊天/列表菜单"查看"
+            #     （main/d.smali:698、e/m.smali:180、e/cx.smali:778、
+            #      e/es.smali:311、e/p.smali:839）。
+            # 客户端自己不打开面板：面板由 S→C 1303 触发（e.smali
+            # :sswitch_eb5 读 action 后 packed-switch 0x1..0x3 → 打开
+            # 界面 0x60）。只认 byte 2 会让地图菜单的查看被静默丢弃，
+            # 表现为"查看他人信息没有数据"。
+            # byte 3（排行榜"查看"，e/be.smali:803）目标语义未确认，仍不认领。
             first = fields[0]
             return bool(
-                isinstance(first, Field) and first.type_id == TYPE_BYTE and int(first.value) == 2,
+                isinstance(first, Field) and first.type_id == TYPE_BYTE
+                and int(first.value) in VIEW_REQUEST_ACTIONS
             )
         if message_id == 1056:
             return int(values[0]) in (1, 2, 3, 4, 10, 20)
@@ -151,11 +167,25 @@ class SocialSystem:
     # 1303/1089 查看
     # ------------------------------------------------------------------
     def _handle_view(self, context: SystemContext, values: list[object]) -> RouteResult:
-        # C→S 1303/2 两种形态：[byte 2, int actor_id] 与 [byte 2, int 0, string 名字]。
+        # C→S 1303 两种形态（can_handle 已限定 byte 1/2，APK 发送端证据见
+        # handler 顶部 VIEW_REQUEST_ACTIONS）：[byte 1, int actor id]（地图点击
+        # 玩家菜单"查看"）与 [byte 2, int 0, string 名字]（好友/聊天/列表菜单
+        # "查看"）。两种请求都回同一应答：S→C 1303/1 面板帧 + 1089/2 附加列。
+        # 客户端自己的"查看"菜单只发包不打开面板，面板由 S→C 1303 打开
+        # （e.smali :sswitch_eb5 → 界面 0x60），因此不应答就等于"点了没反应"。
         target = self._resolve_target(values, name_index=2)
         if target is None:
             LOG.info('VIEW_1303 target not found values=%r', values)
             return RouteResult.handled((top_message_frame('对方不在线'),))
+        # S→C 面板帧用 action=1：客户端复用该 actor 已有的 b/v（e/ey
+        # pswitch_11 用 m.n(actor_id) 取活对象）。目标不在同一地图时
+        # m.n 必然落空，面板会被客户端自己关掉，因此这里先给出明确提示。
+        if int(target.get('map_id', -1)) != int(context.active_role.get('map_id', -2)):
+            LOG.info(
+                'VIEW_1303 target on another map values=%r viewer_map=%s target_map=%s',
+                values, context.active_role.get('map_id'), target.get('map_id'),
+            )
+            return RouteResult.handled((top_message_frame('对方不在当前地图'),))
         frame = player_view_frame(self.settings, target, self._actor_id(target))
         LOG.info(
             'VIEW_1303 user=%r role_id=%s target=%s(%s)',

@@ -1,0 +1,847 @@
+{
+  "format": "piaomiao-map-ref-v1",
+  "image_records": [
+    {
+      "image_id": 60011000,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011001,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011002,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011003,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011004,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011005,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011006,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011007,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011008,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011009,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011010,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011011,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011012,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011013,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011014,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011015,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011016,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011017,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011018,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011019,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011020,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011021,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011022,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011023,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011024,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011025,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011026,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011027,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011028,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011029,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011030,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011031,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011032,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011033,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011034,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 113
+    },
+    {
+      "image_id": 60011035,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011036,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011037,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011038,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    },
+    {
+      "image_id": 60011039,
+      "crop_x": 0,
+      "crop_y": 0,
+      "width": 135,
+      "height": 112
+    }
+  ],
+  "composite_tiles": [
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 0,
+          "x": -107,
+          "y": -125,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 1,
+          "x": -62,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 2,
+          "x": -67,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 3,
+          "x": -72,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 4,
+          "x": -27,
+          "y": -125,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 5,
+          "x": -67,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 6,
+          "x": -72,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 7,
+          "x": -67,
+          "y": -108,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 8,
+          "x": -62,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 9,
+          "x": -67,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 10,
+          "x": -67,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 11,
+          "x": -62,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 12,
+          "x": -67,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 13,
+          "x": -72,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 14,
+          "x": -67,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 15,
+          "x": -67,
+          "y": -107,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 16,
+          "x": -62,
+          "y": -112,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 17,
+          "x": -67,
+          "y": -112,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 18,
+          "x": -72,
+          "y": -112,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 19,
+          "x": -67,
+          "y": -107,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 20,
+          "x": -67,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 21,
+          "x": -62,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 22,
+          "x": -67,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 23,
+          "x": -72,
+          "y": -110,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 24,
+          "x": -67,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 25,
+          "x": -67,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 26,
+          "x": -72,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 27,
+          "x": -67,
+          "y": -108,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 28,
+          "x": -62,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 29,
+          "x": -67,
+          "y": -113,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 30,
+          "x": -67,
+          "y": -90,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 31,
+          "x": -62,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 32,
+          "x": -67,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 33,
+          "x": -72,
+          "y": -115,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 34,
+          "x": -67,
+          "y": -90,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 35,
+          "x": -77,
+          "y": 18,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 36,
+          "x": -72,
+          "y": -47,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 37,
+          "x": -67,
+          "y": -112,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 38,
+          "x": -62,
+          "y": -47,
+          "transform": 0
+        }
+      ]
+    },
+    {
+      "flags": 2,
+      "terrain": 0,
+      "value_b": 0,
+      "value_c": 0,
+      "layers": [
+        {
+          "reference": 39,
+          "x": -57,
+          "y": 18,
+          "transform": 0
+        }
+      ]
+    }
+  ]
+}

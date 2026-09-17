@@ -35,9 +35,15 @@ def player_view_frame(settings, role: dict[str, object], actor_id: int) -> bytes
         5..: 每件装备 6 个字段
         末尾: string prop79（师傅）+ int prop84（斗法排名，0=未上榜）
 
-    每件装备字段（e/ey.a(w,4) 辅助函数）：
-        [int 模板, byte 槽位, string 名字, int 图标, int 实例 id, short 数量]
+    每件装备字段（e/ey.a(w,4) 辅助函数，与 1008 物品实例同构）：
+        [int 模板, byte 槽位, string 名字, int 等级需求, int 实例 id, short 图标编号]
     槽位字节决定装备落在面板哪个格子（ag() 用 0x17700+k 定位）。
+    第 4 个字段是等级需求：1008 field 11 → b/j.n，e/ey.a(b/j) 用它和
+    b/v.c()（角色等级）比较，超出时提示"等级不足，无法装备。"。
+    第 6 个字段是图标编号：1008 field 12 → b/j.q，d/a.a(b/j) 用
+    a/c/x.f(icon_code) 查 24x24 图集（3_002_424 + group*10_000）。
+    把数量放在第 6 个字段会让客户端按 icon_code=1 查图集 3_002_424，
+    该图集在 APK 中不存在，表现就是装备格空白无图标。
     """
     level = max(1, int(role.get('level', 1)))
     equips = [
@@ -58,9 +64,13 @@ def player_view_frame(settings, role: dict[str, object], actor_id: int) -> bytes
             integer(int(resolved.get('template_id', 0))),
             byte(int(resolved.get('equipment_slot', 0))),
             string(item_display_name(resolved)),
-            integer(int(resolved.get('icon_code', 0))),
+            # base+3 是等级需求（1008 field 11 → b/j.n）。字段类型为 int，
+            # 客户端 int-to-byte 截断后与角色等级比较；APK 无其它读取点。
+            integer(int(resolved.get('level_required', 1))),
             integer(int(item.get('id', 0))),
-            short(int(item.get('quantity', 1))),
+            # base+5 是图标编号（1008 field 12 → b/j.q），d/a.a(b/j) 用它
+            # 调 a/c/x.f(icon_code) 定位 24x24 图集帧。绝不是数量。
+            short(int(resolved.get('icon_code', resolved.get('quality', 0)))),
         ])
     fields.append(string(_default_title(role.get('master'))))
     fields.append(integer(0))
