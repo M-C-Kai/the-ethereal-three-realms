@@ -161,3 +161,77 @@ action=1（`ey.a(w)` 的 `pswitch_11`，行 1066 起）即可对所有三种 C�
 - `implementation_staging/build_artifacts/build/dex-smali/pmsj/work/main/e.smali:8530-8543, 9011, 9212-9217, 16129-16161`
 - `implementation_staging/build_artifacts/build/dex-smali/pmsj/work/e/ey.smali:1041-1140`
 - `implementation_staging/build_artifacts/build/dex-smali/pmsj/work/e/be.smali:803`
+
+## 8. 真机回归（2026-09-18，演示数据错挂查看者）
+
+### 8.1 现象与根因（B 级：真机现象 + 本地帧解码）
+
+真机 gg（账号 5201314，role 10085）查看 GV（账号 1137253241，role 10084），
+面板空无装备。根因是**本地数据装配错误，不是协议错误**：
+2026-09-17 的演示装备（青纹肩甲实例 1008505）被 `location: equipped`
+写到了 gg 身上，而 1303 面板装备行取自**被查看者 target** 的
+`location == 'equipped'` 物品（`player_view_frame(role=target)`）——
+被查看者 GV 当时没有任何已穿戴装备，字段 4 = 0，面板自然空白。
+`_handle_view` 回包路由经复核无误：`RouteResult.handled` 帧走请求者
+（查看者）会话，面板数据构建自 target。
+
+### 8.2 数据修正与保护
+
+- 备份 `data/roles.json.bak-20260917-view2` 后，把实例 1008505
+  从 gg(10085) 迁到 GV(10084) 并保持 `equipped`。
+- 新增回归 `test_view_panel_equips_come_from_target_not_viewer`：
+  只给 target（乙）穿青纹肩甲，断言 1303 字段 4=1、装备行
+  `(20001001, 槽2, 青纹肩甲, 等级1, 1008505, icon=201)` 全部来自
+  target，且查看者自己未混入该装备。
+- 顺带复核 1032（物品详情，tooltip）：S→C 仅
+  `[byte 1, int 模板, short 图标, string 描述]`（`e.smali:7092`
+  `:sswitch_94b` 只读 c(1)/b(2)/e(3)，field 0 跳过、无属性块），
+  与本地 `item_detail_frame` 一致；tooltip 的属性行来自 1008 同步的
+  `b/g`（仅限自己背包物品），`e/ey` 不发 1032（ey.smali 无 0x408）——
+  "查看面板点装备 tooltip 无属性行"是 APK 原生行为，不是缺陷。
+
+### 8.3 验证
+
+- `tests.test_social_system` + `tests.test_inventory_system` 全绿。
+- 服务重启后监听 `0.0.0.0:6805`（logs/server.20260918-030324）。
+- **pending real-device verification**：gg 重连后点 GV"查看"，
+  肩甲格应显示图标（图集 3022424 帧 1），tooltip 为品质色白·描述文本
+  （属性行为 APK 原生不含，见 8.2）。
+
+## 8. 真机回归 1（2026-09-17 深夜）："查看无数据" 根因与处置
+
+现象：gg（账号 5201314，角色 10085）点击 GV（账号 1137253241，角色 10084）
+菜单"查看"，客户端发送 1303/action=1 + 1089/action=2，服务端正常回
+1303/action=1，但面板上看不到对方装备。
+
+根因（数据层，非协议层）：演示装备实例 1008505（青纹肩甲 20001001）此前
+被错误挂到**查看者 gg** 身上。1303 装备行本实现取自**被查看者 target**
+（与 e/ey.a(w,4) 渲染 target 数据一致），GV 身上没有任何已穿戴装备 →
+面板合法打开但装备列表为空。
+
+处置：存档迁移 1008505 → GV(10084)、`location: equipped`（迁移前备份
+`data/roles.json.bak-20260917-view2`）。纯运行数据变更，不改 wire contract。
+
+回归保护：`tests/test_social_system.py` 新增
+`test_view_panel_equips_come_from_target_not_viewer`——给 target(bob)
+挂一件已穿戴青纹肩甲后断言 1303 的装备数量/模板/槽位/名字/等级需求/
+实例 id/图标编号全部来自 target，且查看者自身数据不混入。
+`tests.test_social_system` + `tests.test_inventory_system` 36/36 通过。
+
+另核实（B 级证据，2026-09-17）：真机 tooltip 只有模板描述、没有属性行
+是 **APK 原生行为**，不是缺包——
+
+- S→C 1032 解析体 `main/e.smali:7092 :sswitch_94b`（分发表 `0x408`，
+  行 8944）只读 3 个载荷字段：`c(1)=int、b(2)=short、e(3)=string`
+  （按 `_` 切分多行），field 0 跳过，**没有属性块**；与本地
+  `item_detail_frame`（`[byte 1, int 模板, short 图标, string 描述]`）
+  逐字段一致。
+- 装备属性四数组（`b/g.d/b/c/x`）仅由 1008 同步进入查看者**自己**的
+  物品表（`main/e.Z`）；查看面板装备行只有 6 字段（b/j），不携带
+  1008 的 23 字段属性块，`e/ey.smali` 全文无 0x408（不发 1032）。
+- C→S 1032 两种形态：`e.smali:4624 a(II)` = [short 3, int, int]、
+  `e.smali:16082 c(I)` = [short 1, int]，与日志 `field_types=[2,4] /
+  [2,4,4]` 吻合，本地 `can_handle` 已按 short 1/3 限额认领。
+
+真机状态：`pending real-device verification`（gv 重登后 gg 点击 GV
+"查看"应显示肩甲图标；点自己装备的 tooltip 才会出现属性文本）。

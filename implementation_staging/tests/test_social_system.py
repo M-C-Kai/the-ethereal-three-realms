@@ -151,7 +151,38 @@ class SocialSystemTests(unittest.TestCase):
         self.assertEqual(rows_id, 1089)
         self.assertEqual(int(rows[0].value), 2)
 
-    # 排行榜"查看"（e/be.smali:803）发 [byte 3, int 行首列]，目标语义未确认，
+    def test_view_panel_equips_come_from_target_not_viewer(self):
+        # 1303 面板装备列表必须取自被查看者 target（e/ey pswitch_11 渲染对方
+        # 装备）；曾因取错对象导致"查看他人"时面板无装备数据。
+        from systems.inventory.protocol import role_items
+        equip = {
+            'id': 1008505,
+            'template_id': 20001001,  # 青纹肩甲：槽 2 / 图标 201
+            'name': '青纹肩甲',
+            'location': 'equipped',
+            'quantity': 1,
+        }
+        self.bob['items'].append(equip)
+        result = self._handle(self.alice, 1303, [byte(1), integer(player_actor_object_id(10002))])
+        message_id, decoded = self._decode(result.frames[0])
+        self.assertEqual(message_id, 1303)
+        self.assertEqual(int(decoded[4].value), 1)  # 装备数量来自 target
+        template_id, slot, name, level_required, instance_id, icon = decoded[5:11]
+        self.assertEqual(int(template_id.value), 20001001)
+        self.assertEqual(int(slot.value), 2)
+        self.assertEqual(str(name.value), '青纹肩甲')
+        self.assertEqual(int(level_required.value), 1)
+        self.assertEqual(int(instance_id.value), int(equip['id']))
+        self.assertEqual(int(icon.value), 201)
+        # 查看者 alice 自己未穿该装备：面板不能混入查看者数据。
+        alice_equips = [
+            item for item in role_items(self.alice)
+            if item.get('location') == 'equipped' and int(item.get('template_id', 0)) == 20001001
+        ]
+        self.assertEqual(alice_equips, [])
+
+
+    # 排行榜"查看"（e/be.smali:803）发 [byte 3, int 行首列]，目标语义未确认。
     # 本地服保持不认领（不猜测）。
     def test_view_rank_list_action3_stays_unclaimed(self):
         self.assertFalse(
