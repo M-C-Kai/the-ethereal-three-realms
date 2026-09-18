@@ -30,6 +30,8 @@ New-Item -ItemType Directory -Force -Path $BuildDir, $ApkOutputDir, $SigningDir,
 
 & $JavaExe -jar $ApkToolJar d -f -r -p $FrameworkDir -o $DecodeDir $SourceApk
 & python (Join-Path $ProjectDir 'tools\patch_person_shortcut.py') $DecodeDir
+& python (Join-Path $ProjectDir 'tools\patch_equipment_details.py') $DecodeDir
+if ($LASTEXITCODE -ne 0) { throw 'Equipment detail smali patch failed' }
 & $JavaExe -jar $ApkToolJar b -p $FrameworkDir -o $RebuiltApk $DecodeDir
 & python (Join-Path $ProjectDir 'tools\patch_apk.py') $RebuiltApk $PatchedApk --host $ServerIp --port $Port --channel 15
 & $ZipAlignExe -p -f 4 $PatchedApk $AlignedApk

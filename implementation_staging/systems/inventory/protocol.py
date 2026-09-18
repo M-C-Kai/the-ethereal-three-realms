@@ -163,9 +163,11 @@ def item_frame(
         acquired_attributes = list(item.get('acquired_attributes', resolved.get('acquired_attributes', [0, 0, 0, 0, 0])))
         extra_attributes = list(item.get('extra_attributes', resolved.get('extra_attributes', [0, 0, 0, 0, 0])))
         category = (int(item['template_id']) // 10_000_000) % 100
-        # APK main/e.Z -> b/g.c(): only categories 1..10 consume these
-        # four blocks. The additional short slots are unknown, not durability.
-        native_equipment = 1 <= category <= 10
+        # The stock APK's b/g.c() only accepts categories 1..10. The local
+        # compatibility APK patches that predicate to 1..14 so ring/coat/
+        # accessory/talisman slots can use the same complete attribute block.
+        # The additional short slots remain unknown and must stay zero.
+        native_equipment = 1 <= category <= 14
         short_count = 8 if native_equipment else 4
         fields.extend(short(int(value)) for value in (base_attributes + [0] * short_count)[:short_count])
         fields.extend(byte(int(value)) for value in (innate_attributes + [0] * 5)[:5])

@@ -62,12 +62,13 @@ class InventoryHelperTests(unittest.TestCase):
     def test_catalog_equipment_templates_carry_innate_five_element_values(self):
         # APK B 级证据：1008 字段 24..28 为 5×BYTE 五行基础值（先天属性），
         # 客户端 tooltip 仅显示 >0 的行（pmsj/work/e/b.smali）。
-        # b/g.c() 只对模板大类 1..10 返回 true：native 装备 39 字段，
-        # innate 在 fields[24:29]；大类 11..21 走 35 字段布局（4 SHORT），
-        # innate 在 fields[20:25]，客户端不消费该块。
+        # 原版 b/g.c() 只接受模板大类 1..10；本地兼容 APK 将该判断扩展到
+        # 1..14，因此戒指/外套/饰品/法宝也必须使用完整 39 字段布局。
         from systems.inventory.protocol import item_frame
-        from protocol import TYPE_BYTE
-        for template_id in (10001001, 30001001, 100001001):
+        from protocol import TYPE_BYTE, TYPE_INT
+        for template_id in (
+            10001001, 30001001, 100001001, 110001001, 140001001,
+        ):
             resolved = self.registry.resolve({'template_id': template_id})
             innate = [int(v) for v in resolved['innate_attributes']]
             self.assertGreater(sum(innate), 0, template_id)
@@ -76,14 +77,11 @@ class InventoryHelperTests(unittest.TestCase):
             self.assertEqual(len(fields), 39, template_id)
             self.assertEqual([(f.type_id, f.value) for f in fields[24:29]],
                              [(TYPE_BYTE, v) for v in innate])
-        # 大类 14（法宝）为本地扩展槽位：35 字段布局，块客户端不读取。
-        resolved = self.registry.resolve({'template_id': 140001001})
-        innate = [int(v) for v in resolved['innate_attributes']]
-        _, fields = decode_frame(item_frame({
-            'id': 1, 'template_id': 140001001, 'location': 'bag'}))
-        self.assertEqual(len(fields), 35)
-        self.assertEqual([(f.type_id, f.value) for f in fields[20:25]],
-                         [(TYPE_BYTE, v) for v in innate])
+            self.assertEqual(
+                [f.type_id for f in fields[34:39]],
+                [TYPE_INT] * 5,
+                template_id,
+            )
 
     @classmethod
     def setUpClass(cls):

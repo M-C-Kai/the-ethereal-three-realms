@@ -66,6 +66,8 @@ Assert-NativeSuccess 'login failure return-to-input smali patch'
 Assert-NativeSuccess 'role delete confirmation input patch'
 & $PythonExe (Join-Path $ProjectDir 'tools\patch_team_roster_ui.py') $SmaliDir
 Assert-NativeSuccess 'team roster map UI patch'
+& $PythonExe (Join-Path $ProjectDir 'tools\patch_equipment_details.py') $SmaliDir
+Assert-NativeSuccess 'native equipment detail tooltip patch'
 
 # The client only renders a distinct map id after loading both of its local
 # map resources.  Kunlun reuses the proven map 58 composite-tile reference
