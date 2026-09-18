@@ -138,6 +138,17 @@ class InventoryHandlerTests(unittest.TestCase):
         message_id, fields = decode_frame(result.frames[0])
         self.assertEqual(message_id, 1032)
 
+
+    def test_equipment_detail_fallback_contains_configured_attributes(self):
+        from systems.inventory.protocol import item_detail_frame
+        ring = {'id': 999, 'template_id': 110001001, 'location': 'bag'}
+        message_id, fields = decode_frame(item_detail_frame(ring))
+        self.assertEqual(message_id, 1032)
+        detail = str(fields[3].value)
+        self.assertIn('+1 力量(先天)', detail)
+        self.assertIn('+2 智力(先天)', detail)
+        self.assertIn('+2 精神(先天)', detail)
+
     def test_equip_and_unequip_weapon_refreshes(self):
         from protocol import integer, short
         weapon = next(

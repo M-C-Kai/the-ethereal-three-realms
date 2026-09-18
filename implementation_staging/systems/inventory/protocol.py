@@ -70,6 +70,48 @@ def item_display_description(item: dict[str, object]) -> str:
     attack = int(attributes[0]) if attributes else 0
     return f'{description}_强化：+{level}_当前攻击：{attack}'
 
+
+def equipment_detail_description(item: dict[str, object]) -> str:
+    """Text fallback for clients that still open the legacy 1032 detail panel.
+
+    Patched clients render the native b/g tooltip directly.  Older/local APKs
+    may still send 1032/action=1; keep that path useful by appending the same
+    configured equipment data instead of showing only the catalog prose.
+    """
+    description = str(item.get('description', item.get('name', '物品')))
+    if not is_equipment(item):
+        return description
+
+    lines: list[str] = []
+    base_names = ('物理攻击', '物理防御', '法术攻击', '法术防御')
+    innate_names = ('力量', '耐力', '敏捷', '智力', '精神')
+    acquired_names = ('力量', '耐力', '敏捷', '智力', '精神')
+
+    base = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+    for name, raw in zip(base_names, base):
+        value = int(raw)
+        if value:
+            lines.append(f'+{value} {name}' if value > 0 else f'{value} {name}')
+
+    innate = list(item.get('innate_attributes', [0, 0, 0, 0, 0]))
+    for name, raw in zip(innate_names, innate):
+        value = int(raw)
+        if value:
+            lines.append(f'+{value} {name}(先天)' if value > 0 else f'{value} {name}(先天)')
+
+    acquired = list(item.get('acquired_attributes', [0, 0, 0, 0, 0]))
+    for name, raw in zip(acquired_names, acquired):
+        value = int(raw)
+        if value:
+            lines.append(f'+{value} {name}(后天)' if value > 0 else f'{value} {name}(后天)')
+
+    if is_strengthenable_weapon(item):
+        level = normalized_strengthen_level(item)
+        if level > 0:
+            lines.append(f'强化 +{level}')
+
+    return '_'.join([description, *lines]) if lines else description
+
 def strengthening_open_frame() -> bytes:
     return encode_frame(1009, [
         short(97),
@@ -183,7 +225,7 @@ def item_description_frame(item: dict[str, object]) -> bytes:
     return encode_frame(1009, [
         short(82),
         integer(int(item['id'])),
-        string(item_display_description(resolved)),
+        string(equipment_detail_description(resolved)),
     ])
 
 
@@ -194,7 +236,7 @@ def item_detail_frame(item: dict[str, object]) -> bytes:
         byte(1),
         integer(int(item.get('template_id', 0))),
         short(int(resolved.get('icon_code', resolved.get('quality', 0)))),
-        string(item_display_description(resolved)),
+        string(equipment_detail_description(resolved)),
     ])
 
 

@@ -25,6 +25,8 @@ New-Item -ItemType Directory -Path $RunDir, $Framework | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'APK decode failed' }
 & 'D:\python\python.exe' (Join-Path $PSScriptRoot 'tools\patch_team_roster_ui.py') $Decoded
 if ($LASTEXITCODE -ne 0) { throw 'Team roster UI patch failed' }
+& 'D:\python\python.exe' (Join-Path $PSScriptRoot 'tools\patch_equipment_details.py') $Decoded
+if ($LASTEXITCODE -ne 0) { throw 'Equipment detail smali patch failed' }
 & $Java -jar $ApkToolJar b $Decoded -o $Unsigned -p $Framework
 if ($LASTEXITCODE -ne 0) { throw 'APK build failed' }
 & (Join-Path $BuildTools 'zipalign.exe') -p -f 4 $Unsigned $Aligned
