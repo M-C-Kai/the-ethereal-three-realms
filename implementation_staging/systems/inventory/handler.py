@@ -11,7 +11,7 @@ from systems.role.events import CharacterUpdateEvent
 from systems.role.registry import mount_ride_code_from_item
 from protocol import byte, encode_frame, integer, short
 from systems.inventory.protocol import (
-    item_description_frame, item_detail_frame, item_frame,
+    client_template_id, item_description_frame, item_detail_frame, item_frame,
 )
 from systems.inventory.service import (
     bag_capacity, bag_item_count, find_item, is_equipment, is_role_item_equipped,
@@ -69,6 +69,9 @@ class InventorySystem:
                     candidate
                     for candidate in role_items(role)
                     if int(candidate.get('template_id', 0)) == item_id
+                    or client_template_id(
+                        self.settings.item_registry.resolve(candidate)
+                    ) == item_id
                 ),
                 None,
             )

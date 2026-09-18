@@ -27,7 +27,11 @@ server.py                        ← reads templates at runtime, never writes th
 `kind`, `name`, `description`, `max_quantity`, `price`, `level_required`, `icon_code`, `quality`, `sort_group`, `sort_order`, `equipment_slot`, `innate_attributes`, `acquired_attributes`, `extra_attributes`, `appearance_properties`, `item_flags`, `action_flags`, `heal`, `mount_model`
 
 `innate_attributes` / `acquired_attributes` are the 1008 five-element
-blocks (5×BYTE each: 力量/耐力/敏捷/智力/精神 base and bonus). Only
+blocks (5×BYTE each: 力量/耐力/敏捷/智力/精神 base and bonus). `strength`
+is the client equipment-strength index mirrored into the template low digit;
+`max_durability` supplies the equipment current/max durability header, while
+`socket_count` tracks opened holes and `extra_attributes` carries the five
+raw 1008 INT socket payloads. Only
 template categories 1..10 consume them on the client; see
 `docs/protocol/1008-equipment-blocks.md`. `extra_attributes` are the
 socket (孔) slots (5×INT for categories 1..10).

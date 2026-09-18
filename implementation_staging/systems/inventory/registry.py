@@ -417,6 +417,10 @@ class ItemDefinition:
     equipment_attributes: tuple[int, ...] = (0, 0, 0, 0)
     innate_attributes: tuple[int, ...] = (0, 0, 0, 0, 0)
     acquired_attributes: tuple[int, ...] = (0, 0, 0, 0, 0)
+    extra_attributes: tuple[int, ...] = (0, 0, 0, 0, 0)
+    strength: int = 0
+    max_durability: int = 0
+    socket_count: int = 0
     appearance_properties: dict[str, int] = field(default_factory=dict)
     item_flags: int = 0
     action_flags: int = 0
@@ -519,6 +523,32 @@ class ItemRegistry:
                         f'{attr_name} values must fit a byte for template_id={template_id}'
                     )
                 five_element_blocks[attr_name] = values
+
+            raw_extra = raw.get('extra_attributes', [0, 0, 0, 0, 0])
+            if not isinstance(raw_extra, list) or len(raw_extra) != 5:
+                raise ItemCatalogError(
+                    f'extra_attributes must have 5 items for template_id={template_id}'
+                )
+            extra_attributes = tuple(int(x) for x in raw_extra)
+
+            strength = int(raw.get('strength', template_id % 10 if is_equip else 0))
+            if not 0 <= strength <= 9:
+                raise ItemCatalogError(
+                    f'strength must be 0..9 for template_id={template_id}'
+                )
+
+            max_durability = int(raw.get('max_durability', 200 if is_equip else 0))
+            if not 0 <= max_durability <= 32767:
+                raise ItemCatalogError(
+                    f'max_durability must fit a positive short for template_id={template_id}'
+                )
+
+            socket_count = int(raw.get('socket_count', 0))
+            if not 0 <= socket_count <= 5:
+                raise ItemCatalogError(
+                    f'socket_count must be 0..5 for template_id={template_id}'
+                )
+
             definition = ItemDefinition(
                 template_id=template_id,
                 kind=str(raw.get('kind', 'consumable')),
@@ -535,6 +565,10 @@ class ItemRegistry:
                 equipment_attributes=equipment_attributes,
                 innate_attributes=five_element_blocks['innate_attributes'],
                 acquired_attributes=five_element_blocks['acquired_attributes'],
+                extra_attributes=extra_attributes,
+                strength=strength,
+                max_durability=max_durability,
+                socket_count=socket_count,
                 appearance_properties=appearance,
                 item_flags=int(raw.get('item_flags', 0)),
                 action_flags=int(raw.get('action_flags', 0)),
@@ -603,6 +637,10 @@ class ItemRegistry:
             'equipment_attributes': list(definition.equipment_attributes),
             'innate_attributes': list(definition.innate_attributes),
             'acquired_attributes': list(definition.acquired_attributes),
+            'extra_attributes': list(definition.extra_attributes),
+            'strength': definition.strength,
+            'max_durability': definition.max_durability,
+            'socket_count': definition.socket_count,
             'appearance_properties': dict(definition.appearance_properties),
             'item_flags': definition.item_flags,
             'action_flags': definition.action_flags,
@@ -612,7 +650,8 @@ class ItemRegistry:
         for key in ('id', 'quantity', 'location', 'last_heal', 'expires_at',
                      'strengthen_level', 'base_equipment_attributes',
                      'equipment_attributes', 'innate_attributes',
-                     'acquired_attributes', 'state_flags'):
+                     'acquired_attributes', 'extra_attributes',
+                     'durability', 'socket_count', 'state_flags'):
             if key in instance:
                 resolved[key] = instance[key]
         return resolved

@@ -59,6 +59,57 @@ class InventoryHelperTests(unittest.TestCase):
         _, fields = decode_frame(item_frame({'id': 8, 'template_id': 260000001}))
         self.assertEqual(len(fields), 16)
 
+    def test_reference_ring_carries_complete_equipment_detail_data(self):
+        from protocol import TYPE_BYTE, TYPE_INT, TYPE_SHORT
+        from systems.inventory.protocol import item_frame, item_detail_frame
+
+        ring = {'id': 777, 'template_id': 110001001, 'location': 'bag'}
+        message, fields = decode_frame(item_frame(ring, self.registry))
+        self.assertEqual(message, 1008)
+        self.assertEqual(fields[2].type_id, TYPE_SHORT)
+        self.assertEqual(fields[2].value, 200)
+        self.assertEqual(fields[3].type_id, TYPE_SHORT)
+        self.assertEqual(fields[3].value, 200)
+        self.assertEqual(fields[6].value, 5000)
+        self.assertEqual(fields[7].value, 110001009)
+        self.assertEqual(fields[11].value, 1)
+        self.assertEqual(
+            [(f.type_id, f.value) for f in fields[29:34]],
+            [(TYPE_BYTE, v) for v in [15, 20, 20, 20, 21]],
+        )
+        self.assertEqual(
+            [f.type_id for f in fields[34:39]],
+            [TYPE_INT] * 5,
+        )
+
+        detail_message, detail_fields = decode_frame(item_detail_frame(ring))
+        self.assertEqual(detail_message, 1032)
+        detail = str(detail_fields[3].value)
+        for expected in (
+            '+17 精神(先天)',
+            '+15 力量',
+            '强度 +9',
+            '+135 物理防御',
+            '+135 法术防御',
+            '开孔 3/5',
+            '耐久度 200/200',
+            '需要等级 1',
+            '价格: 5000',
+        ):
+            self.assertIn(expected, detail)
+
+    def test_equipment_durability_override_is_instance_state(self):
+        from systems.inventory.protocol import item_frame
+        ring = {
+            'id': 778,
+            'template_id': 110001001,
+            'location': 'equipped',
+            'durability': 137,
+        }
+        _, fields = decode_frame(item_frame(ring, self.registry))
+        self.assertEqual(fields[2].value, 137)
+        self.assertEqual(fields[3].value, 200)
+
     def test_catalog_equipment_templates_carry_innate_five_element_values(self):
         # APK B 级证据：1008 字段 24..28 为 5×BYTE 五行基础值（先天属性），
         # 客户端 tooltip 仅显示 >0 的行（pmsj/work/e/b.smali）。

@@ -55,6 +55,22 @@ def is_strengthenable_weapon(item: dict[str, object]) -> bool:
     return is_equipment(item) and item_slot(item) == 10
 
 
+def equipment_strength(item: dict[str, object]) -> int:
+    """Return the native client equipment-strength index (template low digit)."""
+    raw = item.get('strength')
+    if type(raw) is int and 0 <= raw <= 9:
+        return raw
+    return int(item.get('template_id', 0)) % 10
+
+
+def client_template_id(item: dict[str, object]) -> int:
+    """Encode local strength into the template low digit expected by b/g.h()."""
+    template_id = int(item.get('template_id', 0))
+    if not is_equipment(item):
+        return template_id
+    return template_id - (template_id % 10) + equipment_strength(item)
+
+
 def item_display_name(item: dict[str, object]) -> str:
     name = str(item.get('name', '未命名物品'))
     level = normalized_strengthen_level(item) if is_strengthenable_weapon(item) else 0
@@ -72,26 +88,15 @@ def item_display_description(item: dict[str, object]) -> str:
 
 
 def equipment_detail_description(item: dict[str, object]) -> str:
-    """Text fallback for clients that still open the legacy 1032 detail panel.
-
-    Patched clients render the native b/g tooltip directly.  Older/local APKs
-    may still send 1032/action=1; keep that path useful by appending the same
-    configured equipment data instead of showing only the catalog prose.
-    """
+    """Text fallback for clients that still open the legacy 1032 detail panel."""
     description = str(item.get('description', item.get('name', '物品')))
     if not is_equipment(item):
         return description
 
     lines: list[str] = []
-    base_names = ('物理攻击', '物理防御', '法术攻击', '法术防御')
     innate_names = ('力量', '耐力', '敏捷', '智力', '精神')
     acquired_names = ('力量', '耐力', '敏捷', '智力', '精神')
-
-    base = list(item.get('equipment_attributes', [0, 0, 0, 0]))
-    for name, raw in zip(base_names, base):
-        value = int(raw)
-        if value:
-            lines.append(f'+{value} {name}' if value > 0 else f'{value} {name}')
+    base_names = ('物理攻击', '物理防御', '法术攻击', '法术防御')
 
     innate = list(item.get('innate_attributes', [0, 0, 0, 0, 0]))
     for name, raw in zip(innate_names, innate):
@@ -103,14 +108,39 @@ def equipment_detail_description(item: dict[str, object]) -> str:
     for name, raw in zip(acquired_names, acquired):
         value = int(raw)
         if value:
-            lines.append(f'+{value} {name}(后天)' if value > 0 else f'{value} {name}(后天)')
+            lines.append(f'+{value} {name}' if value > 0 else f'{value} {name}')
 
-    if is_strengthenable_weapon(item):
-        level = normalized_strengthen_level(item)
-        if level > 0:
-            lines.append(f'强化 +{level}')
+    strength = equipment_strength(item)
+    if strength > 0:
+        lines.append(f'强度 +{strength}')
 
-    return '_'.join([description, *lines]) if lines else description
+    base = list(item.get('equipment_attributes', [0, 0, 0, 0]))
+    for name, raw in zip(base_names, base):
+        value = int(raw)
+        if value:
+            lines.append(f'+{value} {name}' if value > 0 else f'{value} {name}')
+
+    extra = list(item.get('extra_attributes', [0, 0, 0, 0, 0]))
+    socket_count = int(item.get('socket_count', 0))
+    if socket_count <= 0:
+        socket_count = sum(1 for value in extra[:5] if int(value) != 0)
+    if socket_count > 0:
+        lines.append(f'开孔 {min(5, socket_count)}/5')
+
+    max_durability = max(0, int(item.get('max_durability', 0)))
+    if max_durability > 0:
+        durability = max(0, min(max_durability, int(item.get('durability', max_durability))))
+        lines.append(f'耐久度 {durability}/{max_durability}')
+
+    level_required = max(0, int(item.get('level_required', 0)))
+    if level_required > 0:
+        lines.append(f'需要等级 {level_required}')
+
+    price = max(0, int(item.get('price', 0)))
+    lines.append(f'价格: {price}')
+
+    return '_'.join([description, *lines])
+
 
 def strengthening_open_frame() -> bytes:
     return encode_frame(1009, [
@@ -181,15 +211,27 @@ def item_frame(
     resolved = registry.resolve(item)
     location = str(item.get('location', 'bag'))
     location_code = {'bag': 50, 'warehouse': 51}.get(location, item_slot(item, registry))
+    equipment = is_equipment(resolved)
+    if equipment:
+        max_durability = max(1, int(resolved.get('max_durability', 200)))
+        current_durability = max(
+            0,
+            min(max_durability, int(resolved.get('durability', max_durability))),
+        )
+        stack_or_durability = current_durability
+        max_stack_or_durability = max_durability
+    else:
+        stack_or_durability = int(item.get('quantity', 1))
+        max_stack_or_durability = int(resolved.get('max_quantity', 1))
     fields = [
         byte(operation),
         integer(int(item['id'])),
-        short(int(item.get('quantity', 1))),
-        short(int(resolved.get('max_quantity', 1))),
+        short(stack_or_durability),
+        short(max_stack_or_durability),
         byte(location_code),
         integer(int(item.get('state_flags', 0))),
         integer(int(resolved.get('price', 0))),
-        integer(int(item['template_id'])),
+        integer(client_template_id(resolved)),
         string(item_display_name(resolved)),
         short(int(resolved.get('item_flags', 0))),
         short(int(resolved.get('action_flags', 0))),
@@ -234,7 +276,7 @@ def item_detail_frame(item: dict[str, object]) -> bytes:
     resolved = registry.resolve(item)
     return encode_frame(1032, [
         byte(1),
-        integer(int(item.get('template_id', 0))),
+        integer(client_template_id(resolved)),
         short(int(resolved.get('icon_code', resolved.get('quality', 0)))),
         string(equipment_detail_description(resolved)),
     ])
