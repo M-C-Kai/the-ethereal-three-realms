@@ -24,7 +24,13 @@ server.py                        ← reads templates at runtime, never writes th
 `id`, `template_id`, `quantity`, `location`, `last_heal`, `strengthen_level`, `base_equipment_attributes`, `equipment_attributes`, `state_flags`
 
 **Template fields** (resolved at read time, never persisted):
-`kind`, `name`, `description`, `max_quantity`, `price`, `level_required`, `icon_code`, `quality`, `sort_group`, `sort_order`, `equipment_slot`, `appearance_properties`, `item_flags`, `action_flags`, `heal`, `mount_model`
+`kind`, `name`, `description`, `max_quantity`, `price`, `level_required`, `icon_code`, `quality`, `sort_group`, `sort_order`, `equipment_slot`, `innate_attributes`, `acquired_attributes`, `extra_attributes`, `appearance_properties`, `item_flags`, `action_flags`, `heal`, `mount_model`
+
+`innate_attributes` / `acquired_attributes` are the 1008 five-element
+blocks (5×BYTE each: 力量/耐力/敏捷/智力/精神 base and bonus). Only
+template categories 1..10 consume them on the client; see
+`docs/protocol/1008-equipment-blocks.md`. `extra_attributes` are the
+socket (孔) slots (5×INT for categories 1..10).
 
 ## Key APIs
 

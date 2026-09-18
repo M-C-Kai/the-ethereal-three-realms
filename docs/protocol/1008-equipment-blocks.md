@@ -19,3 +19,63 @@ main/w.b(I) 强转 a/c/o（SHORT）；d(I) 使用通用整数读取。
 Protocol impact: 仅修复 1008 模板大类 1..10 的附加块，不新增消息/Action/资源。
 Tests: 字段数量、顺序、类型、非零哨兵值及非装备仍为 16 字段。
 Real-device: pending real-device verification。
+
+## 附加块语义复核（2026-09-17，B 级证据）
+
+消费方为 tooltip 构建器 `pmsj/work/e/b.smali`、人物装备页
+`e/ag.smali` / `e/bw.smali` / `e/au.smali`，全部取自 `b/g` 的四组数组：
+
+| getter | 字段块 | 语义（APK 实证） |
+|---|---|---|
+| `a(B)` | 8×SHORT `g.d[0..7]` | 基础四维：物攻/物防/法攻/法防（`a/n.ax[4]`，tooltip 按 `ax[i]: 值` 逐行显示，仅显示 >0 的项） |
+| `b(B)` | 5×BYTE `g.b[0..4]` | 五行基础值：力量/耐力/敏捷/智力/精神（`a/n.aw[5]`） |
+| `c(B)` | 5×BYTE `g.c[0..4]` | 五行加成值；`d(B)=b+c`，tooltip 显示 `aw[i]基础+加成` |
+| `e(B)` | 5×INT `g.x[0..4]` | **镶嵌槽（孔）**：`e/ag`/`e/bw` 按控件 `0x4f1a1+i` 绘制 5 个槽；值→`g.b(I)` 把灵石实例 id 段（0x13315480..0x13316bfb 等）映射为孔等级 1..7 |
+
+结论：
+
+1. 1008 单件装备的属性块 = **四维 8 短 + 五行基础 5 字节 + 五行加成 5 字节 + 孔 5 整数**，
+   共 23 个属性相关字段；不存在独立的"耐久/强化等级/套装"字段。
+   注意 `a/n.ax` 只有 4 个标签：SHORT 槽 4..7 语义未知，真实 APK 数据恒为 0
+   （若非 0 会触发 tooltip `aget-object` 数组越界），服务端必须保持 0。
+2. 品质不占属性块：客户端用 `b/g.a()` 按模板号查 `a/n.ar[5]`
+   （普通/灵器/仙器/古仙器/神器，**无"传说"**）并以 `a/n.at`
+   （`*0/*3/*4/*7/*5`）着色；装备与宠物品質数组（`ar`/`as`）分开。
+3. 孔固定 5 个槽位（`g.x` 数组长度 5），即单件装备最多 5 孔；
+   `g.b(I)` 将灵石 id 段折算为 1..7 阶，非灵石 id 段的值按图标绘制。
+4. 强化等级不在此块中：APK 用名称后缀（`+N`）与描述文本表达。
+
+## 本地先天属性数据（2026-09-18）
+
+功能：青纹套装装备补齐五行基础值（客户端 tooltip 的"先天属性"行）。
+影响模块：`implementation_staging/data/catalog/items.json`、`systems/inventory/registry.py`、`systems/inventory/protocol.py`。
+方向：S→C；MessageID：1008（模板大类 1..10 附加块）。
+字段布局：字段 24..28 = 5×BYTE（`g.b[0..4]` 力量/耐力/敏捷/智力/精神）；
+字段 29..33 = 5×BYTE（`g.c[0..4]` 五行加成）。字段数量/顺序/类型不变。
+
+APK/JAR 证据：本文档 2026-09-17 附加块语义复核（B 级）。
+证据等级：B（协议格式）；内容数值为本地兼容服内容值（与
+`equipment_attributes` 同性质，青纹套装本身即本地构造的新手套装）。
+
+服务端改动：
+- `items.json` 主目录 14 件青纹装备全部声明 `innate_attributes`；
+  `acquired_attributes` 默认全 0（青纹肩甲保留 2026-09-17 的 `基础+加成`
+  显示样例 `[1,0,1,0,0]`）。数值量级 1..3，符合 1 级新手套装。
+- `registry.py` 解析模板 `innate_attributes`/`acquired_attributes`
+  （5 项、0..255 校验）并在 `resolve()` 合并；`role/service.py`
+  `_ensure_items()` 将两者列为模板字段，实例/存档不持久化，
+  因此模板更新对所有现有角色立即生效，无需存档迁移。
+- 预览目录 250 件 `APK资源预览-*` 装备保持全 0（仅外观用途）。
+
+协议边界（重要）：
+- `b/g.c()` 只对模板大类 1..10 返回 true，**先天属性仅对大类 1..10 的
+  10 件装备可见**（盔/肩甲/铠甲/腰带/腿甲/项链/披风/护腕/长靴/武器）。
+- 大类 11..14（戒指/外套/饰品/法宝）为本地扩展槽位，仍按 35 字段布局
+  下发（4 SHORT + 5 BYTE + 5 BYTE + 5 SHORT），客户端不消费该块，
+  其 tooltip 不会显示五行行；模板数据保留仅为定义完整性。
+
+自动测试：`tests/test_inventory_system.py`
+`test_catalog_equipment_templates_carry_innate_five_element_values`
+覆盖 39/35 两种布局的块位置与值；既有 39 字段哨兵断言继续通过。
+真机状态：pending real-device verification。
+

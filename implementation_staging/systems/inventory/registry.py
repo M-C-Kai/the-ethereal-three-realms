@@ -415,6 +415,8 @@ class ItemDefinition:
     sort_group: int = 0
     sort_order: int = 0
     equipment_attributes: tuple[int, ...] = (0, 0, 0, 0)
+    innate_attributes: tuple[int, ...] = (0, 0, 0, 0, 0)
+    acquired_attributes: tuple[int, ...] = (0, 0, 0, 0, 0)
     appearance_properties: dict[str, int] = field(default_factory=dict)
     item_flags: int = 0
     action_flags: int = 0
@@ -504,6 +506,19 @@ class ItemRegistry:
             for k, v in raw_appearance.items():
                 appearance[str(k)] = int(v)
             equipment_attributes = tuple(int(x) for x in raw_attrs) if isinstance(raw_attrs, list) else (0, 0, 0, 0)
+            five_element_blocks: dict[str, tuple[int, ...]] = {}
+            for attr_name in ('innate_attributes', 'acquired_attributes'):
+                raw_values = raw.get(attr_name, [0, 0, 0, 0, 0])
+                if not isinstance(raw_values, list) or len(raw_values) != 5:
+                    raise ItemCatalogError(
+                        f'{attr_name} must have 5 items for template_id={template_id}'
+                    )
+                values = tuple(int(x) for x in raw_values)
+                if any(not 0 <= v <= 255 for v in values):
+                    raise ItemCatalogError(
+                        f'{attr_name} values must fit a byte for template_id={template_id}'
+                    )
+                five_element_blocks[attr_name] = values
             definition = ItemDefinition(
                 template_id=template_id,
                 kind=str(raw.get('kind', 'consumable')),
@@ -518,6 +533,8 @@ class ItemRegistry:
                 sort_group=sort_group,
                 sort_order=int(raw.get('sort_order', 0)),
                 equipment_attributes=equipment_attributes,
+                innate_attributes=five_element_blocks['innate_attributes'],
+                acquired_attributes=five_element_blocks['acquired_attributes'],
                 appearance_properties=appearance,
                 item_flags=int(raw.get('item_flags', 0)),
                 action_flags=int(raw.get('action_flags', 0)),
@@ -584,6 +601,8 @@ class ItemRegistry:
             'sort_group': definition.sort_group,
             'sort_order': definition.sort_order,
             'equipment_attributes': list(definition.equipment_attributes),
+            'innate_attributes': list(definition.innate_attributes),
+            'acquired_attributes': list(definition.acquired_attributes),
             'appearance_properties': dict(definition.appearance_properties),
             'item_flags': definition.item_flags,
             'action_flags': definition.action_flags,
@@ -592,7 +611,8 @@ class ItemRegistry:
         }
         for key in ('id', 'quantity', 'location', 'last_heal', 'expires_at',
                      'strengthen_level', 'base_equipment_attributes',
-                     'equipment_attributes', 'state_flags'):
+                     'equipment_attributes', 'innate_attributes',
+                     'acquired_attributes', 'state_flags'):
             if key in instance:
                 resolved[key] = instance[key]
         return resolved

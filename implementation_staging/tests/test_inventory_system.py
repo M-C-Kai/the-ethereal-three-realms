@@ -59,6 +59,32 @@ class InventoryHelperTests(unittest.TestCase):
         _, fields = decode_frame(item_frame({'id': 8, 'template_id': 260000001}))
         self.assertEqual(len(fields), 16)
 
+    def test_catalog_equipment_templates_carry_innate_five_element_values(self):
+        # APK B 级证据：1008 字段 24..28 为 5×BYTE 五行基础值（先天属性），
+        # 客户端 tooltip 仅显示 >0 的行（pmsj/work/e/b.smali）。
+        # b/g.c() 只对模板大类 1..10 返回 true：native 装备 39 字段，
+        # innate 在 fields[24:29]；大类 11..21 走 35 字段布局（4 SHORT），
+        # innate 在 fields[20:25]，客户端不消费该块。
+        from systems.inventory.protocol import item_frame
+        from protocol import TYPE_BYTE
+        for template_id in (10001001, 30001001, 100001001):
+            resolved = self.registry.resolve({'template_id': template_id})
+            innate = [int(v) for v in resolved['innate_attributes']]
+            self.assertGreater(sum(innate), 0, template_id)
+            _, fields = decode_frame(item_frame({
+                'id': 1, 'template_id': template_id, 'location': 'bag'}))
+            self.assertEqual(len(fields), 39, template_id)
+            self.assertEqual([(f.type_id, f.value) for f in fields[24:29]],
+                             [(TYPE_BYTE, v) for v in innate])
+        # 大类 14（法宝）为本地扩展槽位：35 字段布局，块客户端不读取。
+        resolved = self.registry.resolve({'template_id': 140001001})
+        innate = [int(v) for v in resolved['innate_attributes']]
+        _, fields = decode_frame(item_frame({
+            'id': 1, 'template_id': 140001001, 'location': 'bag'}))
+        self.assertEqual(len(fields), 35)
+        self.assertEqual([(f.type_id, f.value) for f in fields[20:25]],
+                         [(TYPE_BYTE, v) for v in innate])
+
     @classmethod
     def setUpClass(cls):
         cls.settings, cls.game = make_game()
