@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import random
+from dataclasses import dataclass
 
 from protocol import (
     Field, TYPE_BYTE, TYPE_INT, TYPE_SHORT,
@@ -302,6 +303,7 @@ def ensure_weapon_base_attributes(
         item['strengthen_level'] = 0
     recalculate_equipment_attributes(item)
 
+@dataclass
 class SocketOpeningActionResult:
     frames: tuple[bytes, ...]
     changed: bool
@@ -409,6 +411,7 @@ def socket_opening_action_result(
     return SocketOpeningActionResult(tuple(frames), True, message)
 
 
+@dataclass
 class StrengtheningActionResult:
     frames: tuple[bytes, ...]
     changed: bool
