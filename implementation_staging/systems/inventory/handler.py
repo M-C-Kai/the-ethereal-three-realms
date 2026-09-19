@@ -15,7 +15,8 @@ from systems.inventory.protocol import (
 )
 from systems.inventory.service import (
     bag_capacity, bag_item_count, find_item, is_equipment, is_role_item_equipped,
-    gem_embedding_action_result, item_action_location_valid, item_slot,
+    gem_embedding_action_result, gem_removal_action_result,
+    item_action_location_valid, item_slot,
     role_items, try_move_item_to_bag, socket_opening_action_result,
     strengthening_action_result,
 )
@@ -93,6 +94,8 @@ class InventorySystem:
             return self._handle_socket_opening(context, role, values)
         if action in self._gem_embedding_actions():
             return self._handle_gem_embedding(context, role, values)
+        if action in self._gem_removal_actions():
+            return self._handle_gem_removal(context, role, values)
         if action in self._strengthening_actions():
             return self._handle_strengthening(context, role, values)
         if len(values) < 2:
@@ -168,6 +171,33 @@ class InventorySystem:
             raise
         LOG.info(
             'gem embedding action=%r changed=%s message=%r',
+            values, result.changed, result.message,
+        )
+        return RouteResult.handled(result.frames)
+
+    # ------------------------------------------------------------------
+    # 宝石拆除（1009/action 73 打开；108 查看；72 确认）
+    # ------------------------------------------------------------------
+    def _gem_removal_actions(self):
+        from systems.inventory.protocol import GEM_REMOVAL_ACTIONS
+        return GEM_REMOVAL_ACTIONS
+
+    def _handle_gem_removal(self, context: SystemContext, role, values: list[object]) -> RouteResult:
+        snapshot = copy.deepcopy(role)
+        try:
+            result = gem_removal_action_result(
+                role,
+                values,
+                self.settings.item_registry,
+            )
+            if result.changed:
+                self.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        LOG.info(
+            'gem removal action=%r changed=%s message=%r',
             values, result.changed, result.message,
         )
         return RouteResult.handled(result.frames)
