@@ -50,7 +50,9 @@ from systems.role.events import CharacterUpdateBus
 from systems.inventory.protocol import (
     is_equipment, is_strengthenable_weapon, item_frame, item_slot, role_items,
 )
-from systems.inventory.socket import SOCKET_STATE_VERSION, ensure_socket_state
+from systems.inventory.socket import (
+    SOCKET_STATE_VERSION, ensure_socket_state, is_socket_gem_template,
+)
 import copy
 import string as ascii_string
 from systems.inventory.registry import (
@@ -262,6 +264,7 @@ def default_role(settings: Settings) -> dict[str, object]:
     role['items'] = starter_items(int(role['id']), settings.item_registry)
     ensure_equipment_resource_preview_items(role, settings.item_registry)
     role['strengthening_stones_initialized'] = True
+    role['socket_gems_initialized'] = True
     role['mailbox'] = starter_mail(int(role['id']))
     role['mailbox_initialized'] = True
     role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
@@ -411,12 +414,14 @@ class RoleStore:
             role['items'] = starter_items(int(role.get('id', 0)), registry)
             role['strengthening_stones_initialized'] = True
             role['chaos_stones_initialized'] = True
+            role['socket_gems_initialized'] = True
             ensure_equipment_resource_preview_items(role, registry)
             ensure_all_mount_series_items(role, registry)
             return True
         changed = False
         stones_initialized = bool(role.get('strengthening_stones_initialized', False))
         chaos_initialized = bool(role.get('chaos_stones_initialized', False))
+        gems_initialized = bool(role.get('socket_gems_initialized', False))
         defaults = starter_items(int(role.get('id', 0)), registry)
         by_id = {
             int(item.get('id', 0)): item
@@ -432,6 +437,12 @@ class RoleStore:
             int(item.get('template_id', 0)): item
             for item in items
             if isinstance(item, dict) and is_chaos_stone(item)
+        }
+        gems_by_template = {
+            int(item.get('template_id', 0)): item
+            for item in items
+            if isinstance(item, dict)
+            and is_socket_gem_template(int(item.get('template_id', 0)))
         }
         # Strip template fields from legacy items that still carry them.
         template_owned_fields = {
@@ -484,14 +495,22 @@ class RoleStore:
         # survive this catalogue migration.
         for default in defaults:
             item_id = int(default['id'])
-            if is_strengthening_stone(default) or is_chaos_stone(default):
-                template_id = int(default['template_id'])
+            default_template_id = int(default.get('template_id', 0))
+            if (
+                is_strengthening_stone(default)
+                or is_chaos_stone(default)
+                or is_socket_gem_template(default_template_id)
+            ):
+                template_id = default_template_id
                 if is_strengthening_stone(default):
                     current = stones_by_template.get(template_id)
                     initialized = stones_initialized
-                else:
+                elif is_chaos_stone(default):
                     current = chaos_by_template.get(template_id)
                     initialized = chaos_initialized
+                else:
+                    current = gems_by_template.get(template_id)
+                    initialized = gems_initialized
                 if current is None and initialized:
                     continue
                 if current is None:
@@ -520,6 +539,8 @@ class RoleStore:
                     stones_by_template[int(default['template_id'])] = default
                 if is_chaos_stone(default):
                     chaos_by_template[int(default['template_id'])] = default
+                if is_socket_gem_template(int(default.get('template_id', 0))):
+                    gems_by_template[int(default['template_id'])] = default
                 changed = True
                 continue
             preserved = {
@@ -633,6 +654,9 @@ class RoleStore:
             changed = True
         if not chaos_initialized:
             role['chaos_stones_initialized'] = True
+            changed = True
+        if not gems_initialized:
+            role['socket_gems_initialized'] = True
             changed = True
         changed = ensure_equipment_resource_preview_items(role, registry) or changed
         changed = ensure_all_mount_series_items(role, registry) or changed
@@ -835,6 +859,7 @@ class RoleStore:
         role['socket_state_version'] = SOCKET_STATE_VERSION
         role['strengthening_stones_initialized'] = True
         role['chaos_stones_initialized'] = True
+        role['socket_gems_initialized'] = True
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
         role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
