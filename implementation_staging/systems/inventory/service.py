@@ -551,8 +551,8 @@ def _return_removed_gem_to_bag(
     role: dict[str, object],
     template_id: int,
     registry: ItemRegistry,
-) -> dict[str, object] | None:
-    """Return one removed gem to an existing stack or a new bag instance."""
+) -> tuple[dict[str, object], bool] | None:
+    """Return one removed gem and whether a new bag instance was created."""
     for item in role_items(role):
         if (
             int(item.get('template_id', 0)) == template_id
@@ -564,7 +564,7 @@ def _return_removed_gem_to_bag(
             quantity = max(0, int(item.get('quantity', 0)))
             if quantity < max_quantity:
                 item['quantity'] = quantity + 1
-                return item
+                return item, False
 
     if bag_item_count(role) >= bag_capacity(role):
         return None
@@ -576,7 +576,7 @@ def _return_removed_gem_to_bag(
         'location': 'bag',
     }
     role_items(role).append(item)
-    return item
+    return item, True
 
 
 def gem_removal_action_result(
@@ -641,16 +641,17 @@ def gem_removal_action_result(
     if silver < GEM_REMOVAL_SILVER_COST:
         return _invalid_gem_removal_result('银两不足，拆除宝石需要1000银两')
 
-    returned = _return_removed_gem_to_bag(role, gem_template_id, registry)
-    if returned is None:
+    returned_result = _return_removed_gem_to_bag(role, gem_template_id, registry)
+    if returned_result is None:
         return _invalid_gem_removal_result('背包已满，无法拆除宝石')
+    returned, created = returned_result
 
     currencies['silver'] = silver - GEM_REMOVAL_SILVER_COST
     restore_empty_socket(equipment, socket_index)
 
     frames: list[bytes] = [
         item_frame(equipment, registry, operation=3),
-        item_frame(returned, registry, operation=3),
+        item_frame(returned, registry, operation=1 if created else 3),
         currency_property_update_frame(
             int(role.get('id', 0)),
             50,
