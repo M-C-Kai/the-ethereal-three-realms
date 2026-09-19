@@ -511,7 +511,7 @@ class InventoryGemEmbeddingTests(unittest.TestCase):
         }
 
     def test_apk_gem_embedding_actions_declared(self):
-        self.assertEqual(GEM_EMBEDDING_ACTIONS, {93, 98})
+        self.assertEqual(GEM_EMBEDDING_ACTIONS, {93, 94, 98})
 
     def test_open_embedding_page_uses_action_98(self):
         role = self._role()
@@ -520,6 +520,16 @@ class InventoryGemEmbeddingTests(unittest.TestCase):
         message, fields = decode_frame(result.frames[0])
         self.assertEqual(message, 1009)
         self.assertEqual(fields[0].value, 98)
+
+    def test_selecting_gem_uses_action_94_ack(self):
+        role = self._role()
+        result = gem_embedding_action_result(
+            role, [94, 8801, 8825], self.registry,
+        )
+        self.assertFalse(result.changed)
+        message, fields = decode_frame(result.frames[0])
+        self.assertEqual(message, 1009)
+        self.assertEqual(fields[0].value, 94)
 
     def test_matching_gem_embeds_into_first_open_empty_socket(self):
         role = self._role(socket_type=3, gem_template=322002000)
