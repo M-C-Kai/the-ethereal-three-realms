@@ -445,9 +445,19 @@ handler 只负责：
 
 严格分 5 个提交阶段，避免一次改动过大：
 
-### Phase 1 — State
-新增 `socket.py`、`socket_types`、migration version、测试。
-**不改变现有真机行为。**
+### Phase 1 — State ✅ 已实现，待真机/本地回归
+已新增 `socket.py`、`socket_types`、`socket_state_version=1` 与迁移测试。
+本阶段不改变 action 90 的开孔行为；现有真机表现应保持不变。
+
+实现提交：
+- `fa6c668e02cbcfa22e95168f279250dc5be7bdd1`：socket domain
+- `26ffc69d2bc55285f8d479a720875a9c0b9aa4c0`：protocol 统一 helper
+- `af352842484ea5fc3f81c39ee0216478c43d521b`：RoleStore migration V1
+- `8fa1fdef6335394e33fe879ff63d73f87fbca521`：migration tests
+- `b5378284b553bec1e06d812e51219f18f0e6d856`：新发放装备补齐 socket state
+
+注意：当前执行环境无法直接 clone GitHub 仓库运行 unittest，因此不能声称自动化测试已通过；
+代码已做静态复核，进入 Phase 2 前需要按计划完成回归。
 
 ### Phase 2 — Opening
 开孔开始生成真实 1..6/7 孔色。
