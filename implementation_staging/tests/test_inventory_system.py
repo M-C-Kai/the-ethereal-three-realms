@@ -10,13 +10,15 @@ from protocol import decode_frame
 from systems.battle.service import battle_state_for
 from systems.inventory.handler import InventorySystem
 from systems.inventory.protocol import (
-    GEM_EMBEDDING_ACTIONS, SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS,
+    GEM_EMBEDDING_ACTIONS, GEM_REMOVAL_ACTIONS, SOCKET_OPENING_ACTIONS,
+    STRENGTHENING_ACTIONS,
     find_item, item_slot,
     native_socket_slots, opened_socket_count, role_items,
 )
 from systems.inventory.service import (
     bag_capacity, bag_item_count, gem_embedding_action_result,
-    socket_opening_action_result, try_move_item_to_bag,
+    gem_removal_action_result, socket_opening_action_result,
+    try_move_item_to_bag,
 )
 from systems.inventory.socket import (
     SOCKET_STATE_VERSION, gem_socket_type, socket_types,
@@ -593,6 +595,119 @@ class InventoryGemEmbeddingTests(unittest.TestCase):
         )
         self.assertFalse(result.changed)
         self.assertIn('没有可镶嵌的空孔', result.message)
+
+
+class InventoryGemRemovalTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.settings, cls.game = make_game()
+        cls.registry = cls.settings.item_registry
+
+    def _role(self, silver=5000, with_stack=True):
+        items = [
+            {
+                'id': 9901,
+                'template_id': 100001001,
+                'location': 'bag',
+                'socket_types': [3, 5, 0, 0, 0],
+                'extra_attributes': [322002000, 5, 0, 0, 0],
+            },
+        ]
+        if with_stack:
+            items.append({
+                'id': 9925,
+                'template_id': 322002000,
+                'location': 'bag',
+                'quantity': 2,
+            })
+        return {
+            'id': 99,
+            'currencies': {
+                'silver': silver,
+                'immortal_stones': 100,
+                'immortal_crystals': 100,
+            },
+            'items': items,
+        }
+
+    def test_apk_gem_removal_actions_declared(self):
+        self.assertEqual(GEM_REMOVAL_ACTIONS, {72, 73, 108})
+
+    def test_open_removal_page_uses_action_73(self):
+        result = gem_removal_action_result(
+            self._role(), [73], self.registry,
+        )
+        self.assertFalse(result.changed)
+        message, fields = decode_frame(result.frames[0])
+        self.assertEqual(message, 1009)
+        self.assertEqual(fields[0].value, 73)
+
+    def test_remove_gem_restores_socket_and_returns_to_stack(self):
+        role = self._role(silver=5000, with_stack=True)
+        result = gem_removal_action_result(
+            role, [72, 9901, 0], self.registry,
+        )
+        self.assertTrue(result.changed)
+        equipment = find_item(role, 9901)
+        stack = find_item(role, 9925)
+        self.assertEqual(equipment['socket_types'], [3, 5, 0, 0, 0])
+        self.assertEqual(equipment['extra_attributes'], [3, 5, 0, 0, 0])
+        self.assertEqual(stack['quantity'], 3)
+        self.assertEqual(role['currencies']['silver'], 4000)
+
+        message_ids = [decode_frame(frame)[0] for frame in result.frames]
+        self.assertIn(1008, message_ids)
+        self.assertIn(1017, message_ids)
+        refresh_message, refresh_fields = decode_frame(result.frames[-1])
+        self.assertEqual(refresh_message, 1009)
+        self.assertEqual(refresh_fields[0].value, 73)
+
+    def test_remove_gem_creates_new_bag_instance_when_stack_missing(self):
+        role = self._role(silver=5000, with_stack=False)
+        result = gem_removal_action_result(
+            role, [72, 9901, 0], self.registry,
+        )
+        self.assertTrue(result.changed)
+        returned = [
+            item for item in role_items(role)
+            if int(item.get('template_id', 0)) == 322002000
+        ]
+        self.assertEqual(len(returned), 1)
+        self.assertEqual(returned[0]['quantity'], 1)
+        self.assertEqual(returned[0]['location'], 'bag')
+
+    def test_insufficient_silver_does_not_remove_gem(self):
+        role = self._role(silver=999, with_stack=True)
+        result = gem_removal_action_result(
+            role, [72, 9901, 0], self.registry,
+        )
+        self.assertFalse(result.changed)
+        self.assertEqual(
+            find_item(role, 9901)['extra_attributes'],
+            [322002000, 5, 0, 0, 0],
+        )
+        self.assertEqual(find_item(role, 9925)['quantity'], 2)
+        self.assertEqual(role['currencies']['silver'], 999)
+
+    def test_empty_socket_cannot_be_removed(self):
+        role = self._role()
+        result = gem_removal_action_result(
+            role, [72, 9901, 1], self.registry,
+        )
+        self.assertFalse(result.changed)
+        self.assertIn('没有可拆除', result.message)
+
+    def test_action_108_inspection_does_not_mutate_state(self):
+        role = self._role()
+        result = gem_removal_action_result(
+            role, [108, 9901, 0], self.registry,
+        )
+        self.assertFalse(result.changed)
+        self.assertEqual(role['currencies']['silver'], 5000)
+        self.assertEqual(
+            find_item(role, 9901)['extra_attributes'][0],
+            322002000,
+        )
 
 
 class InventoryGemStarterGrantTests(unittest.TestCase):
