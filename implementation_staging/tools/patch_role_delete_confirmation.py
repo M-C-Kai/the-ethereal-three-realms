@@ -21,6 +21,11 @@ def patch_role_delete_confirmation(decode_dir: Path) -> bool:
     source = smali.read_text(encoding='utf-8')
     if MARKER in source:
         return False
+    confirm_at = source.find('const-string v0, "\\u786e\\u8ba4"')
+    if confirm_at >= 0:
+        window = source[confirm_at:confirm_at + 250]
+        if 'Ljava/lang/String;->trim()Ljava/lang/String;' in window:
+            return False
     if NEEDLE not in source:
         raise ValueError('role-delete confirmation comparison was not found')
     smali.write_text(source.replace(NEEDLE, REPLACEMENT, 1), encoding='utf-8')

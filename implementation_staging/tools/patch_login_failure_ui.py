@@ -18,6 +18,9 @@ def patch_login_failure_ui(smali_file: Path) -> bool:
     if result_at < 0:
         raise ValueError('UI manager result in wrong-password branch was not found')
     insert_at = result_at + len('    move-result-object v4')
+    following = source[insert_at:insert_at + 400]
+    if 'const/16 v5, 0xa' in following and 'Lpmsj/work/d/n;->a(I)Z' in following:
+        return False
     navigation = f'''\n\n    {PATCH_MARKER}\n    const/16 v5, 0xa\n\n    invoke-virtual {{v4, v5}}, Lpmsj/work/d/n;->a(I)Z\n\n    invoke-static {{}}, Lpmsj/work/d/n;->f()Lpmsj/work/d/n;\n\n    move-result-object v4\n\n    const/16 v5, 0x136\n\n    invoke-virtual {{v4, v5}}, Lpmsj/work/d/n;->f(I)Lpmsj/work/d/c;\n'''
     smali_file.write_text(source[:insert_at] + navigation + source[insert_at:], encoding='utf-8')
     return True
