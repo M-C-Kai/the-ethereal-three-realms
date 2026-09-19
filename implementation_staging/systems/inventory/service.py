@@ -22,7 +22,8 @@ from systems.inventory.protocol import (
     is_strengthenable_weapon, item_display_description, item_display_name,
     currency_property_update_frame, gem_embedding_open_frame,
     gem_embedding_refresh_frame, gem_embedding_selection_frame,
-    gem_removal_open_frame, gem_removal_refresh_frame,
+    gem_removal_open_frame, gem_removal_repaint_frame,
+    gem_removal_refresh_frame,
     item_frame, item_slot, native_socket_slots, role_items,
     socket_opening_open_frame, socket_opening_refresh_frame,
     strengthening_equipment_error_frame,
@@ -660,6 +661,10 @@ def gem_removal_action_result(
         top_message_frame(
             f'拆除成功，第{socket_index + 1}孔已恢复，消耗1000银两'
         ),
+        # 1008 mutates the item object first; echo action 72 so the already
+        # selected socket widget repaints from the restored g.x value, then
+        # action 73 rebinds the removal page state.
+        gem_removal_repaint_frame(),
         gem_removal_refresh_frame(),
     ]
     return GemRemovalActionResult(tuple(frames), True, frames and '拆除成功' or '')
