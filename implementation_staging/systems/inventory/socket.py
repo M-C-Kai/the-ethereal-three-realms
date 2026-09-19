@@ -80,6 +80,40 @@ def opened_socket_count(item: Mapping[str, object]) -> int:
     return sum(1 for value in native_socket_slots(item) if value != 0)
 
 
+def allowed_socket_types(
+    item: Mapping[str, object],
+    *,
+    equipment_slot: int,
+) -> tuple[int, ...]:
+    """返回该装备部位允许首次生成/洗孔的原生孔型。
+
+    原版公开规则只锁定一个部位例外：紫色孔仅腰带与手镯/护腕可出现。
+    当前目录中腰带=slot 4，护腕=slot 8。
+    """
+    if not 1 <= equipment_slot <= 10:
+        return ()
+    if equipment_slot in {4, 8}:
+        return tuple(range(1, 8))
+    return tuple(range(1, 7))
+
+
+def roll_socket_type(
+    item: Mapping[str, object],
+    *,
+    equipment_slot: int,
+    rng,
+) -> int:
+    """按本地兼容策略生成一个合法孔色。
+
+    官方各色权重未知；当前策略在合法候选集中等概率。
+    该策略是可替换实现，不代表官方概率。
+    """
+    candidates = allowed_socket_types(item, equipment_slot=equipment_slot)
+    if not candidates:
+        return SOCKET_NONE
+    return candidates[rng.randrange(len(candidates))]
+
+
 def first_unopened_socket(item: Mapping[str, object]) -> int | None:
     types = socket_types(item)
     for index, value in enumerate(types):
