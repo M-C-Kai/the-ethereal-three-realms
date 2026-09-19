@@ -10,12 +10,13 @@ from protocol import decode_frame
 from systems.battle.service import battle_state_for
 from systems.inventory.handler import InventorySystem
 from systems.inventory.protocol import (
-    SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS, find_item, item_slot,
+    GEM_EMBEDDING_ACTIONS, SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS,
+    find_item, item_slot,
     native_socket_slots, opened_socket_count, role_items,
 )
 from systems.inventory.service import (
-    bag_capacity, bag_item_count, socket_opening_action_result,
-    try_move_item_to_bag,
+    bag_capacity, bag_item_count, gem_embedding_action_result,
+    socket_opening_action_result, try_move_item_to_bag,
 )
 from systems.inventory.socket import (
     SOCKET_STATE_VERSION, gem_socket_type, socket_types,
@@ -481,6 +482,107 @@ class InventorySocketOpeningTests(unittest.TestCase):
             loaded_role = reloaded.roles_for('chaos-once')[0]
             self.assertIsNone(find_item(loaded_role, consumed_id))
             self.assertTrue(loaded_role.get('chaos_stones_initialized'))
+
+
+class InventoryGemEmbeddingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.settings, cls.game = make_game()
+        cls.registry = cls.settings.item_registry
+
+    def _role(self, socket_type=3, gem_template=322002000):
+        return {
+            'id': 88,
+            'items': [
+                {
+                    'id': 8801,
+                    'template_id': 100001001,
+                    'location': 'bag',
+                    'socket_types': [socket_type, 0, 0, 0, 0],
+                    'extra_attributes': [socket_type, 0, 0, 0, 0],
+                },
+                {
+                    'id': 8825,
+                    'template_id': gem_template,
+                    'location': 'bag',
+                    'quantity': 3,
+                },
+            ],
+        }
+
+    def test_apk_gem_embedding_actions_declared(self):
+        self.assertEqual(GEM_EMBEDDING_ACTIONS, {93, 98})
+
+    def test_open_embedding_page_uses_action_98(self):
+        role = self._role()
+        result = gem_embedding_action_result(role, [98], self.registry)
+        self.assertFalse(result.changed)
+        message, fields = decode_frame(result.frames[0])
+        self.assertEqual(message, 1009)
+        self.assertEqual(fields[0].value, 98)
+
+    def test_matching_gem_embeds_into_first_open_empty_socket(self):
+        role = self._role(socket_type=3, gem_template=322002000)
+        result = gem_embedding_action_result(
+            role, [93, 8801, 8825], self.registry,
+        )
+        self.assertTrue(result.changed)
+        equipment = find_item(role, 8801)
+        gem = find_item(role, 8825)
+        self.assertEqual(equipment['socket_types'], [3, 0, 0, 0, 0])
+        self.assertEqual(equipment['extra_attributes'], [322002000, 0, 0, 0, 0])
+        self.assertEqual(gem['quantity'], 2)
+        repaint_message, repaint_fields = decode_frame(result.frames[-2])
+        self.assertEqual(repaint_message, 1009)
+        self.assertEqual(repaint_fields[0].value, 93)
+        rebind_message, rebind_fields = decode_frame(result.frames[-1])
+        self.assertEqual(rebind_message, 1009)
+        self.assertEqual(rebind_fields[0].value, 98)
+
+    def test_mismatched_gem_is_rejected_without_consuming(self):
+        role = self._role(socket_type=5, gem_template=322002000)
+        result = gem_embedding_action_result(
+            role, [93, 8801, 8825], self.registry,
+        )
+        self.assertFalse(result.changed)
+        self.assertEqual(find_item(role, 8825)['quantity'], 3)
+        self.assertEqual(find_item(role, 8801)['extra_attributes'], [5, 0, 0, 0, 0])
+        self.assertIn('不匹配', result.message)
+
+    def test_embedding_uses_first_empty_socket_in_order(self):
+        role = self._role(socket_type=3, gem_template=322004000)
+        equipment = find_item(role, 8801)
+        equipment['socket_types'] = [3, 5, 0, 0, 0]
+        equipment['extra_attributes'] = [322002000, 5, 0, 0, 0]
+        result = gem_embedding_action_result(
+            role, [93, 8801, 8825], self.registry,
+        )
+        self.assertTrue(result.changed)
+        self.assertEqual(
+            equipment['extra_attributes'],
+            [322002000, 322004000, 0, 0, 0],
+        )
+
+    def test_gold_gem_uses_locked_socket_type_two(self):
+        role = self._role(socket_type=2, gem_template=322001000)
+        result = gem_embedding_action_result(
+            role, [93, 8801, 8825], self.registry,
+        )
+        self.assertTrue(result.changed)
+        self.assertEqual(
+            find_item(role, 8801)['extra_attributes'][0],
+            322001000,
+        )
+
+    def test_no_open_empty_socket_is_rejected(self):
+        role = self._role(socket_type=3, gem_template=322002000)
+        equipment = find_item(role, 8801)
+        equipment['extra_attributes'] = [322002000, 0, 0, 0, 0]
+        result = gem_embedding_action_result(
+            role, [93, 8801, 8825], self.registry,
+        )
+        self.assertFalse(result.changed)
+        self.assertIn('没有可镶嵌的空孔', result.message)
 
 
 class InventoryHandlerTests(unittest.TestCase):
