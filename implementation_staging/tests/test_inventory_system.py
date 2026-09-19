@@ -374,7 +374,8 @@ class InventorySocketOpeningTests(unittest.TestCase):
         self.assertTrue(result.changed)
         equipment = find_item(role, 7701)
         stone = find_item(role, 7721)
-        self.assertEqual(equipment['extra_attributes'], [1, 0, 0, 0, 0])
+        self.assertEqual(equipment['extra_attributes'], [6, 0, 0, 0, 0])
+        self.assertEqual(equipment['socket_types'], [6, 0, 0, 0, 0])
         self.assertEqual(stone['quantity'], 2)
         message_ids = [decode_frame(frame)[0] for frame in result.frames]
         self.assertIn(1008, message_ids)
@@ -382,7 +383,7 @@ class InventorySocketOpeningTests(unittest.TestCase):
         self.assertEqual(refresh_message, 1009)
         self.assertEqual(refresh_fields[0].value, 95)
 
-    def test_weapon_empty_socket_uses_real_device_verified_code_one(self):
+    def test_weapon_opening_can_generate_lowest_common_socket_colour(self):
         role = self._role()
         result = socket_opening_action_result(
             role, [90, 7701, 7721], _FixedRng(0), self.registry,
@@ -390,6 +391,37 @@ class InventorySocketOpeningTests(unittest.TestCase):
         self.assertTrue(result.changed)
         equipment = find_item(role, 7701)
         self.assertEqual(native_socket_slots(equipment), [1, 0, 0, 0, 0])
+        self.assertEqual(socket_types(equipment), [1, 0, 0, 0, 0])
+
+    def test_normal_equipment_never_generates_purple_socket(self):
+        role = self._role()
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(9999), self.registry,
+        )
+        self.assertTrue(result.changed)
+        equipment = find_item(role, 7701)
+        self.assertEqual(socket_types(equipment)[0], 6)
+
+    def test_belt_can_generate_purple_socket(self):
+        role = self._role()
+        equipment = find_item(role, 7701)
+        equipment['template_id'] = 40001001
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(9999), self.registry,
+        )
+        self.assertTrue(result.changed)
+        self.assertEqual(socket_types(equipment), [7, 0, 0, 0, 0])
+        self.assertEqual(native_socket_slots(equipment), [7, 0, 0, 0, 0])
+
+    def test_bracer_can_generate_purple_socket(self):
+        role = self._role()
+        equipment = find_item(role, 7701)
+        equipment['template_id'] = 80001001
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(9999), self.registry,
+        )
+        self.assertTrue(result.changed)
+        self.assertEqual(socket_types(equipment), [7, 0, 0, 0, 0])
 
     def test_failed_later_socket_keeps_equipment_and_consumes_stone(self):
         role = self._role()
@@ -412,7 +444,8 @@ class InventorySocketOpeningTests(unittest.TestCase):
             role, [90, 7701, 7721], _FixedRng(9999), self.registry,
         )
         self.assertTrue(result.changed)
-        self.assertEqual(equipment['extra_attributes'], [1, 1, 1, 1, 1])
+        self.assertEqual(equipment['extra_attributes'], [1, 1, 1, 1, 6])
+        self.assertEqual(equipment['socket_types'], [1, 1, 1, 1, 6])
 
     def test_ring_is_rejected_without_consuming_material(self):
         role = self._role()
