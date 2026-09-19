@@ -301,20 +301,29 @@ class InventorySocketOpeningTests(unittest.TestCase):
         self.assertTrue(result.changed)
         equipment = find_item(role, 7701)
         stone = find_item(role, 7721)
-        self.assertEqual(equipment['extra_attributes'], [10, 0, 0, 0, 0])
+        self.assertEqual(equipment['extra_attributes'], [1, 0, 0, 0, 0])
         self.assertEqual(stone['quantity'], 2)
         message_ids = [decode_frame(frame)[0] for frame in result.frames]
         self.assertIn(1008, message_ids)
 
+    def test_weapon_empty_socket_uses_real_device_verified_code_one(self):
+        role = self._role()
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(0), self.registry,
+        )
+        self.assertTrue(result.changed)
+        equipment = find_item(role, 7701)
+        self.assertEqual(native_socket_slots(equipment), [1, 0, 0, 0, 0])
+
     def test_failed_later_socket_keeps_equipment_and_consumes_stone(self):
         role = self._role()
         equipment = find_item(role, 7701)
-        equipment['extra_attributes'] = [10, 0, 0, 0, 0]
+        equipment['extra_attributes'] = [1, 0, 0, 0, 0]
         result = socket_opening_action_result(
             role, [90, 7701, 7721], _FixedRng(9999), self.registry,
         )
         self.assertTrue(result.changed)
-        self.assertEqual(equipment['extra_attributes'], [10, 0, 0, 0, 0])
+        self.assertEqual(equipment['extra_attributes'], [1, 0, 0, 0, 0])
         self.assertEqual(find_item(role, 7721)['quantity'], 2)
         self.assertIn('开孔失败', result.message)
 
@@ -322,12 +331,12 @@ class InventorySocketOpeningTests(unittest.TestCase):
         role = self._role()
         role['items'][1]['template_id'] = 322250001
         equipment = find_item(role, 7701)
-        equipment['extra_attributes'] = [10, 10, 10, 10, 0]
+        equipment['extra_attributes'] = [1, 1, 1, 1, 0]
         result = socket_opening_action_result(
             role, [90, 7701, 7721], _FixedRng(9999), self.registry,
         )
         self.assertTrue(result.changed)
-        self.assertEqual(equipment['extra_attributes'], [10, 10, 10, 10, 10])
+        self.assertEqual(equipment['extra_attributes'], [1, 1, 1, 1, 1])
 
     def test_ring_is_rejected_without_consuming_material(self):
         role = self._role()
