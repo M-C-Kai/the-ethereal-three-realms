@@ -192,6 +192,7 @@ def strengthening_reset_frame() -> bytes:
 STRENGTHENING_ACTIONS = {74, 75, 77, 92, 97}
 SOCKET_OPENING_ACTIONS = {90, 95}
 GEM_EMBEDDING_ACTIONS = {93, 94, 98}
+GEM_REMOVAL_ACTIONS = {72, 73, 108}
 
 
 def socket_opening_open_frame() -> bytes:
@@ -234,6 +235,30 @@ def gem_embedding_selection_frame() -> bytes:
     until the matching response arrives.
     """
     return encode_frame(1009, [short(94)])
+
+
+def gem_removal_open_frame() -> bytes:
+    """APK ag.y(9) opens/rebinds the gem-removal page with action 73."""
+    return encode_frame(1009, [
+        short(73),
+        string('请选择需要拆除宝石的装备和孔位。拆除成功消耗1000银两。'),
+    ])
+
+
+def gem_removal_refresh_frame() -> bytes:
+    """Rebind the existing e/ag removal page after a successful removal."""
+    return gem_removal_open_frame()
+
+
+def currency_property_update_frame(role_id: int, property_index: int, value: int) -> bytes:
+    """Encode one verified 1017 incremental character-property update."""
+    return encode_frame(1017, [
+        byte(0),
+        integer(int(role_id)),
+        integer(1),
+        byte(int(property_index)),
+        integer(int(value)),
+    ])
 
 
 def item_frame(
