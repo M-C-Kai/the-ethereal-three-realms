@@ -8,6 +8,7 @@ from protocol import (
     binary, byte, encode_frame, integer, long_integer, short, string,
 )
 from systems.inventory.registry import is_strengthening_stone, normalized_strengthen_level
+from systems.inventory.socket import native_socket_slots, opened_socket_count
 from systems.inventory.registry import (
     STACKABLE_ITEM_FLAG, ItemRegistry, armor_property2_from_equipment,
     armor_property2_from_icon, battle_weapon_field2_from_icon,
@@ -85,25 +86,6 @@ def item_display_description(item: dict[str, object]) -> str:
     attributes = list(item.get('equipment_attributes', [0, 0, 0, 0]))
     attack = int(attributes[0]) if attributes else 0
     return f'{description}_强化：+{level}_当前攻击：{attack}'
-
-
-def native_socket_slots(item: dict[str, object]) -> list[int]:
-    """Return authoritative g.x[0..4] / 1008 fields 34..38."""
-    raw = item.get('extra_attributes', [0, 0, 0, 0, 0])
-    source = raw if isinstance(raw, (list, tuple)) else ()
-    slots: list[int] = []
-    for index in range(5):
-        value = source[index] if index < len(source) else 0
-        try:
-            slots.append(max(0, int(value)))
-        except (TypeError, ValueError):
-            slots.append(0)
-    return slots
-
-
-def opened_socket_count(item: dict[str, object]) -> int:
-    """Count opened sockets from native slot state only."""
-    return sum(1 for value in native_socket_slots(item) if value != 0)
 
 
 def equipment_detail_description(item: dict[str, object]) -> str:
