@@ -410,6 +410,12 @@ def socket_opening_action_result(
     else:
         message = f'开孔失败，成功率{rate / 100:.0f}%，混沌石已消耗'
     frames.append(top_message_frame(message))
+    if succeeded:
+        # 1008 updates the authoritative item object, but the already-open
+        # e/ag socket page keeps its selected controls cached. Re-send the
+        # native action-95 page-init response after the item update so the
+        # page rebinds/repaints from the refreshed g.x[0..4] state.
+        frames.append(socket_opening_open_frame())
     return SocketOpeningActionResult(tuple(frames), True, message)
 
 
