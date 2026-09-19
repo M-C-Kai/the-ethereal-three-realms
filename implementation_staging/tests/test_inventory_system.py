@@ -9,7 +9,10 @@ from app.context import SystemContext
 from protocol import decode_frame
 from systems.battle.service import battle_state_for
 from systems.inventory.handler import InventorySystem
-from systems.inventory.protocol import STRENGTHENING_ACTIONS, find_item, item_slot, role_items
+from systems.inventory.protocol import (
+    STRENGTHENING_ACTIONS, find_item, item_slot, native_socket_slots,
+    opened_socket_count, role_items,
+)
 from systems.inventory.service import (
     bag_capacity, bag_item_count, try_move_item_to_bag,
 )
@@ -54,49 +57,38 @@ class InventoryHelperTests(unittest.TestCase):
         self.assertEqual([(f.type_id, f.value) for f in fields[34:39]],
                          [(TYPE_INT, v) for v in [40000, 2, 3, 4, 5]])
 
-    def test_1008_encodes_open_empty_sockets_for_native_ag_controls(self):
+    def test_1008_uses_extra_attributes_as_authoritative_socket_state(self):
         from protocol import TYPE_INT
         from systems.inventory.protocol import item_frame
-
         item = {
-            'id': 701,
-            'template_id': 10000001,
-            'location': 'bag',
+            'id': 701, 'template_id': 10000001, 'location': 'bag',
             'socket_count': 3,
-            'extra_attributes': [0, 0, 0, 0, 0],
+            'extra_attributes': [1, 2, 0, 0, 0],
         }
         _, fields = decode_frame(item_frame(item))
         self.assertEqual(
-            [(field.type_id, field.value) for field in fields[34:39]],
-            [(TYPE_INT, 1), (TYPE_INT, 1), (TYPE_INT, 1),
+            [(f.type_id, f.value) for f in fields[34:39]],
+            [(TYPE_INT, 1), (TYPE_INT, 2), (TYPE_INT, 0),
              (TYPE_INT, 0), (TYPE_INT, 0)],
         )
+        self.assertEqual(opened_socket_count(item), 2)
 
-        # 已镶嵌灵石 ID 必须保留；只为已开但为空的孔补原生空孔值 1。
-        item['extra_attributes'] = [0x13315480, 0, 0, 0, 0]
-        _, fields = decode_frame(item_frame(item))
-        self.assertEqual(
-            [field.value for field in fields[34:39]],
-            [0x13315480, 1, 1, 0, 0],
-        )
+    def test_native_socket_helpers_ignore_legacy_socket_count(self):
+        item = {'socket_count': 5, 'extra_attributes': [1, 0x13315480, 0, 0, 0]}
+        self.assertEqual(native_socket_slots(item), [1, 0x13315480, 0, 0, 0])
+        self.assertEqual(opened_socket_count(item), 2)
 
     def test_open_empty_sockets_are_not_inferred_from_gem_ids(self):
         from systems.inventory.protocol import equipment_detail_description
         item = {
             'template_id': 10000001,
             'description': '测试装备',
-            'socket_count': 3,
-            'extra_attributes': [0, 0, 0, 0, 0],
+            'socket_count': 1,
+            'extra_attributes': [1, 2, 3, 0, 0],
         }
         detail = equipment_detail_description(item)
         self.assertIn('开孔 3/5', detail)
-
-        # 已镶嵌值不能反向决定开孔数量；孔数量是独立实例状态。
-        item['socket_count'] = 1
-        item['extra_attributes'] = [40000, 40001, 40002, 0, 0]
-        detail = equipment_detail_description(item)
-        self.assertIn('开孔 1/5', detail)
-        self.assertNotIn('开孔 3/5', detail)
+        self.assertNotIn('开孔 1/5', detail)
 
     def test_non_equipment_record_keeps_common_fields_only(self):
         from systems.inventory.protocol import item_frame
@@ -135,7 +127,6 @@ class InventoryHelperTests(unittest.TestCase):
             '强度 +9',
             '+135 物理防御',
             '+135 法术防御',
-            '开孔 3/5',
             '耐久度 200/200',
             '需要等级 1',
             '价格: 5000',
@@ -199,6 +190,58 @@ class InventoryHelperTests(unittest.TestCase):
         role = {'items': []}
         weapon = weapon_of({'items': self.game.roles.data['accounts']['localtest'][0]['items']} if False else {'items': []}, self.registry)
         self.assertIsNone(weapon)
+
+
+class InventorySocketMigrationTests(unittest.TestCase):
+    def test_role_loader_migrates_legacy_socket_count_once(self):
+        import server
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = server.Settings.load(server.Path(ROOT) / 'config.json')
+            settings.role_data_file = str(Path(tmp) / 'roles.json')
+            store = RoleStore(settings)
+            role = store.create('socket-migrate', '孔位迁移', 0, 0)
+            item = next(
+                x for x in role_items(role)
+                if int(settings.item_registry.resolve(x).get('equipment_slot', 0)) == 10
+            )
+            item.pop('extra_attributes', None)
+            item['socket_count'] = 3
+            item_id = int(item['id'])
+            store.save()
+
+            reloaded = RoleStore(settings)
+            migrated_role = reloaded.roles_for('socket-migrate')[0]
+            migrated = next(x for x in role_items(migrated_role) if int(x.get('id', 0)) == item_id)
+            self.assertEqual(migrated['extra_attributes'], [1, 1, 1, 0, 0])
+            self.assertNotIn('socket_count', migrated)
+
+            second = RoleStore(settings)
+            second_role = second.roles_for('socket-migrate')[0]
+            second_item = next(x for x in role_items(second_role) if int(x.get('id', 0)) == item_id)
+            self.assertEqual(second_item['extra_attributes'], [1, 1, 1, 0, 0])
+            self.assertNotIn('socket_count', second_item)
+
+    def test_ring_legacy_socket_count_is_not_migrated(self):
+        import server
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = server.Settings.load(server.Path(ROOT) / 'config.json')
+            settings.role_data_file = str(Path(tmp) / 'roles.json')
+            store = RoleStore(settings)
+            role = store.create('ring-migrate', '戒指迁移', 0, 0)
+            ring = {
+                'id': int(role['id']) * 10000 + 999,
+                'template_id': 110001001,
+                'location': 'bag',
+                'socket_count': 3,
+            }
+            role_items(role).append(ring)
+            store.save()
+
+            reloaded = RoleStore(settings)
+            migrated_role = reloaded.roles_for('ring-migrate')[0]
+            migrated = next(x for x in role_items(migrated_role) if x.get('template_id') == 110001001)
+            self.assertEqual(migrated['extra_attributes'], [0, 0, 0, 0, 0])
+            self.assertNotIn('socket_count', migrated)
 
 
 class InventoryHandlerTests(unittest.TestCase):
