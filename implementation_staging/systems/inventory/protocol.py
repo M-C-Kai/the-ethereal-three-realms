@@ -87,6 +87,25 @@ def item_display_description(item: dict[str, object]) -> str:
     return f'{description}_强化：+{level}_当前攻击：{attack}'
 
 
+def native_socket_slots(item: dict[str, object]) -> list[int]:
+    """Return authoritative g.x[0..4] / 1008 fields 34..38."""
+    raw = item.get('extra_attributes', [0, 0, 0, 0, 0])
+    source = raw if isinstance(raw, (list, tuple)) else ()
+    slots: list[int] = []
+    for index in range(5):
+        value = source[index] if index < len(source) else 0
+        try:
+            slots.append(max(0, int(value)))
+        except (TypeError, ValueError):
+            slots.append(0)
+    return slots
+
+
+def opened_socket_count(item: dict[str, object]) -> int:
+    """Count opened sockets from native slot state only."""
+    return sum(1 for value in native_socket_slots(item) if value != 0)
+
+
 def equipment_detail_description(item: dict[str, object]) -> str:
     """Text fallback for clients that still open the legacy 1032 detail panel."""
     description = str(item.get('description', item.get('name', '物品')))
@@ -120,12 +139,7 @@ def equipment_detail_description(item: dict[str, object]) -> str:
         if value:
             lines.append(f'+{value} {name}' if value > 0 else f'{value} {name}')
 
-    extra = list(item.get('extra_attributes', [0, 0, 0, 0, 0]))
-    # 1008 fields[34..38] are the five native socket slots (g.x[0..4]).
-    # A zero value is an empty/open socket; a non-zero value is the embedded
-    # spirit-stone instance/resource id.  Do not infer socket count from
-    # non-zero values: that would count gems rather than opened holes.
-    socket_count = max(0, min(5, int(item.get('socket_count', 0))))
+    socket_count = opened_socket_count(item)
     if socket_count > 0:
         lines.append(f'开孔 {socket_count}/5')
 
@@ -247,17 +261,8 @@ def item_frame(
         base_attributes = list(resolved.get('equipment_attributes', [0, 0, 0, 0]))
         innate_attributes = list(item.get('innate_attributes', resolved.get('innate_attributes', [0, 0, 0, 0, 0])))
         acquired_attributes = list(item.get('acquired_attributes', resolved.get('acquired_attributes', [0, 0, 0, 0, 0])))
-        extra_attributes = list(item.get('extra_attributes', resolved.get('extra_attributes', [0, 0, 0, 0, 0])))
-        # APK e/ag.k() renders the five native socket controls from g.x[0..4].
-        # 0 means unopened/no socket. Values 1..10 are opened empty sockets:
-        # ag.j() explicitly selects e(i) only when 1 <= value <= 10, while
-        # ag.k() draws value-1 from the native socket atlas when g.b(value)==0.
-        # Real embedded spirit-stone ids are preserved unchanged.
-        socket_count = max(0, min(5, int(resolved.get('socket_count', 0))))
-        extra_attributes = (extra_attributes + [0] * 5)[:5]
-        for socket_index in range(socket_count):
-            if int(extra_attributes[socket_index]) == 0:
-                extra_attributes[socket_index] = 1
+        # g.x[0..4] is the single source of truth; socket_count is ignored.
+        extra_attributes = native_socket_slots(resolved)
         category = (int(item['template_id']) // 10_000_000) % 100
         # The stock APK's b/g.c() only accepts categories 1..10. The local
         # compatibility APK patches that predicate to 1..14 so ring/coat/
