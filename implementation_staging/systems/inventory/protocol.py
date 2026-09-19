@@ -248,6 +248,19 @@ def item_frame(
         innate_attributes = list(item.get('innate_attributes', resolved.get('innate_attributes', [0, 0, 0, 0, 0])))
         acquired_attributes = list(item.get('acquired_attributes', resolved.get('acquired_attributes', [0, 0, 0, 0, 0])))
         extra_attributes = list(item.get('extra_attributes', resolved.get('extra_attributes', [0, 0, 0, 0, 0])))
+        # Native socket representation (b/g.x[0..4]): zero means no socket.
+        # A small non-zero value is an opened-but-empty socket: g.f()/g.g()
+        # treat it as present, while g.b(value) returns 0 for values < 10 so
+        # no spirit-stone grade/icon is rendered. Preserve real non-zero gem
+        # ids and materialize opened empty holes with sentinel 1.
+        socket_count = max(0, min(5, int(resolved.get('socket_count', 0))))
+        extra_attributes = (extra_attributes + [0] * 5)[:5]
+        for socket_index in range(socket_count):
+            if int(extra_attributes[socket_index]) == 0:
+                extra_attributes[socket_index] = 1
+        for socket_index in range(socket_count, 5):
+            if int(extra_attributes[socket_index]) == 1:
+                extra_attributes[socket_index] = 0
         category = (int(item['template_id']) // 10_000_000) % 100
         # The stock APK's b/g.c() only accepts categories 1..10. The local
         # compatibility APK patches that predicate to 1..14 so ring/coat/
