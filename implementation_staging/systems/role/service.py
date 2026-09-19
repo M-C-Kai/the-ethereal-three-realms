@@ -459,6 +459,18 @@ class RoleStore:
             raw_extra = item.get('extra_attributes')
             if isinstance(raw_extra, list) and len(raw_extra) == 5:
                 slots = native_socket_slots(item)
+                # 2026-09-19 real-device correction: earlier builds wrote the
+                # equipment slot number (e.g. weapon=10) as the empty-hole
+                # code. Those saves must be normalized to the verified empty
+                # code 1, otherwise ag.k() renders them as hidden/dark holes.
+                normalized_slots = [
+                    1 if 1 <= value <= 10 else value
+                    for value in slots
+                ]
+                if normalized_slots != slots:
+                    item['extra_attributes'] = normalized_slots
+                    slots = normalized_slots
+                    changed = True
             else:
                 slots = native_socket_slots(resolved)
                 legacy_count = 0
