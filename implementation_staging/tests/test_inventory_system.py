@@ -222,6 +222,26 @@ class InventorySocketMigrationTests(unittest.TestCase):
             self.assertEqual(second_item['extra_attributes'], [1, 1, 1, 0, 0])
             self.assertNotIn('socket_count', second_item)
 
+    def test_role_loader_normalizes_old_weapon_hole_code_ten(self):
+        import server
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = server.Settings.load(server.Path(ROOT) / 'config.json')
+            settings.role_data_file = str(Path(tmp) / 'roles.json')
+            store = RoleStore(settings)
+            role = store.create('socket-code-fix', '孔码修复', 0, 0)
+            weapon = next(
+                x for x in role_items(role)
+                if int(settings.item_registry.resolve(x).get('equipment_slot', 0)) == 10
+            )
+            weapon['extra_attributes'] = [10, 1, 0, 0, 0]
+            weapon_id = int(weapon['id'])
+            store.save()
+
+            reloaded = RoleStore(settings)
+            loaded = reloaded.roles_for('socket-code-fix')[0]
+            fixed = next(x for x in role_items(loaded) if int(x.get('id', 0)) == weapon_id)
+            self.assertEqual(fixed['extra_attributes'], [1, 1, 0, 0, 0])
+
     def test_ring_legacy_socket_count_is_not_migrated(self):
         import server
         with tempfile.TemporaryDirectory() as tmp:
@@ -305,6 +325,9 @@ class InventorySocketOpeningTests(unittest.TestCase):
         self.assertEqual(stone['quantity'], 2)
         message_ids = [decode_frame(frame)[0] for frame in result.frames]
         self.assertIn(1008, message_ids)
+        refresh_message, refresh_fields = decode_frame(result.frames[-1])
+        self.assertEqual(refresh_message, 1009)
+        self.assertEqual(refresh_fields[0].value, 95)
 
     def test_weapon_empty_socket_uses_real_device_verified_code_one(self):
         role = self._role()
