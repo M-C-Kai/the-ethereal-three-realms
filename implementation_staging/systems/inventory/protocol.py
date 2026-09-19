@@ -121,11 +121,13 @@ def equipment_detail_description(item: dict[str, object]) -> str:
             lines.append(f'+{value} {name}' if value > 0 else f'{value} {name}')
 
     extra = list(item.get('extra_attributes', [0, 0, 0, 0, 0]))
-    socket_count = int(item.get('socket_count', 0))
-    if socket_count <= 0:
-        socket_count = sum(1 for value in extra[:5] if int(value) != 0)
+    # 1008 fields[34..38] are the five native socket slots (g.x[0..4]).
+    # A zero value is an empty/open socket; a non-zero value is the embedded
+    # spirit-stone instance/resource id.  Do not infer socket count from
+    # non-zero values: that would count gems rather than opened holes.
+    socket_count = max(0, min(5, int(item.get('socket_count', 0))))
     if socket_count > 0:
-        lines.append(f'开孔 {min(5, socket_count)}/5')
+        lines.append(f'开孔 {socket_count}/5')
 
     max_durability = max(0, int(item.get('max_durability', 0)))
     if max_durability > 0:
