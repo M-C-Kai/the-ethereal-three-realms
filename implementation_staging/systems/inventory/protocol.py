@@ -201,6 +201,16 @@ def socket_opening_open_frame() -> bytes:
     ])
 
 
+def socket_opening_refresh_frame() -> bytes:
+    """Trigger the native e/ag page refresh after action=90 succeeds.
+
+    main/e.smali maps S→C 1009/action=90 to d/n.h(0x144), which calls
+    ag() on the existing socket page. This is the repaint path that refreshes
+    the already-selected equipment controls immediately.
+    """
+    return encode_frame(1009, [short(90)])
+
+
 def item_frame(
     item: dict[str, object],
     registry: ItemRegistry | None = None,
