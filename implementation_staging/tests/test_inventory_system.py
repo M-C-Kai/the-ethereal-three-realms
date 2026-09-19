@@ -17,6 +17,9 @@ from systems.inventory.service import (
     bag_capacity, bag_item_count, socket_opening_action_result,
     try_move_item_to_bag,
 )
+from systems.inventory.socket import (
+    SOCKET_STATE_VERSION, gem_socket_type, socket_types,
+)
 from systems.role.events import CharacterUpdateBus
 from systems.role.service import RoleStore
 
@@ -214,12 +217,15 @@ class InventorySocketMigrationTests(unittest.TestCase):
             migrated_role = reloaded.roles_for('socket-migrate')[0]
             migrated = next(x for x in role_items(migrated_role) if int(x.get('id', 0)) == item_id)
             self.assertEqual(migrated['extra_attributes'], [1, 1, 1, 0, 0])
+            self.assertEqual(migrated['socket_types'], [1, 1, 1, 0, 0])
+            self.assertEqual(migrated_role['socket_state_version'], SOCKET_STATE_VERSION)
             self.assertNotIn('socket_count', migrated)
 
             second = RoleStore(settings)
             second_role = second.roles_for('socket-migrate')[0]
             second_item = next(x for x in role_items(second_role) if int(x.get('id', 0)) == item_id)
             self.assertEqual(second_item['extra_attributes'], [1, 1, 1, 0, 0])
+            self.assertEqual(second_item['socket_types'], [1, 1, 1, 0, 0])
             self.assertNotIn('socket_count', second_item)
 
     def test_role_loader_normalizes_old_weapon_hole_code_ten(self):
@@ -241,6 +247,52 @@ class InventorySocketMigrationTests(unittest.TestCase):
             loaded = reloaded.roles_for('socket-code-fix')[0]
             fixed = next(x for x in role_items(loaded) if int(x.get('id', 0)) == weapon_id)
             self.assertEqual(fixed['extra_attributes'], [1, 1, 0, 0, 0])
+            self.assertEqual(fixed['socket_types'], [1, 1, 0, 0, 0])
+
+    def test_role_loader_preserves_real_socket_colours(self):
+        import server
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = server.Settings.load(server.Path(ROOT) / 'config.json')
+            settings.role_data_file = str(Path(tmp) / 'roles.json')
+            store = RoleStore(settings)
+            role = store.create('socket-colours', '孔色迁移', 0, 0)
+            weapon = next(
+                x for x in role_items(role)
+                if int(settings.item_registry.resolve(x).get('equipment_slot', 0)) == 10
+            )
+            weapon['extra_attributes'] = [2, 3, 4, 5, 6]
+            weapon.pop('socket_types', None)
+            weapon_id = int(weapon['id'])
+            store.save()
+
+            reloaded = RoleStore(settings)
+            loaded = reloaded.roles_for('socket-colours')[0]
+            migrated = next(x for x in role_items(loaded) if int(x.get('id', 0)) == weapon_id)
+            self.assertEqual(migrated['extra_attributes'], [2, 3, 4, 5, 6])
+            self.assertEqual(migrated['socket_types'], [2, 3, 4, 5, 6])
+
+    def test_role_loader_recovers_socket_type_from_embedded_gem(self):
+        import server
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = server.Settings.load(server.Path(ROOT) / 'config.json')
+            settings.role_data_file = str(Path(tmp) / 'roles.json')
+            store = RoleStore(settings)
+            role = store.create('socket-gem-migrate', '宝石孔迁移', 0, 0)
+            weapon = next(
+                x for x in role_items(role)
+                if int(settings.item_registry.resolve(x).get('equipment_slot', 0)) == 10
+            )
+            weapon['extra_attributes'] = [322002000, 322004000, 0, 0, 0]
+            weapon.pop('socket_types', None)
+            weapon_id = int(weapon['id'])
+            store.save()
+
+            reloaded = RoleStore(settings)
+            loaded = reloaded.roles_for('socket-gem-migrate')[0]
+            migrated = next(x for x in role_items(loaded) if int(x.get('id', 0)) == weapon_id)
+            self.assertEqual(migrated['extra_attributes'], [322002000, 322004000, 0, 0, 0])
+            self.assertEqual(migrated['socket_types'], [3, 5, 0, 0, 0])
+            self.assertEqual(gem_socket_type(322001000), 2)
 
     def test_ring_legacy_socket_count_is_not_migrated(self):
         import server
@@ -262,6 +314,7 @@ class InventorySocketMigrationTests(unittest.TestCase):
             migrated_role = reloaded.roles_for('ring-migrate')[0]
             migrated = next(x for x in role_items(migrated_role) if x.get('template_id') == 110001001)
             self.assertEqual(migrated['extra_attributes'], [0, 0, 0, 0, 0])
+            self.assertEqual(migrated['socket_types'], [0, 0, 0, 0, 0])
             self.assertNotIn('socket_count', migrated)
 
 
