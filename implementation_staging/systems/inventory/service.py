@@ -29,6 +29,9 @@ from systems.fuyuan import service as fuyuan
 from systems.role.registry import (
     construct_mount_state, create_mount_item_instance, load_mount_catalog,
 )
+from systems.inventory.socket import (
+    ensure_socket_state, first_unopened_socket, roll_socket_type, socket_types,
+)
 from systems.inventory.registry import (
     INITIAL_STRENGTHEN_STONE_TEMPLATE_ID,
     MIDDLE_STRENGTHEN_STONE_TEMPLATE_ID,
@@ -314,20 +317,6 @@ def _invalid_socket_opening_result(message: str) -> SocketOpeningActionResult:
     return SocketOpeningActionResult((top_message_frame(message),), False, message)
 
 
-def _empty_socket_code(item: dict[str, object], registry: ItemRegistry | None = None) -> int:
-    """Return the verified native code for one opened-but-empty socket.
-
-    APK ag.j()/ag.k() accepts 1..10 as empty-hole codes, but the exact
-    equipment-part -> hole-code table is not protocol-locked. Real-device
-    testing verified code 1 renders an opened empty socket correctly, while
-    using the weapon slot number (10) made the hole appear hidden/dark after
-    reopening the socket page. Until the original mapping is recovered, use
-    the verified neutral code 1 for all native slots 1..10.
-    """
-    slot = item_slot(item, registry)
-    return 1 if 1 <= slot <= 10 else 0
-
-
 def socket_opening_action_result(
     role: dict[str, object],
     values: list[object],
@@ -366,9 +355,14 @@ def socket_opening_action_result(
     if str(equipment.get('location', 'bag')) not in {'bag', 'equipped'}:
         return _invalid_socket_opening_result('只能对背包或已装备的装备开孔')
 
+    # Phase 2: ensure the instance owns a persistent original-hole array.
+    # Minimal test/caller items may not have passed RoleStore migration yet.
+    ensure_socket_state(equipment, socketable=True)
+    types = socket_types(equipment)
     slots = native_socket_slots(equipment)
-    opened = sum(1 for value in slots if value != 0)
-    if opened >= 5 or 0 not in slots:
+    opened = sum(1 for value in types if value != 0)
+    index = first_unopened_socket(equipment)
+    if opened >= 5 or index is None:
         return _invalid_socket_opening_result('该装备已经开满5个孔')
 
     definition = chaos_stone_definition_for(material)
@@ -390,11 +384,16 @@ def socket_opening_action_result(
     rate = chaos_socket_rate(definition, opened)
     succeeded = rng.randrange(10_000) < rate
     if succeeded:
-        index = slots.index(0)
-        code = _empty_socket_code(equipment, registry)
-        if code == 0:
+        socket_type = roll_socket_type(
+            equipment,
+            equipment_slot=slot,
+            rng=rng,
+        )
+        if socket_type == 0:
             return _invalid_socket_opening_result('该部位装备不能开孔')
-        slots[index] = code
+        types[index] = socket_type
+        slots[index] = socket_type
+        equipment['socket_types'] = types
         equipment['extra_attributes'] = slots
 
     frames: list[bytes] = []
