@@ -48,7 +48,8 @@ from protocol import (
 )
 from systems.role.events import CharacterUpdateBus
 from systems.inventory.protocol import (
-    is_equipment, is_strengthenable_weapon, item_frame, item_slot, role_items,
+    is_equipment, is_strengthenable_weapon, item_frame, item_slot,
+    native_socket_slots, role_items,
 )
 import copy
 import string as ascii_string
@@ -430,7 +431,7 @@ class RoleStore:
             'kind', 'name', 'description', 'max_quantity', 'price',
             'level_required', 'icon_code', 'quality', 'sort_group',
             'sort_order', 'equipment_slot', 'innate_attributes',
-            'acquired_attributes', 'extra_attributes', 'appearance_properties',
+            'acquired_attributes', 'appearance_properties',
             'item_flags', 'action_flags', 'heal', 'mount_model',
         }
         for item in items:
@@ -441,6 +442,35 @@ class RoleStore:
                 item.pop(field_name, None)
             if set(item.keys()) != before_keys:
                 changed = True
+        # Native socket migration: extra_attributes/g.x[0..4] is authoritative.
+        # Older saves may only carry socket_count; migrate that once, then delete it.
+        for item in items:
+            if not isinstance(item, dict) or not is_equipment(item):
+                continue
+            resolved = registry.resolve(item)
+            slot = int(resolved.get('equipment_slot', 0) or 0)
+            raw_extra = item.get('extra_attributes')
+            if isinstance(raw_extra, list) and len(raw_extra) == 5:
+                slots = native_socket_slots(item)
+            else:
+                slots = native_socket_slots(resolved)
+                legacy_count = 0
+                if slot != 11:
+                    try:
+                        legacy_count = max(0, min(5, int(item.get(
+                            'socket_count', resolved.get('socket_count', 0)
+                        ) or 0)))
+                    except (TypeError, ValueError):
+                        legacy_count = 0
+                for index in range(legacy_count):
+                    if slots[index] == 0:
+                        slots[index] = 1
+                item['extra_attributes'] = slots
+                changed = True
+            if 'socket_count' in item:
+                item.pop('socket_count', None)
+                changed = True
+
         # Upgrade the two legacy test items in place and append the missing
         # equipment slots.  Location and quantities are player state, so they
         # survive this catalogue migration.
