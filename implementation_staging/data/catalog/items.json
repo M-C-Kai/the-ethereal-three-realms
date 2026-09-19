@@ -1698,6 +1698,66 @@
       "quality": 0,
       "sort_group": 0,
       "sort_order": 0
+    },
+    {
+      "template_id": 322250000,
+      "kind": "consumable",
+      "name": "混沌石",
+      "description": "装备开孔材料。_每次开孔消耗1颗；第一孔成功率100%，后续孔位成功率逐次降低。",
+      "max_quantity": 9999,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 6109,
+      "quality": 0,
+      "sort_group": 0,
+      "sort_order": 250,
+      "item_flags": 64,
+      "action_flags": 0
+    },
+    {
+      "template_id": 322250001,
+      "kind": "consumable",
+      "name": "天元混沌石",
+      "description": "特殊混沌石。_用于装备开孔；本地兼容服按特殊混沌石规则处理。",
+      "max_quantity": 9999,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 6109,
+      "quality": 0,
+      "sort_group": 0,
+      "sort_order": 251,
+      "item_flags": 64,
+      "action_flags": 0
+    },
+    {
+      "template_id": 322250002,
+      "kind": "consumable",
+      "name": "三才混沌石",
+      "description": "特殊混沌石。_用于装备开孔；本地兼容服按特殊混沌石规则处理。",
+      "max_quantity": 9999,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 6109,
+      "quality": 0,
+      "sort_group": 0,
+      "sort_order": 252,
+      "item_flags": 64,
+      "action_flags": 0
+    },
+    {
+      "template_id": 322250003,
+      "kind": "consumable",
+      "name": "特殊混沌石",
+      "description": "客户端可识别的特殊混沌石兼容项。_用于装备开孔。",
+      "max_quantity": 9999,
+      "price": 0,
+      "level_required": 1,
+      "icon_code": 6109,
+      "quality": 0,
+      "sort_group": 0,
+      "sort_order": 253,
+      "item_flags": 64,
+      "action_flags": 0
     }
   ]
 }
