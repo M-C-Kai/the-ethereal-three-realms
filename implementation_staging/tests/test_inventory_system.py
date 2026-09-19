@@ -340,6 +340,28 @@ class InventorySocketOpeningTests(unittest.TestCase):
         self.assertIn('不能开孔', result.message)
 
 
+    def test_consumed_chaos_stone_is_not_regranted(self):
+        import server
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = server.Settings.load(server.Path(ROOT) / 'config.json')
+            settings.role_data_file = str(Path(tmp) / 'roles.json')
+            store = RoleStore(settings)
+            role = store.create('chaos-once', '混沌石一次性', 0, 0)
+            stones = [
+                item for item in role_items(role)
+                if 322250000 <= int(item.get('template_id', 0)) <= 322250003
+            ]
+            self.assertEqual(len(stones), 4)
+            consumed_id = int(stones[0]['id'])
+            role_items(role).remove(stones[0])
+            store.save()
+
+            reloaded = RoleStore(settings)
+            loaded_role = reloaded.roles_for('chaos-once')[0]
+            self.assertIsNone(find_item(loaded_role, consumed_id))
+            self.assertTrue(loaded_role.get('chaos_stones_initialized'))
+
+
 class InventoryHandlerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
