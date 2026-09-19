@@ -815,6 +815,7 @@ class RoleStore:
         role['items'] = starter_items(role_id, self.settings.item_registry)
         ensure_equipment_resource_preview_items(role, self.settings.item_registry)
         role['strengthening_stones_initialized'] = True
+        role['chaos_stones_initialized'] = True
         role['mailbox'] = starter_mail(role_id)
         role['mailbox_initialized'] = True
         role['bag_reset_version'] = ROLE_BAG_RESET_VERSION
