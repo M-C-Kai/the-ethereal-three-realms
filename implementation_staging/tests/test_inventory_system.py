@@ -54,6 +54,24 @@ class InventoryHelperTests(unittest.TestCase):
         self.assertEqual([(f.type_id, f.value) for f in fields[34:39]],
                          [(TYPE_INT, v) for v in [40000, 2, 3, 4, 5]])
 
+    def test_open_empty_sockets_are_not_inferred_from_gem_ids(self):
+        from systems.inventory.protocol import equipment_detail_description
+        item = {
+            'template_id': 10000001,
+            'description': '测试装备',
+            'socket_count': 3,
+            'extra_attributes': [0, 0, 0, 0, 0],
+        }
+        detail = equipment_detail_description(item)
+        self.assertIn('开孔 3/5', detail)
+
+        # 已镶嵌值不能反向决定开孔数量；孔数量是独立实例状态。
+        item['socket_count'] = 1
+        item['extra_attributes'] = [40000, 40001, 40002, 0, 0]
+        detail = equipment_detail_description(item)
+        self.assertIn('开孔 1/5', detail)
+        self.assertNotIn('开孔 3/5', detail)
+
     def test_non_equipment_record_keeps_common_fields_only(self):
         from systems.inventory.protocol import item_frame
         _, fields = decode_frame(item_frame({'id': 8, 'template_id': 260000001}))
