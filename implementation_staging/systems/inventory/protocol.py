@@ -191,7 +191,7 @@ def strengthening_reset_frame() -> bytes:
 
 STRENGTHENING_ACTIONS = {74, 75, 77, 92, 97}
 SOCKET_OPENING_ACTIONS = {90, 95}
-GEM_EMBEDDING_ACTIONS = {93, 98}
+GEM_EMBEDDING_ACTIONS = {93, 94, 98}
 
 
 def socket_opening_open_frame() -> bytes:
@@ -223,6 +223,17 @@ def gem_embedding_open_frame() -> bytes:
 def gem_embedding_refresh_frame() -> bytes:
     """S→C action 93 invalidates/repaints the existing e/ag embedding page."""
     return encode_frame(1009, [short(93)])
+
+
+def gem_embedding_selection_frame() -> bytes:
+    """Acknowledge the native gem-selection request.
+
+    main/e.smali routes S→C 1009/action=94 (0x5e) through sswitch_38 to the
+    currently open e/ag page. The client sends this intermediate action while
+    placing a gem into the embedding selector and keeps its global wait state
+    until the matching response arrives.
+    """
+    return encode_frame(1009, [short(94)])
 
 
 def item_frame(
