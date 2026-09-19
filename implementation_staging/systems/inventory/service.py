@@ -315,15 +315,17 @@ def _invalid_socket_opening_result(message: str) -> SocketOpeningActionResult:
 
 
 def _empty_socket_code(item: dict[str, object], registry: ItemRegistry | None = None) -> int:
-    """Return the native 1..10 empty-hole code for original equipment slots.
+    """Return the verified native code for one opened-but-empty socket.
 
-    APK has ten native equipment families (slots 1..10) and ten empty-hole
-    codes (1..10). The exact official server table is unavailable; mapping
-    native equipment slot -> same-number hole code keeps part-specific holes
-    deterministic and within ag.j()/ag.k()'s verified range.
+    APK ag.j()/ag.k() accepts 1..10 as empty-hole codes, but the exact
+    equipment-part -> hole-code table is not protocol-locked. Real-device
+    testing verified code 1 renders an opened empty socket correctly, while
+    using the weapon slot number (10) made the hole appear hidden/dark after
+    reopening the socket page. Until the original mapping is recovered, use
+    the verified neutral code 1 for all native slots 1..10.
     """
     slot = item_slot(item, registry)
-    return slot if 1 <= slot <= 10 else 0
+    return 1 if 1 <= slot <= 10 else 0
 
 
 def socket_opening_action_result(
