@@ -16,7 +16,7 @@ from systems.inventory.protocol import (
 from systems.inventory.service import (
     bag_capacity, bag_item_count, find_item, is_equipment, is_role_item_equipped,
     item_action_location_valid, item_slot, role_items, try_move_item_to_bag,
-    strengthening_action_result,
+    socket_opening_action_result, strengthening_action_result,
 )
 from systems.role.service import MOUNT_EQUIPMENT_SLOT
 
@@ -85,11 +85,15 @@ class InventorySystem:
     # 1009 物品操作
     # ------------------------------------------------------------------
     def _handle_item_action(self, context: SystemContext, role, values: list[object]) -> RouteResult:
-        if role is None or len(values) < 2:
+        if role is None or not values:
             return RouteResult.not_handled()
         action = int(values[0])
+        if action in self._socket_opening_actions():
+            return self._handle_socket_opening(context, role, values)
         if action in self._strengthening_actions():
             return self._handle_strengthening(context, role, values)
+        if len(values) < 2:
+            return RouteResult.handled()
         item_id = int(values[1]) if len(values) > 1 else 0
         item = find_item(role, item_id)
         if action == 82 and item is not None:
@@ -112,6 +116,31 @@ class InventorySystem:
             action, item_id, values,
         )
         return RouteResult.handled()
+
+    # ------------------------------------------------------------------
+    # 装备开孔（1009/action 95 打开；90 确认）
+    # ------------------------------------------------------------------
+    def _socket_opening_actions(self):
+        from systems.inventory.protocol import SOCKET_OPENING_ACTIONS
+        return SOCKET_OPENING_ACTIONS
+
+    def _handle_socket_opening(self, context: SystemContext, role, values: list[object]) -> RouteResult:
+        snapshot = copy.deepcopy(role)
+        try:
+            result = socket_opening_action_result(
+                role,
+                values,
+                random,
+                self.settings.item_registry,
+            )
+            if result.changed:
+                self.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        LOG.info('socket opening action=%r changed=%s message=%r', values, result.changed, result.message)
+        return RouteResult.handled(result.frames)
 
     # ------------------------------------------------------------------
     # 强化（1009 强化动作）
