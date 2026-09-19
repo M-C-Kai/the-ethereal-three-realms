@@ -108,6 +108,60 @@
       "instance_offset": 24,
       "quantity": 100,
       "location": "bag"
+    },
+    {
+      "template_id": 322000000,
+      "instance_offset": 25,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322000100,
+      "instance_offset": 26,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322000200,
+      "instance_offset": 27,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322001000,
+      "instance_offset": 28,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322002000,
+      "instance_offset": 29,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322003000,
+      "instance_offset": 30,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322004000,
+      "instance_offset": 31,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322005000,
+      "instance_offset": 32,
+      "quantity": 100,
+      "location": "bag"
+    },
+    {
+      "template_id": 322006000,
+      "instance_offset": 33,
+      "quantity": 100,
+      "location": "bag"
     }
   ]
 }
