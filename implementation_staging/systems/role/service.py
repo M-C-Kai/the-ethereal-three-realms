@@ -48,9 +48,9 @@ from protocol import (
 )
 from systems.role.events import CharacterUpdateBus
 from systems.inventory.protocol import (
-    is_equipment, is_strengthenable_weapon, item_frame, item_slot,
-    native_socket_slots, role_items,
+    is_equipment, is_strengthenable_weapon, item_frame, item_slot, role_items,
 )
+from systems.inventory.socket import SOCKET_STATE_VERSION, ensure_socket_state
 import copy
 import string as ascii_string
 from systems.inventory.registry import (
@@ -449,46 +449,35 @@ class RoleStore:
                 item.pop(field_name, None)
             if set(item.keys()) != before_keys:
                 changed = True
-        # Native socket migration: extra_attributes/g.x[0..4] is authoritative.
-        # Older saves may only carry socket_count; migrate that once, then delete it.
+        # Socket-state migration V1:
+        # - socket_types[0..4] persists the original hole colour/type.
+        # - extra_attributes/g.x[0..4] remains the client-visible current state.
+        # The migration is idempotent and also repairs the historical 8..10
+        # empty-frame values without collapsing valid 2..7 hole colours.
         for item in items:
             if not isinstance(item, dict) or not is_equipment(item):
                 continue
             resolved = registry.resolve(item)
             slot = int(resolved.get('equipment_slot', 0) or 0)
-            raw_extra = item.get('extra_attributes')
-            if isinstance(raw_extra, list) and len(raw_extra) == 5:
-                slots = native_socket_slots(item)
-                # 2026-09-19 real-device correction: earlier builds wrote the
-                # equipment slot number (e.g. weapon=10) as the empty-hole
-                # code. Those saves must be normalized to the verified empty
-                # code 1, otherwise ag.k() renders them as hidden/dark holes.
-                normalized_slots = [
-                    1 if 1 <= value <= 10 else value
-                    for value in slots
-                ]
-                if normalized_slots != slots:
-                    item['extra_attributes'] = normalized_slots
-                    slots = normalized_slots
-                    changed = True
-            else:
-                slots = native_socket_slots(resolved)
+            legacy_count = 0
+            try:
+                legacy_count = max(0, min(5, int(item.get(
+                    'socket_count', resolved.get('socket_count', 0)
+                ) or 0)))
+            except (TypeError, ValueError):
                 legacy_count = 0
-                if slot != 11:
-                    try:
-                        legacy_count = max(0, min(5, int(item.get(
-                            'socket_count', resolved.get('socket_count', 0)
-                        ) or 0)))
-                    except (TypeError, ValueError):
-                        legacy_count = 0
-                for index in range(legacy_count):
-                    if slots[index] == 0:
-                        slots[index] = 1
-                item['extra_attributes'] = slots
+            if ensure_socket_state(
+                item,
+                socketable=1 <= slot <= 10,
+                legacy_socket_count=legacy_count,
+            ):
                 changed = True
             if 'socket_count' in item:
                 item.pop('socket_count', None)
                 changed = True
+        if role.get('socket_state_version') != SOCKET_STATE_VERSION:
+            role['socket_state_version'] = SOCKET_STATE_VERSION
+            changed = True
 
         # Upgrade the two legacy test items in place and append the missing
         # equipment slots.  Location and quantities are player state, so they
@@ -543,6 +532,7 @@ class RoleStore:
                     'strengthen_level',
                     'base_equipment_attributes',
                     'extra_attributes',
+                    'socket_types',
                 )
                 if key in current
             }
@@ -825,6 +815,13 @@ class RoleStore:
             'currencies': initial_currency_balances(),
         }
         role['items'] = starter_items(role_id, self.settings.item_registry)
+        for item in role_items(role):
+            if not isinstance(item, dict) or not is_equipment(item):
+                continue
+            resolved = self.settings.item_registry.resolve(item)
+            slot = int(resolved.get('equipment_slot', 0) or 0)
+            ensure_socket_state(item, socketable=1 <= slot <= 10)
+        role['socket_state_version'] = SOCKET_STATE_VERSION
         ensure_equipment_resource_preview_items(role, self.settings.item_registry)
         role['strengthening_stones_initialized'] = True
         role['chaos_stones_initialized'] = True
