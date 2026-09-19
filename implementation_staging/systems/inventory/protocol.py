@@ -248,6 +248,16 @@ def item_frame(
         innate_attributes = list(item.get('innate_attributes', resolved.get('innate_attributes', [0, 0, 0, 0, 0])))
         acquired_attributes = list(item.get('acquired_attributes', resolved.get('acquired_attributes', [0, 0, 0, 0, 0])))
         extra_attributes = list(item.get('extra_attributes', resolved.get('extra_attributes', [0, 0, 0, 0, 0])))
+        # APK e/ag.k() renders the five native socket controls from g.x[0..4].
+        # 0 means unopened/no socket. Values 1..10 are opened empty sockets:
+        # ag.j() explicitly selects e(i) only when 1 <= value <= 10, while
+        # ag.k() draws value-1 from the native socket atlas when g.b(value)==0.
+        # Real embedded spirit-stone ids are preserved unchanged.
+        socket_count = max(0, min(5, int(resolved.get('socket_count', 0))))
+        extra_attributes = (extra_attributes + [0] * 5)[:5]
+        for socket_index in range(socket_count):
+            if int(extra_attributes[socket_index]) == 0:
+                extra_attributes[socket_index] = 1
         category = (int(item['template_id']) // 10_000_000) % 100
         # The stock APK's b/g.c() only accepts categories 1..10. The local
         # compatibility APK patches that predicate to 1..14 so ring/coat/
