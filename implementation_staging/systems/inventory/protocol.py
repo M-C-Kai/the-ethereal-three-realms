@@ -245,8 +245,18 @@ def gem_removal_open_frame() -> bytes:
     ])
 
 
+def gem_removal_repaint_frame() -> bytes:
+    """Notify the open e/ag removal page that action=72 completed.
+
+    As with opening(90) and embedding(93), the confirm action must be echoed
+    after the updated 1008 record so the currently selected socket controls
+    redraw immediately instead of waiting for the page to be reopened.
+    """
+    return encode_frame(1009, [short(72)])
+
+
 def gem_removal_refresh_frame() -> bytes:
-    """Rebind the existing e/ag removal page after a successful removal."""
+    """Rebind the existing e/ag removal page after the native repaint."""
     return gem_removal_open_frame()
 
 
