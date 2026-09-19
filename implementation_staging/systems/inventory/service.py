@@ -16,8 +16,10 @@ from systems.inventory.registry import (
     is_strengthening_stone, normalized_strengthen_level,
 )
 from systems.inventory.protocol import (
-    SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS, find_item, is_equipment,
+    GEM_EMBEDDING_ACTIONS, SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS,
+    find_item, is_equipment,
     is_strengthenable_weapon, item_display_description, item_display_name,
+    gem_embedding_open_frame, gem_embedding_refresh_frame,
     item_frame, item_slot, native_socket_slots, role_items,
     socket_opening_open_frame, socket_opening_refresh_frame,
     strengthening_equipment_error_frame,
@@ -31,7 +33,8 @@ from systems.role.registry import (
     construct_mount_state, create_mount_item_instance, load_mount_catalog,
 )
 from systems.inventory.socket import (
-    ensure_socket_state, first_unopened_socket, roll_socket_type, socket_types,
+    ensure_socket_state, first_empty_open_socket, first_unopened_socket,
+    gem_socket_type, is_socket_gem_template, roll_socket_type, socket_types,
 )
 from systems.inventory.registry import (
     INITIAL_STRENGTHEN_STONE_TEMPLATE_ID,
@@ -420,6 +423,105 @@ def socket_opening_action_result(
         # step so the page's selected item/material controls remain in sync.
         frames.append(socket_opening_open_frame())
     return SocketOpeningActionResult(tuple(frames), True, message)
+
+
+@dataclass
+class GemEmbeddingActionResult:
+    frames: tuple[bytes, ...]
+    changed: bool
+    message: str = ''
+
+
+def _invalid_gem_embedding_result(message: str) -> GemEmbeddingActionResult:
+    return GemEmbeddingActionResult((top_message_frame(message),), False, message)
+
+
+def gem_embedding_action_result(
+    role: dict[str, object],
+    values: list[object],
+    registry: ItemRegistry | None = None,
+) -> GemEmbeddingActionResult:
+    """Apply APK native 1009/action 98(open) and 93(confirm embedding).
+
+    The confirm packet contains only equipment instance id + gem instance id.
+    The server therefore always targets the first opened-but-empty socket in
+    physical order (0..4), matching the APK help text.
+    """
+    if registry is None:
+        registry = default_item_registry()
+    if not values:
+        return _invalid_gem_embedding_result('镶嵌请求缺少操作类型')
+    try:
+        action = int(values[0])
+    except (TypeError, ValueError):
+        return _invalid_gem_embedding_result('镶嵌请求格式错误')
+
+    if action == 98:
+        return GemEmbeddingActionResult((gem_embedding_open_frame(),), False)
+    if action not in GEM_EMBEDDING_ACTIONS:
+        return GemEmbeddingActionResult((), False)
+
+    try:
+        equipment_id = int(values[1])
+        gem_id = int(values[2])
+    except (IndexError, TypeError, ValueError):
+        return _invalid_gem_embedding_result('请选择需要镶嵌的装备和宝石')
+
+    equipment = find_item(role, equipment_id)
+    gem = find_item(role, gem_id)
+    if equipment is None or not is_equipment(equipment):
+        return _invalid_gem_embedding_result('镶嵌装备无效')
+    slot = item_slot(equipment, registry)
+    if not 1 <= slot <= 10:
+        return _invalid_gem_embedding_result('该部位装备不能镶嵌宝石')
+    if str(equipment.get('location', 'bag')) not in {'bag', 'equipped'}:
+        return _invalid_gem_embedding_result('只能对背包或已装备的装备镶嵌')
+
+    ensure_socket_state(equipment, socketable=True)
+    target_index = first_empty_open_socket(equipment)
+    if target_index is None:
+        return _invalid_gem_embedding_result('该装备没有可镶嵌的空孔')
+
+    valid_gem = (
+        gem is not None
+        and is_socket_gem_template(int(gem.get('template_id', 0)))
+        and str(gem.get('location', 'bag')) == 'bag'
+        and type(gem.get('quantity')) is int
+        and int(gem.get('quantity', 0)) > 0
+    )
+    if not valid_gem or gem is None:
+        return _invalid_gem_embedding_result('请选择有效的镶嵌宝石')
+
+    types = socket_types(equipment)
+    socket_type = types[target_index]
+    gem_template_id = int(gem['template_id'])
+    required_type = gem_socket_type(gem_template_id)
+    if required_type != socket_type:
+        return _invalid_gem_embedding_result(
+            f'第{target_index + 1}孔颜色与该宝石不匹配'
+        )
+
+    current = native_socket_slots(equipment)
+    current[target_index] = gem_template_id
+    equipment['extra_attributes'] = current
+
+    gem['quantity'] = int(gem['quantity']) - 1
+
+    frames: list[bytes] = [
+        item_frame(equipment, registry, operation=3),
+        item_frame(gem, registry, operation=3),
+    ]
+    if int(gem['quantity']) == 0:
+        role_items(role).remove(gem)
+        frames.append(encode_frame(1009, [short(3), integer(gem_id)]))
+
+    message = f'镶嵌成功，第{target_index + 1}孔已镶嵌'
+    frames.append(top_message_frame(message))
+    # Mirror the opening-page refresh pattern: action 93 repaints the current
+    # e/ag page, then action 98 rebinds its selected controls/help state.
+    frames.append(gem_embedding_refresh_frame())
+    frames.append(gem_embedding_open_frame())
+    return GemEmbeddingActionResult(tuple(frames), True, message)
 
 
 @dataclass
