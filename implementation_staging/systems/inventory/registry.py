@@ -650,7 +650,7 @@ class ItemRegistry:
         for key in ('id', 'quantity', 'location', 'last_heal', 'expires_at',
                      'strengthen_level', 'base_equipment_attributes',
                      'equipment_attributes', 'innate_attributes',
-                     'acquired_attributes', 'extra_attributes',
+                     'acquired_attributes', 'extra_attributes', 'socket_types',
                      'durability', 'socket_count', 'state_flags'):
             if key in instance:
                 resolved[key] = instance[key]
