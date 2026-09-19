@@ -11,12 +11,15 @@ from protocol import (
 from systems.inventory.registry import (
     ItemRegistry, default_item_registry, deprecated_armor_template_ids,
     deprecated_mount_template_ids, deprecated_unsupported_equipment_template_ids,
+    chaos_socket_rate, chaos_stone_definition_for, is_chaos_stone,
     is_strengthening_stone, normalized_strengthen_level,
 )
 from systems.inventory.protocol import (
-    STRENGTHENING_ACTIONS, find_item, is_equipment, is_strengthenable_weapon,
-    item_display_description, item_display_name, item_frame, item_slot,
-    role_items, strengthening_equipment_error_frame, strengthening_equipment_frame,
+    SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS, find_item, is_equipment,
+    is_strengthenable_weapon, item_display_description, item_display_name,
+    item_frame, item_slot, native_socket_slots, role_items,
+    socket_opening_open_frame, strengthening_equipment_error_frame,
+    strengthening_equipment_frame,
     strengthening_open_frame, strengthening_rate_error_frame,
     strengthening_rate_frame, strengthening_reset_frame,
     strengthening_stone_selection_frame,
@@ -298,6 +301,113 @@ def ensure_weapon_base_attributes(
     if 'strengthen_level' not in item:
         item['strengthen_level'] = 0
     recalculate_equipment_attributes(item)
+
+class SocketOpeningActionResult:
+    frames: tuple[bytes, ...]
+    changed: bool
+    message: str = ''
+
+
+def _invalid_socket_opening_result(message: str) -> SocketOpeningActionResult:
+    return SocketOpeningActionResult((top_message_frame(message),), False, message)
+
+
+def _empty_socket_code(item: dict[str, object], registry: ItemRegistry | None = None) -> int:
+    """Return the native 1..10 empty-hole code for original equipment slots.
+
+    APK has ten native equipment families (slots 1..10) and ten empty-hole
+    codes (1..10). The exact official server table is unavailable; mapping
+    native equipment slot -> same-number hole code keeps part-specific holes
+    deterministic and within ag.j()/ag.k()'s verified range.
+    """
+    slot = item_slot(item, registry)
+    return slot if 1 <= slot <= 10 else 0
+
+
+def socket_opening_action_result(
+    role: dict[str, object],
+    values: list[object],
+    rng=random,
+    registry: ItemRegistry | None = None,
+) -> SocketOpeningActionResult:
+    """Apply APK native 1009/action 95(open) and 90(confirm socket opening)."""
+    if registry is None:
+        registry = default_item_registry()
+    if not values:
+        return _invalid_socket_opening_result('开孔请求缺少操作类型')
+    try:
+        action = int(values[0])
+    except (TypeError, ValueError):
+        return _invalid_socket_opening_result('开孔请求格式错误')
+
+    if action == 95:
+        return SocketOpeningActionResult((socket_opening_open_frame(),), False)
+    if action not in SOCKET_OPENING_ACTIONS:
+        return SocketOpeningActionResult((), False)
+
+    try:
+        equipment_id = int(values[1])
+        material_id = int(values[2])
+    except (IndexError, TypeError, ValueError):
+        return _invalid_socket_opening_result('请选择需要开孔的装备和混沌石')
+
+    equipment = find_item(role, equipment_id)
+    material = find_item(role, material_id)
+    if equipment is None or not is_equipment(equipment):
+        return _invalid_socket_opening_result('开孔装备无效')
+    slot = item_slot(equipment, registry)
+    if not 1 <= slot <= 10:
+        # 原 APK 开孔属性块只覆盖原生 1..10；戒指 11 明确不参与开孔。
+        return _invalid_socket_opening_result('该部位装备不能开孔')
+    if str(equipment.get('location', 'bag')) not in {'bag', 'equipped'}:
+        return _invalid_socket_opening_result('只能对背包或已装备的装备开孔')
+
+    slots = native_socket_slots(equipment)
+    opened = sum(1 for value in slots if value != 0)
+    if opened >= 5 or 0 not in slots:
+        return _invalid_socket_opening_result('该装备已经开满5个孔')
+
+    definition = chaos_stone_definition_for(material)
+    valid_material = (
+        material is not None
+        and definition is not None
+        and is_chaos_stone(material)
+        and str(material.get('location', 'bag')) == 'bag'
+        and type(material.get('quantity')) is int
+        and int(material.get('quantity', 0)) > 0
+    )
+    if not valid_material or material is None or definition is None:
+        return _invalid_socket_opening_result('请放入有效的混沌石')
+
+    # 帮助明确：无论成功失败，每次都消耗 1 颗混沌石。
+    quantity = int(material['quantity'])
+    material['quantity'] = quantity - 1
+
+    rate = chaos_socket_rate(definition, opened)
+    succeeded = rng.randrange(10_000) < rate
+    if succeeded:
+        index = slots.index(0)
+        code = _empty_socket_code(equipment, registry)
+        if code == 0:
+            return _invalid_socket_opening_result('该部位装备不能开孔')
+        slots[index] = code
+        equipment['extra_attributes'] = slots
+
+    frames: list[bytes] = []
+    if succeeded:
+        frames.append(item_frame(equipment, registry, operation=3))
+    frames.append(item_frame(material, registry, operation=3))
+    if int(material['quantity']) == 0:
+        role_items(role).remove(material)
+        frames.append(encode_frame(1009, [short(3), integer(material_id)]))
+
+    if succeeded:
+        message = f'开孔成功，第{opened + 1}孔已开启'
+    else:
+        message = f'开孔失败，成功率{rate / 100:.0f}%，混沌石已消耗'
+    frames.append(top_message_frame(message))
+    return SocketOpeningActionResult(tuple(frames), True, message)
+
 
 class StrengtheningActionResult:
     frames: tuple[bytes, ...]
