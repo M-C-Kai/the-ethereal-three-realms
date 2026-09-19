@@ -191,6 +191,7 @@ def strengthening_reset_frame() -> bytes:
 
 STRENGTHENING_ACTIONS = {74, 75, 77, 92, 97}
 SOCKET_OPENING_ACTIONS = {90, 95}
+GEM_EMBEDDING_ACTIONS = {93, 98}
 
 
 def socket_opening_open_frame() -> bytes:
@@ -209,6 +210,19 @@ def socket_opening_refresh_frame() -> bytes:
     the already-selected equipment controls immediately.
     """
     return encode_frame(1009, [short(90)])
+
+
+def gem_embedding_open_frame() -> bytes:
+    """APK ag.y(3) opens the gem-embedding page with C→S 1009/action=98."""
+    return encode_frame(1009, [
+        short(98),
+        string('请选择需要镶嵌的装备和曜灵石。'),
+    ])
+
+
+def gem_embedding_refresh_frame() -> bytes:
+    """S→C action 93 invalidates/repaints the existing e/ag embedding page."""
+    return encode_frame(1009, [short(93)])
 
 
 def item_frame(
