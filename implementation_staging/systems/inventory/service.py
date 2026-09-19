@@ -20,6 +20,7 @@ from systems.inventory.protocol import (
     find_item, is_equipment,
     is_strengthenable_weapon, item_display_description, item_display_name,
     gem_embedding_open_frame, gem_embedding_refresh_frame,
+    gem_embedding_selection_frame,
     item_frame, item_slot, native_socket_slots, role_items,
     socket_opening_open_frame, socket_opening_refresh_frame,
     strengthening_equipment_error_frame,
@@ -458,6 +459,11 @@ def gem_embedding_action_result(
 
     if action == 98:
         return GemEmbeddingActionResult((gem_embedding_open_frame(),), False)
+    if action == 94:
+        # Placing/selecting a gem is a distinct native round-trip before the
+        # final action=93 confirmation. Without this ack the client remains in
+        # its global "请稍后" wait state and never reaches the confirm step.
+        return GemEmbeddingActionResult((gem_embedding_selection_frame(),), False)
     if action not in GEM_EMBEDDING_ACTIONS:
         return GemEmbeddingActionResult((), False)
 
