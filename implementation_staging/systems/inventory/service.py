@@ -19,7 +19,8 @@ from systems.inventory.protocol import (
     SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS, find_item, is_equipment,
     is_strengthenable_weapon, item_display_description, item_display_name,
     item_frame, item_slot, native_socket_slots, role_items,
-    socket_opening_open_frame, strengthening_equipment_error_frame,
+    socket_opening_open_frame, socket_opening_refresh_frame,
+    strengthening_equipment_error_frame,
     strengthening_equipment_frame,
     strengthening_open_frame, strengthening_rate_error_frame,
     strengthening_rate_frame, strengthening_reset_frame,
@@ -410,10 +411,13 @@ def socket_opening_action_result(
         message = f'开孔失败，成功率{rate / 100:.0f}%，混沌石已消耗'
     frames.append(top_message_frame(message))
     if succeeded:
-        # 1008 updates the authoritative item object, but the already-open
-        # e/ag socket page keeps its selected controls cached. Re-send the
-        # native action-95 page-init response after the item update so the
-        # page rebinds/repaints from the refreshed g.x[0..4] state.
+        # S→C action 90 is the client's native repaint signal for e/ag:
+        # main/e -> sswitch_37 -> d/n.h(0x144) -> page.ag().
+        # Send it after the updated 1008 item record so the selected equipment
+        # immediately redraws the newly generated socket colour.
+        frames.append(socket_opening_refresh_frame())
+        # Keep the already real-device-verified action-95 rebind as a second
+        # step so the page's selected item/material controls remain in sync.
         frames.append(socket_opening_open_frame())
     return SocketOpeningActionResult(tuple(frames), True, message)
 
