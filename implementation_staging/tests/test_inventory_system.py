@@ -379,6 +379,9 @@ class InventorySocketOpeningTests(unittest.TestCase):
         self.assertEqual(stone['quantity'], 2)
         message_ids = [decode_frame(frame)[0] for frame in result.frames]
         self.assertIn(1008, message_ids)
+        repaint_message, repaint_fields = decode_frame(result.frames[-2])
+        self.assertEqual(repaint_message, 1009)
+        self.assertEqual(repaint_fields[0].value, 90)
         refresh_message, refresh_fields = decode_frame(result.frames[-1])
         self.assertEqual(refresh_message, 1009)
         self.assertEqual(refresh_fields[0].value, 95)
