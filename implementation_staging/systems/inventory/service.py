@@ -16,11 +16,13 @@ from systems.inventory.registry import (
     is_strengthening_stone, normalized_strengthen_level,
 )
 from systems.inventory.protocol import (
-    GEM_EMBEDDING_ACTIONS, SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS,
+    GEM_EMBEDDING_ACTIONS, GEM_REMOVAL_ACTIONS, SOCKET_OPENING_ACTIONS,
+    STRENGTHENING_ACTIONS,
     find_item, is_equipment,
     is_strengthenable_weapon, item_display_description, item_display_name,
-    gem_embedding_open_frame, gem_embedding_refresh_frame,
-    gem_embedding_selection_frame,
+    currency_property_update_frame, gem_embedding_open_frame,
+    gem_embedding_refresh_frame, gem_embedding_selection_frame,
+    gem_removal_open_frame, gem_removal_refresh_frame,
     item_frame, item_slot, native_socket_slots, role_items,
     socket_opening_open_frame, socket_opening_refresh_frame,
     strengthening_equipment_error_frame,
@@ -35,7 +37,8 @@ from systems.role.registry import (
 )
 from systems.inventory.socket import (
     ensure_socket_state, first_empty_open_socket, first_unopened_socket,
-    gem_socket_type, is_socket_gem_template, roll_socket_type, socket_types,
+    gem_socket_type, is_socket_gem_template, restore_empty_socket,
+    roll_socket_type, socket_gem_template, socket_types,
 )
 from systems.inventory.registry import (
     INITIAL_STRENGTHEN_STONE_TEMPLATE_ID,
@@ -528,6 +531,137 @@ def gem_embedding_action_result(
     frames.append(gem_embedding_refresh_frame())
     frames.append(gem_embedding_open_frame())
     return GemEmbeddingActionResult(tuple(frames), True, message)
+
+
+@dataclass
+class GemRemovalActionResult:
+    frames: tuple[bytes, ...]
+    changed: bool
+    message: str = ''
+
+
+GEM_REMOVAL_SILVER_COST = 1000
+
+
+def _invalid_gem_removal_result(message: str) -> GemRemovalActionResult:
+    return GemRemovalActionResult((top_message_frame(message),), False, message)
+
+
+def _return_removed_gem_to_bag(
+    role: dict[str, object],
+    template_id: int,
+    registry: ItemRegistry,
+) -> dict[str, object] | None:
+    """Return one removed gem to an existing stack or a new bag instance."""
+    for item in role_items(role):
+        if (
+            int(item.get('template_id', 0)) == template_id
+            and str(item.get('location', 'bag')) == 'bag'
+            and is_socket_gem_template(template_id)
+        ):
+            resolved = registry.resolve(item)
+            max_quantity = max(1, int(resolved.get('max_quantity', 1)))
+            quantity = max(0, int(item.get('quantity', 0)))
+            if quantity < max_quantity:
+                item['quantity'] = quantity + 1
+                return item
+
+    if bag_item_count(role) >= bag_capacity(role):
+        return None
+
+    item = {
+        'id': allocate_item_instance_id(role),
+        'template_id': int(template_id),
+        'quantity': 1,
+        'location': 'bag',
+    }
+    role_items(role).append(item)
+    return item
+
+
+def gem_removal_action_result(
+    role: dict[str, object],
+    values: list[object],
+    registry: ItemRegistry | None = None,
+) -> GemRemovalActionResult:
+    """Apply native gem-removal actions 73(open), 108(inspect), 72(confirm)."""
+    if registry is None:
+        registry = default_item_registry()
+    if not values:
+        return _invalid_gem_removal_result('拆除请求缺少操作类型')
+
+    try:
+        action = int(values[0])
+    except (TypeError, ValueError):
+        return _invalid_gem_removal_result('拆除请求格式错误')
+
+    if action == 73:
+        return GemRemovalActionResult((gem_removal_open_frame(),), False)
+    if action not in GEM_REMOVAL_ACTIONS:
+        return GemRemovalActionResult((), False)
+
+    try:
+        equipment_id = int(values[1])
+        socket_index = int(values[2])
+    except (IndexError, TypeError, ValueError):
+        return _invalid_gem_removal_result('请选择需要拆除的装备和孔位')
+
+    equipment = find_item(role, equipment_id)
+    if equipment is None or not is_equipment(equipment):
+        return _invalid_gem_removal_result('拆除装备无效')
+    slot = item_slot(equipment, registry)
+    if not 1 <= slot <= 10:
+        return _invalid_gem_removal_result('该部位装备不能拆除宝石')
+    if not 0 <= socket_index < 5:
+        return _invalid_gem_removal_result('孔位无效')
+
+    ensure_socket_state(equipment, socketable=True)
+    gem_template_id = socket_gem_template(equipment, socket_index)
+    if gem_template_id is None:
+        return _invalid_gem_removal_result('该孔没有可拆除的宝石')
+
+    if action == 108:
+        # Exact S→C 109 detail payload is still not locked from the preserved
+        # smali subset. Do not invent it. Rebind the native removal page and
+        # surface a safe local detail message while preserving the 108 flow.
+        resolved_gem = registry.resolve({'template_id': gem_template_id})
+        name = str(resolved_gem.get('name', f'宝石{gem_template_id}'))
+        return GemRemovalActionResult((
+            top_message_frame(f'第{socket_index + 1}孔：{name}'),
+            gem_removal_open_frame(),
+        ), False)
+
+    currencies = role.get('currencies')
+    if not isinstance(currencies, dict):
+        return _invalid_gem_removal_result('角色银两数据无效')
+    try:
+        silver = int(currencies.get('silver', 0))
+    except (TypeError, ValueError):
+        silver = 0
+    if silver < GEM_REMOVAL_SILVER_COST:
+        return _invalid_gem_removal_result('银两不足，拆除宝石需要1000银两')
+
+    returned = _return_removed_gem_to_bag(role, gem_template_id, registry)
+    if returned is None:
+        return _invalid_gem_removal_result('背包已满，无法拆除宝石')
+
+    currencies['silver'] = silver - GEM_REMOVAL_SILVER_COST
+    restore_empty_socket(equipment, socket_index)
+
+    frames: list[bytes] = [
+        item_frame(equipment, registry, operation=3),
+        item_frame(returned, registry, operation=3),
+        currency_property_update_frame(
+            int(role.get('id', 0)),
+            50,
+            int(currencies['silver']),
+        ),
+        top_message_frame(
+            f'拆除成功，第{socket_index + 1}孔已恢复，消耗1000银两'
+        ),
+        gem_removal_refresh_frame(),
+    ]
+    return GemRemovalActionResult(tuple(frames), True, frames and '拆除成功' or '')
 
 
 @dataclass
