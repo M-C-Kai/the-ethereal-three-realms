@@ -1,86 +1,126 @@
-# 飘渺三界项目导航
+# 飘渺三界
 
-目录核查日期：2026-09-12。本项目是《飘渺三界2》Android 客户端的本地 TCP 登录／游戏兼容服务，主体使用 Python；APK 补丁、地图资源和离线诊断工具与服务端共同维护。
+《飘渺三界2》Android 客户端的本地 TCP 登录/游戏兼容服务。主体使用 Python；APK 补丁、地图资源和离线诊断工具与服务端共同维护。
 
-> **开发前必读：**任何人工开发者或智能体在修改项目之前，必须先阅读根 `AGENTS.md` 和 `docs/development/APK_PROTOCOL_FIRST.md`，再读取目标目录的 `AGENTS.md`、相关协议证据与测试。所有修改都必须执行 APK Verification Gate；涉及客户端可观察行为的实现至少需要 B 级 APK 证据。
+> **开发前必读：** 任何人工开发者或智能体在修改项目之前，必须先阅读根 `AGENTS.md` 和 `docs/development/APK_PROTOCOL_FIRST.md`，再读取目标目录的 `AGENTS.md`、相关协议证据与测试。所有修改都必须执行 APK Verification Gate；涉及客户端可观察行为的实现至少需要 B 级 APK 证据。
 
-## 当前目录
+## 项目结构
 
 ```text
 飘渺三界/
-├─ implementation_staging/       实际开发与运行目录
-│  ├─ server.py                  基础服务、角色存储、游戏逻辑与协议路由
-│  ├─ server_dynamic_maps.py     动态地图及相关服务扩展
-│  ├─ server_pets.py             基础宠物接入层
-│  ├─ server_pet_system.py       当前启动脚本使用的集成入口
-│  ├─ protocol.py               TCP 帧、字段类型、编码／解码
-│  ├─ *_registry.py             各系统定义与资源注册表
-│  ├─ *_service.py              各系统业务处理
-│  ├─ *_protocol.py             各系统协议处理（另有 pet_protocol_core.py）
-│  ├─ data/                     配置目录、资源目录、账号与角色运行数据
-│  ├─ maps/                     地图源配置与地图二进制资源
-│  ├─ materials/                地图和外观相关素材
-│  ├─ tests/                    65 个 test_*.py 文件（不等于测试用例数）
-│  ├─ test_client.py            TCP 集成测试客户端
-│  ├─ tools/                    APK 补丁、地图生成、资源检查工具
-│  ├─ references/               外观审计与资源证据
-│  ├─ docs/                     模块说明与补充文档
-│  ├─ build_artifacts/         APK、签名、构建中间产物和历史提取产物
-│  ├─ logs/                    服务日志与 stdout/stderr 捕获文件
-│  ├─ runtime/                 PID 与其他小型运行状态文件
-│  ├─ 历史版本apk/              历史安装包
-│  ├─ start_server.bat          Windows 启动入口
-│  └─ restart_server.ps1        服务重启与进程管理
-├─ resource_generator/          地图、角色和资源可视化／生成器项目
-│  ├─ tools/characters/         角色外观诊断脚本
-│  ├─ tools/maps/               后续地图可视化与编辑工具入口
-│  └─ outputs/                  生成器默认输出目录
-├─ docs/
-│  ├─ development/             项目级开发规范与 APK-first 门禁
-│  ├─ protocol/                协议结构、消息号、调用链与审计
-│  ├─ diagnostics/             人物外观诊断图与结果
-│  └─ superpowers/             功能设计 specs 与实施计划 plans
-├─ .github/workflows/          任务系统相关自动化
-└─ 项目级导航与自动化配置
+├── AGENTS.md                       全仓智能体开发规范（最高优先级）
+├── README.md                       本文件
+├── docs/                           项目级文档
+│   ├── FUNCTION_MANUAL.md          功能手册：各模块功能与联动总览
+│   ├── development/                开发规范与 APK 验证
+│   │   ├── APK_PROTOCOL_FIRST.md   APK 协议优先开发规范
+│   │   └── APK_VERIFICATION_*.md   具体协议验证记录
+│   ├── protocol/                   协议文档
+│   │   ├── 01~15                   通信架构、包结构、消息号、登录、战斗等
+│   │   └──专题文档                  1008 装备块、1010 挂机、1138 寄售等
+│   ├── diagnostics/                诊断文档
+│   └── superpowers/                设计规格与实施计划
+│       ├── specs/                  功能设计文档
+│       └── plans/                  实施计划文档
+├── implementation_staging/         实际开发与运行目录
+│   ├── AGENTS.md                   实现目录开发约束与验证要求
+│   ├── server.py                   依赖装配、系统总线路由、网络收发
+│   ├── protocol.py                 TCP 帧格式、字段编码/解码、游戏加密
+│   ├── app/                        应用框架（路由、上下文、通知）
+│   │   ├── router.py               SystemRouter 总线分发
+│   │   ├── context.py              SystemContext 连接级状态
+│   │   └── notify.py               通知帧工具
+│   ├── systems/                    按玩法域拆分的系统层（五层结构）
+│   │   ├── role/                   角色：账号、登录、CRUD、面板、门派、邮件
+│   │   ├── map/                    地图：地图数据、进入、实体刷新、传送、对话
+│   │   ├── inventory/              背包：物品下发、装备/卸下/使用、强化
+│   │   ├── battle/                 战斗：回合制、逃跑保护、结算、PvP
+│   │   ├── skill/                  技能：生活技能、门派技能、采集
+│   │   ├── task/                   任务：目录、接取、进度、奖励
+│   │   ├── pet/                    宠物：目录、详情、技能、状态切换
+│   │   ├── shop/                   商店：页签、商品、购买
+│   │   ├── social/                 玩家交互：查看、私聊、交易、好友、PK
+│   │   ├── team/                   组队：建队、邀请、跟随
+│   │   ├── gang/                   帮派：目录、成员、职位
+│   │   ├── consignment/            寄售：上架、下架、购买
+│   │   ├── exchange/               交易所：挂单、交易
+│   │   └── fuyuan/                 福缘：目录、结算、充值
+│   ├── data/                       配置与运行数据
+│   │   ├── roles.json              角色存档（运行时生成）
+│   │   ├── accounts.json           账号数据
+│   │   └── *.json                  其他静态/运行时数据
+│   ├── maps/                       地图资源（map.o / map.ref）
+│   ├── tests/                      统一测试套件
+│   ├── test_client.py              TCP 集成测试客户端
+│   ├── tools/                      APK 补丁、地图生成工具
+│   ├── references/                 外观审计与资源证据
+│   ├── build_artifacts/            APK、签名、构建产物
+│   ├── logs/                       服务日志
+│   ├── start_server.bat            Windows 启动入口
+│   └── restart_server.ps1          服务重启脚本
+├── resource_generator/             地图与资源可视化/生成器
+│   ├── tools/characters/           角色外观诊断脚本
+│   ├── tools/maps/                 地图可视化与编辑工具
+│   └── outputs/                    生成器输出目录
+└── .github/workflows/              CI 自动化
 ```
 
-## 入口与模块关系
+## 系统架构
 
-启动链为 `start_server.bat → restart_server.ps1 → server_pet_system.py`。
-集成入口先安装宠物支持与核心桥接，再调用 `server_dynamic_maps.main()`；扩展层依赖基础 `server.py`。
-直接执行 `server.py` 与执行集成入口的功能范围不同。
+### 三层职责
 
-| 领域 | 主要文件（位于 implementation_staging） |
-| --- | --- |
-| 网络、账号、角色、背包、战斗及综合路由 | `server.py`、`protocol.py` |
-| 人物状态刷新 | `character_update_bus.py` |
-| 物品、商店、强化、福缘 | `item_registry.py`、`systems/shop/`、`strengthening.py`、`fuyuan.py` |
-| 地图 | `map_registry.py`、`map_o.py`、`dynamic_map_builder.py`、`server_dynamic_maps.py` |
-| 门派与生活技能 | `sect_registry.py`、`life_skill_registry.py`、`life_skill_service.py` |
-| 坐骑 | `mount_constructor.py`、`mount_protocol.py` |
-| 宠物 | `pet_*.py`、`server_pets.py`、`server_pet_system.py` |
-| 寄售 | `consignment_protocol.py`、`consignment_service.py` |
-| 任务 | `task_registry.py`、`task_protocol.py`、`task_runtime.py`、`task_service.py`、`task_server_support.py` |
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 网络与装配 | `server.py` | 依赖装配、SystemRouter 总线分发、asyncio TCP 收发、心跳、断线清理 |
+| 路由 | `app/router.py` | 按 MessageID 分发到唯一系统 handler |
+| 玩法系统 | `systems/<name>/` | handler → service → protocol → registry → events 五层 |
+
+### 系统五层结构
+
+每个 `systems/<name>/` 包含：
+
+| 文件 | 职责 |
+|---|---|
+| `handler.py` | 系统协议入口，路由注册（can_handle / handle） |
+| `service.py` | 业务规则和状态流转 |
+| `protocol.py` | 协议字段编码、解码和适配 |
+| `registry.py` | 静态目录加载和校验 |
+| `events.py` | 跨系统事件名和事件载荷定义 |
+
+### 核心流程
+
+```
+登录 → 选服 → 加密初始化 → 角色列表 → 创建/选择角色
+→ 地图初始化(map.o + 1407 分块) → 实体列表(1126)
+→ 背包/面板/技能初始化 → 游戏循环
+```
+
+### 模块联动
+
+- 装备物品 → CharacterUpdateBus → 角色属性重算 + 广播
+- 点击妖兽 → 地图系统 → 战斗系统
+- NPC 对话 → 任务系统 / 寄售系统
+- 坐骑穿卸 → 背包 → 地图外观广播
+
+详细联动关系见 `docs/FUNCTION_MANUAL.md`。
 
 ## 阅读顺序
 
-1. `AGENTS.md`：全仓最高级智能体开发规则，任何修改前必读。
-2. `docs/development/APK_PROTOCOL_FIRST.md`：APK 协议优先规范、A/B/C/D 证据等级和 Protocol Review 门禁。
-3. `implementation_staging/AGENTS.md`：实现目录的开发约束与验证要求。
-4. `implementation_staging/README.md`：功能说明、配置与手机测试。
-5. `implementation_staging/PROTOCOL_LOCK.md` 和 `EQUIPMENT_RESOURCE_CATALOG.md`：协议与资源约束。
-6. `docs/protocol/README.md`：协议文档索引。
-7. 对应模块源码和 `implementation_staging/tests/` 中的测试。
+1. `AGENTS.md` — 全仓最高级智能体开发规则
+2. `docs/development/APK_PROTOCOL_FIRST.md` — APK 协议优先规范
+3. `implementation_staging/AGENTS.md` — 实现目录开发约束
+4. `implementation_staging/README.md` — 功能说明与配置
+5. `docs/FUNCTION_MANUAL.md` — 各模块功能与联动总览
+6. `docs/protocol/` — 协议文档
+7. 对应模块源码和 `implementation_staging/tests/` 中的测试
 
-`implementation_staging/OPENCODE_HANDOFF.md` 是历史交接资料，其中主目录路径和测试数量已过时；当前工作区及实际代码应作为目录与入口的依据。旧 README 中直接启动 `server.py` 的命令也不等同于当前集成启动流程。历史交接内容不得覆盖根 `AGENTS.md` 与 APK-first 开发规范。
+## 开发与验证
 
-## 当前整理事项
+```powershell
+# 单元测试
+cd implementation_staging
+D:\python\python.exe -m unittest discover -s tests -v
 
-- 第一轮规范化已将日志、APK、签名和构建产物目标目录固定到 `logs/`、`runtime/` 与 `build_artifacts/`；历史根目录产物可按该规则归档。
-- 资源可视化和生成器项目已独立为 `resource_generator/`，后续地图、角色等资源编辑能力优先在其中扩展。
-- `server.py` 仍集中承载大量逻辑，功能模块已开始拆分，尚未形成统一 Python 包结构。
-- 文档分布在根目录 `docs/`、主体 `docs/` 和主体顶层；本文件作为统一导航。
-- 日志、APK、签名文件、缓存和多数构建产物已有 `.gitignore` 规则；忽略规则不会清理磁盘文件或取消已有跟踪。
-- `data/` 混合静态定义与运行存档。整理时必须保留角色、账号及其他业务状态；不要整目录删除或覆盖。
-
-本次仅核查布局并添加导航，未迁移源码、清理文件、重启服务或执行测试。功能是否通过测试及手机验收，不由本目录核查推断。
+# 端到端测试
+D:\python\python.exe test_client.py --host 127.0.0.1 --port 6805 --exercise-role-crud
+```
