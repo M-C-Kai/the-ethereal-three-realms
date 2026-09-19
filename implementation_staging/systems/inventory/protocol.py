@@ -208,6 +208,15 @@ def strengthening_reset_frame() -> bytes:
 
 
 STRENGTHENING_ACTIONS = {74, 75, 77, 92, 97}
+SOCKET_OPENING_ACTIONS = {90, 95}
+
+
+def socket_opening_open_frame() -> bytes:
+    """APK ag.y(1) opens the socket page with C→S 1009/action=95."""
+    return encode_frame(1009, [
+        short(95),
+        string('请选择需要开孔的装备和混沌石。'),
+    ])
 
 
 def item_frame(
