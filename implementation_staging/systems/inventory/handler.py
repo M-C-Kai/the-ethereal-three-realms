@@ -15,8 +15,9 @@ from systems.inventory.protocol import (
 )
 from systems.inventory.service import (
     bag_capacity, bag_item_count, find_item, is_equipment, is_role_item_equipped,
-    item_action_location_valid, item_slot, role_items, try_move_item_to_bag,
-    socket_opening_action_result, strengthening_action_result,
+    gem_embedding_action_result, item_action_location_valid, item_slot,
+    role_items, try_move_item_to_bag, socket_opening_action_result,
+    strengthening_action_result,
 )
 from systems.role.service import MOUNT_EQUIPMENT_SLOT
 
@@ -90,6 +91,8 @@ class InventorySystem:
         action = int(values[0])
         if action in self._socket_opening_actions():
             return self._handle_socket_opening(context, role, values)
+        if action in self._gem_embedding_actions():
+            return self._handle_gem_embedding(context, role, values)
         if action in self._strengthening_actions():
             return self._handle_strengthening(context, role, values)
         if len(values) < 2:
@@ -140,6 +143,33 @@ class InventorySystem:
             role.update(snapshot)
             raise
         LOG.info('socket opening action=%r changed=%s message=%r', values, result.changed, result.message)
+        return RouteResult.handled(result.frames)
+
+    # ------------------------------------------------------------------
+    # 宝石镶嵌（1009/action 98 打开；93 确认）
+    # ------------------------------------------------------------------
+    def _gem_embedding_actions(self):
+        from systems.inventory.protocol import GEM_EMBEDDING_ACTIONS
+        return GEM_EMBEDDING_ACTIONS
+
+    def _handle_gem_embedding(self, context: SystemContext, role, values: list[object]) -> RouteResult:
+        snapshot = copy.deepcopy(role)
+        try:
+            result = gem_embedding_action_result(
+                role,
+                values,
+                self.settings.item_registry,
+            )
+            if result.changed:
+                self.save()
+        except Exception:
+            role.clear()
+            role.update(snapshot)
+            raise
+        LOG.info(
+            'gem embedding action=%r changed=%s message=%r',
+            values, result.changed, result.message,
+        )
         return RouteResult.handled(result.frames)
 
     # ------------------------------------------------------------------
