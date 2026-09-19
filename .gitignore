@@ -11,6 +11,7 @@ __pycache__/
 # Local account/character state
 /implementation_staging/data/roles.json
 /implementation_staging/data/roles.*.json
+/implementation_staging/data/roles.json.bak*
 /implementation_staging/data/accounts.json
 /implementation_staging/data/gangs.json
 /implementation_staging/data/consignment_listings.json
@@ -52,4 +53,7 @@ __pycache__/
 Thumbs.db
 .idea/
 .vscode/
+.commandcode/
+.vitepress/
 node_modules
+/package-lock.json
