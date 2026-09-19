@@ -10,11 +10,12 @@ from protocol import decode_frame
 from systems.battle.service import battle_state_for
 from systems.inventory.handler import InventorySystem
 from systems.inventory.protocol import (
-    STRENGTHENING_ACTIONS, find_item, item_slot, native_socket_slots,
-    opened_socket_count, role_items,
+    SOCKET_OPENING_ACTIONS, STRENGTHENING_ACTIONS, find_item, item_slot,
+    native_socket_slots, opened_socket_count, role_items,
 )
 from systems.inventory.service import (
-    bag_capacity, bag_item_count, try_move_item_to_bag,
+    bag_capacity, bag_item_count, socket_opening_action_result,
+    try_move_item_to_bag,
 )
 from systems.role.events import CharacterUpdateBus
 from systems.role.service import RoleStore
@@ -242,6 +243,101 @@ class InventorySocketMigrationTests(unittest.TestCase):
             migrated = next(x for x in role_items(migrated_role) if x.get('template_id') == 110001001)
             self.assertEqual(migrated['extra_attributes'], [0, 0, 0, 0, 0])
             self.assertNotIn('socket_count', migrated)
+
+
+class _FixedRng:
+    def __init__(self, value: int):
+        self.value = value
+
+    def randrange(self, upper: int) -> int:
+        return min(max(0, self.value), upper - 1)
+
+
+class InventorySocketOpeningTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.settings, cls.game = make_game()
+        cls.registry = cls.settings.item_registry
+
+    def _role(self):
+        role = {
+            'id': 77,
+            'items': [
+                {
+                    'id': 7701,
+                    'template_id': 100001001,
+                    'location': 'bag',
+                    'extra_attributes': [0, 0, 0, 0, 0],
+                },
+                {
+                    'id': 7721,
+                    'template_id': 322250000,
+                    'location': 'bag',
+                    'quantity': 3,
+                },
+            ],
+        }
+        return role
+
+    def test_apk_socket_actions_declared(self):
+        self.assertEqual(SOCKET_OPENING_ACTIONS, {90, 95})
+
+    def test_open_socket_page_uses_action_95(self):
+        from protocol import short
+        role = self._role()
+        result = socket_opening_action_result(
+            role, [95], _FixedRng(0), self.registry,
+        )
+        self.assertFalse(result.changed)
+        message_id, fields = decode_frame(result.frames[0])
+        self.assertEqual(message_id, 1009)
+        self.assertEqual(fields[0].value, 95)
+
+    def test_first_socket_succeeds_and_consumes_one_chaos_stone(self):
+        role = self._role()
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(9999), self.registry,
+        )
+        self.assertTrue(result.changed)
+        equipment = find_item(role, 7701)
+        stone = find_item(role, 7721)
+        self.assertEqual(equipment['extra_attributes'], [10, 0, 0, 0, 0])
+        self.assertEqual(stone['quantity'], 2)
+        message_ids = [decode_frame(frame)[0] for frame in result.frames]
+        self.assertIn(1008, message_ids)
+
+    def test_failed_later_socket_keeps_equipment_and_consumes_stone(self):
+        role = self._role()
+        equipment = find_item(role, 7701)
+        equipment['extra_attributes'] = [10, 0, 0, 0, 0]
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(9999), self.registry,
+        )
+        self.assertTrue(result.changed)
+        self.assertEqual(equipment['extra_attributes'], [10, 0, 0, 0, 0])
+        self.assertEqual(find_item(role, 7721)['quantity'], 2)
+        self.assertIn('开孔失败', result.message)
+
+    def test_special_chaos_stone_guarantees_socket_in_local_compat_rule(self):
+        role = self._role()
+        role['items'][1]['template_id'] = 322250001
+        equipment = find_item(role, 7701)
+        equipment['extra_attributes'] = [10, 10, 10, 10, 0]
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(9999), self.registry,
+        )
+        self.assertTrue(result.changed)
+        self.assertEqual(equipment['extra_attributes'], [10, 10, 10, 10, 10])
+
+    def test_ring_is_rejected_without_consuming_material(self):
+        role = self._role()
+        role['items'][0]['template_id'] = 110001001
+        result = socket_opening_action_result(
+            role, [90, 7701, 7721], _FixedRng(0), self.registry,
+        )
+        self.assertFalse(result.changed)
+        self.assertEqual(find_item(role, 7721)['quantity'], 3)
+        self.assertIn('不能开孔', result.message)
 
 
 class InventoryHandlerTests(unittest.TestCase):
