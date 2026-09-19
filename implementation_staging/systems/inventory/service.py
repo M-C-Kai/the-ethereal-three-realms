@@ -661,9 +661,9 @@ def gem_removal_action_result(
         top_message_frame(
             f'拆除成功，第{socket_index + 1}孔已恢复，消耗1000银两'
         ),
-        # 1008 mutates the item object first; echo action 72 so the already
-        # selected socket widget repaints from the restored g.x value, then
-        # action 73 rebinds the removal page state.
+        # 1008 mutates the item object first; APK S→C action 107 enters
+        # main/e sswitch_37 -> d/n.h(0x144), forcing the existing e/ag page
+        # to repaint from the restored g.x value. Action 73 then rebinds.
         gem_removal_repaint_frame(),
         gem_removal_refresh_frame(),
     ]
