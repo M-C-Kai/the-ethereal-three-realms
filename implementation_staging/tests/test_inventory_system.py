@@ -54,6 +54,32 @@ class InventoryHelperTests(unittest.TestCase):
         self.assertEqual([(f.type_id, f.value) for f in fields[34:39]],
                          [(TYPE_INT, v) for v in [40000, 2, 3, 4, 5]])
 
+    def test_1008_encodes_open_empty_sockets_for_native_ag_controls(self):
+        from protocol import TYPE_INT
+        from systems.inventory.protocol import item_frame
+
+        item = {
+            'id': 701,
+            'template_id': 10000001,
+            'location': 'bag',
+            'socket_count': 3,
+            'extra_attributes': [0, 0, 0, 0, 0],
+        }
+        _, fields = decode_frame(item_frame(item))
+        self.assertEqual(
+            [(field.type_id, field.value) for field in fields[34:39]],
+            [(TYPE_INT, 1), (TYPE_INT, 1), (TYPE_INT, 1),
+             (TYPE_INT, 0), (TYPE_INT, 0)],
+        )
+
+        # 已镶嵌灵石 ID 必须保留；只为已开但为空的孔补原生空孔值 1。
+        item['extra_attributes'] = [0x13315480, 0, 0, 0, 0]
+        _, fields = decode_frame(item_frame(item))
+        self.assertEqual(
+            [field.value for field in fields[34:39]],
+            [0x13315480, 1, 1, 0, 0],
+        )
+
     def test_open_empty_sockets_are_not_inferred_from_gem_ids(self):
         from systems.inventory.protocol import equipment_detail_description
         item = {
