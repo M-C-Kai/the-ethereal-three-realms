@@ -585,6 +585,34 @@ class InventoryGemEmbeddingTests(unittest.TestCase):
         self.assertIn('没有可镶嵌的空孔', result.message)
 
 
+class InventoryGemStarterGrantTests(unittest.TestCase):
+    def test_consumed_socket_gem_is_not_regranted(self):
+        import server
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = server.Settings.load(server.Path(ROOT) / 'config.json')
+            settings.role_data_file = str(Path(tmp) / 'roles.json')
+            store = RoleStore(settings)
+            role = store.create('gem-once', '宝石一次性', 0, 0)
+            gems = [
+                item for item in role_items(role)
+                if 322000000 <= int(item.get('template_id', 0)) <= 322006011
+                and gem_socket_type(int(item.get('template_id', 0))) is not None
+            ]
+            self.assertEqual(len(gems), 9)
+            consumed = gems[0]
+            consumed_template = int(consumed['template_id'])
+            role_items(role).remove(consumed)
+            store.save()
+
+            reloaded = RoleStore(settings)
+            loaded = reloaded.roles_for('gem-once')[0]
+            self.assertFalse(any(
+                int(item.get('template_id', 0)) == consumed_template
+                for item in role_items(loaded)
+            ))
+            self.assertTrue(loaded.get('socket_gems_initialized'))
+
+
 class InventoryHandlerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
