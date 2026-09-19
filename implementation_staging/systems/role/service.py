@@ -636,7 +636,17 @@ class RoleStore:
             changed = True
         changed = ensure_equipment_resource_preview_items(role, registry) or changed
         changed = ensure_all_mount_series_items(role, registry) or changed
-        for item in items:
+        # Preview/default grants above can append equipment after the first
+        # migration pass. Ensure every final equipment instance has V1 socket
+        # state before the role is returned to the session.
+        for item in role_items(role):
+            if not isinstance(item, dict) or not is_equipment(item):
+                continue
+            resolved = registry.resolve(item)
+            slot = int(resolved.get('equipment_slot', 0) or 0)
+            if ensure_socket_state(item, socketable=1 <= slot <= 10):
+                changed = True
+        for item in role_items(role):
             if not isinstance(item, dict) or not is_strengthenable_weapon(item):
                 continue
             before_strengthening = copy.deepcopy(item)
@@ -815,6 +825,7 @@ class RoleStore:
             'currencies': initial_currency_balances(),
         }
         role['items'] = starter_items(role_id, self.settings.item_registry)
+        ensure_equipment_resource_preview_items(role, self.settings.item_registry)
         for item in role_items(role):
             if not isinstance(item, dict) or not is_equipment(item):
                 continue
@@ -822,7 +833,6 @@ class RoleStore:
             slot = int(resolved.get('equipment_slot', 0) or 0)
             ensure_socket_state(item, socketable=1 <= slot <= 10)
         role['socket_state_version'] = SOCKET_STATE_VERSION
-        ensure_equipment_resource_preview_items(role, self.settings.item_registry)
         role['strengthening_stones_initialized'] = True
         role['chaos_stones_initialized'] = True
         role['mailbox'] = starter_mail(role_id)
