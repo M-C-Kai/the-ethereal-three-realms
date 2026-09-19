@@ -246,13 +246,15 @@ def gem_removal_open_frame() -> bytes:
 
 
 def gem_removal_repaint_frame() -> bytes:
-    """Notify the open e/ag removal page that action=72 completed.
+    """Trigger the native e/ag repaint after a successful gem removal.
 
-    As with opening(90) and embedding(93), the confirm action must be echoed
-    after the updated 1008 record so the currently selected socket controls
-    redraw immediately instead of waiting for the page to be reopened.
+    APK main/e.smali's 1009 action switch does NOT handle S→C action 72.
+    It maps action 107 (0x6b) to sswitch_37 -> d/n.h(0x144), the same direct
+    repaint callback used by opening action 90 and embedding action 93.
+    Therefore removal confirm is C→S 72, while the native repaint signal is
+    S→C 107.
     """
-    return encode_frame(1009, [short(72)])
+    return encode_frame(1009, [short(107)])
 
 
 def gem_removal_refresh_frame() -> bytes:
