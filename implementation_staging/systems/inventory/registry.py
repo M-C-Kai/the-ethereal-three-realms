@@ -735,6 +735,70 @@ STRENGTHENING_STONE_DEFINITIONS = {
 }
 STRENGTHENING_STONES = STRENGTHENING_STONE_DEFINITIONS
 
+# ---------------------------------------------------------------------------
+# 装备开孔：APK e/ag + b/g 实证。
+# g.b(j) 只接受 322250000..322250003 作为开孔材料。
+# 官方帮助仅锁定“第一孔 100%，后四孔逐次降低，特殊混沌石除外”；
+# 后四孔普通石的精确官方概率未找到，因此这里使用本地兼容概率。
+# 322250001/2 的名称来自历史活动资料，但具体 ID→名称对应仍属本地映射。
+# ---------------------------------------------------------------------------
+CHAOS_STONE_TEMPLATE_MIN = 322_250_000
+CHAOS_STONE_TEMPLATE_MAX = 322_250_003
+CHAOS_STONE_TEMPLATE_ID = 322_250_000
+TIANYUAN_CHAOS_STONE_TEMPLATE_ID = 322_250_001
+SANCAI_CHAOS_STONE_TEMPLATE_ID = 322_250_002
+SPECIAL_CHAOS_STONE_TEMPLATE_ID = 322_250_003
+NORMAL_CHAOS_SOCKET_RATES = (10_000, 7_500, 5_000, 3_000, 1_500)
+
+
+@dataclass(frozen=True)
+class ChaosStoneDefinition:
+    template_id: int
+    name: str
+    special: bool
+
+
+CHAOS_STONE_DEFINITIONS = {
+    CHAOS_STONE_TEMPLATE_ID: ChaosStoneDefinition(
+        CHAOS_STONE_TEMPLATE_ID, '混沌石', False,
+    ),
+    TIANYUAN_CHAOS_STONE_TEMPLATE_ID: ChaosStoneDefinition(
+        TIANYUAN_CHAOS_STONE_TEMPLATE_ID, '天元混沌石', True,
+    ),
+    SANCAI_CHAOS_STONE_TEMPLATE_ID: ChaosStoneDefinition(
+        SANCAI_CHAOS_STONE_TEMPLATE_ID, '三才混沌石', True,
+    ),
+    SPECIAL_CHAOS_STONE_TEMPLATE_ID: ChaosStoneDefinition(
+        SPECIAL_CHAOS_STONE_TEMPLATE_ID, '特殊混沌石', True,
+    ),
+}
+
+
+def chaos_stone_definition_for(item: Mapping[str, object] | None) -> Optional[ChaosStoneDefinition]:
+    if item is None:
+        return None
+    template_id = _template_id(item)
+    if template_id is None:
+        return None
+    return CHAOS_STONE_DEFINITIONS.get(template_id)
+
+
+def is_chaos_stone(item: Mapping[str, object]) -> bool:
+    template_id = _template_id(item)
+    return (
+        template_id is not None
+        and CHAOS_STONE_TEMPLATE_MIN <= template_id <= CHAOS_STONE_TEMPLATE_MAX
+    )
+
+
+def chaos_socket_rate(stone: ChaosStoneDefinition, opened_count: int) -> int:
+    if type(opened_count) is not int or not 0 <= opened_count < 5:
+        raise ValueError('opened socket count must be 0..4')
+    if stone.special:
+        # APK 帮助明确“特殊混沌石除外”，本地兼容服按全孔 100% 处理。
+        return 10_000
+    return NORMAL_CHAOS_SOCKET_RATES[opened_count]
+
 
 def _template_id(item: Mapping[str, object]) -> Optional[int]:
     value = item.get("template_id")
