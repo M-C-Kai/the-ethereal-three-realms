@@ -54,7 +54,7 @@ from systems.inventory.protocol import (
 import copy
 import string as ascii_string
 from systems.inventory.registry import (
-    STRENGTHENING_ATTACK_BONUSES, default_item_registry,
+    STRENGTHENING_ATTACK_BONUSES, default_item_registry, is_chaos_stone,
     normalized_strengthen_level, recalculate_equipment_attributes,
     weapon_appearance_field_from_icon_and_strengthen,
 )
@@ -410,11 +410,13 @@ class RoleStore:
         if not isinstance(items, list):
             role['items'] = starter_items(int(role.get('id', 0)), registry)
             role['strengthening_stones_initialized'] = True
+            role['chaos_stones_initialized'] = True
             ensure_equipment_resource_preview_items(role, registry)
             ensure_all_mount_series_items(role, registry)
             return True
         changed = False
         stones_initialized = bool(role.get('strengthening_stones_initialized', False))
+        chaos_initialized = bool(role.get('chaos_stones_initialized', False))
         defaults = starter_items(int(role.get('id', 0)), registry)
         by_id = {
             int(item.get('id', 0)): item
@@ -425,6 +427,11 @@ class RoleStore:
             int(item.get('template_id', 0)): item
             for item in items
             if isinstance(item, dict) and is_strengthening_stone(item)
+        }
+        chaos_by_template = {
+            int(item.get('template_id', 0)): item
+            for item in items
+            if isinstance(item, dict) and is_chaos_stone(item)
         }
         # Strip template fields from legacy items that still carry them.
         template_owned_fields = {
@@ -476,10 +483,15 @@ class RoleStore:
         # survive this catalogue migration.
         for default in defaults:
             item_id = int(default['id'])
-            if is_strengthening_stone(default):
+            if is_strengthening_stone(default) or is_chaos_stone(default):
                 template_id = int(default['template_id'])
-                current = stones_by_template.get(template_id)
-                if current is None and stones_initialized:
+                if is_strengthening_stone(default):
+                    current = stones_by_template.get(template_id)
+                    initialized = stones_initialized
+                else:
+                    current = chaos_by_template.get(template_id)
+                    initialized = chaos_initialized
+                if current is None and initialized:
                     continue
                 if current is None:
                     conflicting = by_id.get(item_id)
@@ -505,6 +517,8 @@ class RoleStore:
                 by_id[item_id] = default
                 if is_strengthening_stone(default):
                     stones_by_template[int(default['template_id'])] = default
+                if is_chaos_stone(default):
+                    chaos_by_template[int(default['template_id'])] = default
                 changed = True
                 continue
             preserved = {
@@ -516,6 +530,7 @@ class RoleStore:
                     'last_heal',
                     'strengthen_level',
                     'base_equipment_attributes',
+                    'extra_attributes',
                 )
                 if key in current
             }
@@ -613,6 +628,9 @@ class RoleStore:
                 changed = True
         if not stones_initialized:
             role['strengthening_stones_initialized'] = True
+            changed = True
+        if not chaos_initialized:
+            role['chaos_stones_initialized'] = True
             changed = True
         changed = ensure_equipment_resource_preview_items(role, registry) or changed
         changed = ensure_all_mount_series_items(role, registry) or changed
